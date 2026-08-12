@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exact xMoney X mark path from xmoney-x.svg / onramp coin-flip loaders. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="104dp"
+    android:height="81dp"
+    android:viewportWidth="539"
+    android:viewportHeight="418">
+    <path
+        android:fillColor="#FF7C4DFF"
+        android:pathData="M298.499 209L539 78.7682L498.567 0L278.345 90.2814C272.674 92.6093 266.387 92.6093 260.717 90.2814L40.4327 0.0629123L0 78.7682L240.501 209L0 339.232L40.4327 418L260.655 327.719C266.326 325.391 272.613 325.391 278.283 327.719L498.506 418L538.938 339.232L298.438 209H298.499Z" />
+</vector>

@@ -1,0 +1,67 @@
+{
+  "defaultColors": {
+    "light": {
+      "primary": "#7c4dff",
+      "background": "#ffffff",
+      "error": "#ff6b6b"
+    },
+    "dark": {
+      "primary": "#7c4dff",
+      "background": "#16141a",
+      "error": "#ff6b6b"
+    }
+  },
+  "validation": [
+    {
+      "field": "cardNumber",
+      "input": "",
+      "expectedKey": "errors.cardNumberRequired"
+    },
+    {
+      "field": "cardNumber",
+      "input": "4111111111111111",
+      "expectedKey": null
+    },
+    {
+      "field": "cardNumber",
+      "input": "123",
+      "expectedKey": "errors.cardNumberTooShort"
+    },
+    {
+      "field": "expiry",
+      "input": { "month": "", "year": "" },
+      "expectedKey": "errors.expDateRequired"
+    },
+    {
+      "field": "cvv",
+      "input": "",
+      "expectedKey": "errors.cvvRequired"
+    },
+    {
+      "field": "cvv",
+      "input": "12",
+      "expectedKey": "errors.cvvInvalid"
+    },
+    {
+      "field": "holderName",
+      "input": "",
+      "expectedKey": "errors.cardHolderNameRequired"
+    },
+    {
+      "field": "holderName",
+      "input": "John123",
+      "expectedKey": "errors.cardHolderNameNoDigits"
+    }
+  ],
+  "buttonTypes": [
+    { "type": "pay", "key": "button.pay" },
+    { "type": "book", "key": "button.book" },
+    { "type": "buy", "key": "button.buy" },
+    { "type": "checkout", "key": "button.checkout" },
+    { "type": "donate", "key": "button.donate" },
+    { "type": "order", "key": "button.order" },
+    { "type": "subscribe", "key": "button.subscribe" },
+    { "type": "topUp", "key": "button.topUp" },
+    { "type": "deposit", "key": "button.deposit" }
+  ]
+}

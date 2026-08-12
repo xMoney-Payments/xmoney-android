@@ -1,0 +1,4 @@
+-keep class com.xmoney.paymentsheet.** { *; }
+-keep class com.xmoney.paymentsheet.internal.PaymentSheetActivity { *; }
+-keep class com.xmoney.paymentsheet.internal.PaymentSheetRequestParcelable { *; }
+-keep class com.xmoney.paymentsheet.internal.ParcelableResult { *; }

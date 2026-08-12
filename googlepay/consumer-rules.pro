@@ -1,0 +1,4 @@
+-keep class com.xmoney.googlepay.** { *; }
+-keep class com.xmoney.googlepay.ui.** { *; }
+-keep class com.xmoney.googlepay.internal.GooglePayHostActivity { *; }
+-keep class com.xmoney.googlepay.internal.GooglePayRequestParcelable { *; }

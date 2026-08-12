@@ -1,0 +1,3 @@
+-keep class com.xmoney.paymentelement.** { *; }
+-keep class com.xmoney.paymentelement.ui.PaymentFormKt { *; }
+-keep class com.xmoney.paymentelement.ui.CardFormKt { *; }

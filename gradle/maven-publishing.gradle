@@ -1,0 +1,4 @@
+mavenPublishing {
+    publishToMavenCentral(true)
+    signAllPublications()
+}
