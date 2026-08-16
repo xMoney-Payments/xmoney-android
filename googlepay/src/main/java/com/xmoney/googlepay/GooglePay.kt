@@ -6,6 +6,7 @@ import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.payments.model.PaymentResult
 import com.xmoney.googlepay.internal.GooglePayHostActivity
 import com.xmoney.googlepay.internal.GooglePaySessionRegistry
+import com.xmoney.googlepay.internal.GooglePayBootstrap
 import java.lang.ref.WeakReference
 import java.util.UUID
 
@@ -21,12 +22,21 @@ class GooglePay(
     private var lastActivity: WeakReference<FragmentActivity>? = null
     private var lastRequestId: String? = null
 
+    companion object {
+        /** Installs Play Wallet hooks on core. Idempotent; also runs from a ContentProvider on link. */
+        @JvmStatic
+        fun register() {
+            GooglePayBootstrap.install()
+        }
+    }
+
     fun present(
         activity: FragmentActivity,
         intent: PaymentIntent,
         onEvent: (GooglePayEvent) -> Unit = {},
         onResult: (PaymentResult) -> Unit,
     ) {
+        GooglePay.register()
         lastActivity = WeakReference(activity)
         val config = configuration.copy(
             paymentMethods = configuration.paymentMethods.copy(

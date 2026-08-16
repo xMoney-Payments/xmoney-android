@@ -38,6 +38,9 @@ sealed class PaymentError(
         const val GENERIC_PAYMENT = "Payment failed"
         const val GENERIC_LOAD = "Failed to load"
         const val GENERIC_GOOGLE_PAY = "Google Pay failed"
+        const val MISSING_GOOGLE_PAY_AMOUNT_OR_CURRENCY =
+            "Missing amount or currency for Google Pay."
+        const val EMPTY_GOOGLE_PAY_TOKEN = "Empty Google Pay token"
 
         private val sdkAuthoredMessages = setOf(
             NAME_CHECK_NOT_ENABLED,
@@ -49,17 +52,23 @@ sealed class PaymentError(
             "Payment canceled",
             "Missing currency for card holder verification",
             "Missing transaction id",
+            "Missing transaction",
+            "Missing session state",
             "Google Pay is not available",
             "Google Pay resolution launcher not registered",
+            EMPTY_GOOGLE_PAY_TOKEN,
             GENERIC_NETWORK,
             GENERIC_REQUEST,
             GENERIC_PAYMENT,
             GENERIC_LOAD,
             GENERIC_GOOGLE_PAY,
+            MISSING_GOOGLE_PAY_AMOUNT_OR_CURRENCY,
         )
 
         private fun isSdkAuthored(message: String): Boolean =
-            message in sdkAuthoredMessages || message.startsWith("Transaction ")
+            message in sdkAuthoredMessages ||
+                message.startsWith("Transaction ") ||
+                message.startsWith("Invalid multipart field")
 
         fun from(code: String, message: String): PaymentError = when (code) {
             "NETWORK_ERROR" -> Network(message)

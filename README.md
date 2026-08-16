@@ -6,7 +6,7 @@ Native Android SDK for xMoney payments. Ships as Maven modules:
 |--------|----------|-------------|
 | `core` | `com.xmoney:payments-core` | Networking, validation, payment engine, 3DS host |
 | `googlepay` | `com.xmoney:googlepay` | Standalone Google Pay + shared wallet orchestration |
-| `embedded` | `com.xmoney:paymentelement` | Merchant-hosted Payment Element (card, saved card, Google Pay) |
+| `paymentelement` | `com.xmoney:paymentelement` | Merchant-hosted Payment Element (card, saved card, Google Pay) |
 | `paymentsheet` | `com.xmoney:paymentsheet` | Drop-in payment sheet UI (hosts the embedded form) |
 
 ```
@@ -40,6 +40,24 @@ Everything else (`HttpClient`, services, `ThreeDSDialog`, `PaymentForm`, theme h
 - Kotlin 2.0+
 - `minSdk` 23, `compileSdk` 36
 - Java 17
+
+## Installation
+
+Latest release: **`0.0.1`** ([Maven Central](https://central.sonatype.com/search?q=g:com.xmoney))
+
+```kotlin
+dependencies {
+    // Drop-in sheet (pulls paymentelement → googlepay → payments-core)
+    implementation("com.xmoney:paymentsheet:0.0.1")
+
+    // Or pick surfaces individually:
+    // implementation("com.xmoney:paymentelement:0.0.1")
+    // implementation("com.xmoney:googlepay:0.0.1")
+    // implementation("com.xmoney:payments-core:0.0.1")
+}
+```
+
+`mavenCentral()` must be in your repositories (default for most Android projects).
 
 ## Quick start
 
@@ -142,7 +160,11 @@ Session tokens are always fetched by the SDK — merchants never pass them.
 cp example/secrets.properties.example example/secrets.properties
 # Edit PUBLIC_KEY, API_KEY, API_BASE, CURRENCY, DESCRIPTION
 
+# Local modules (default — use while developing the SDK)
 ./gradlew :example:assembleDebug
+
+# Published Maven artifacts (smoke-test what merchants get)
+./gradlew :example:assembleDebug -PuseMavenSdk=true
 ```
 
 Open the **`xmoney-android`** root in Android Studio and run **`example`**. Demos:
@@ -154,7 +176,7 @@ Open the **`xmoney-android`** root in Android Studio and run **`example`**. Demo
 ## Testing
 
 ```bash
-./gradlew :core:test :googlepay:test :embedded:test :paymentsheet:test
+./gradlew :core:test :googlepay:test :paymentelement:test :paymentsheet:test
 ```
 
 Contract tests read `test-vectors/test-vectors.json`.

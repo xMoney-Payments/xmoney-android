@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.os.Parcelable
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,30 +25,56 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
-import com.xmoney.payments.config.ResolvedPaymentConfig
-import com.xmoney.payments.engine.PaymentEngine
-import com.xmoney.payments.model.PaymentResult
-import com.xmoney.payments.threeds.ThreeDSHostController
+import com.xmoney.googlepay.GooglePay
 import com.xmoney.googlepay.GooglePayEvent
 import com.xmoney.googlepay.ui.GooglePayButton
 import com.xmoney.googlepay.ui.XCoinFlipLoader
+import com.xmoney.payments.config.PaymentConfig
+import com.xmoney.payments.config.ResolvedPaymentConfig
+import com.xmoney.payments.engine.DigitalWalletAuthorizing
+import com.xmoney.payments.engine.PaymentSession
+import com.xmoney.payments.engine.SheetState
+import com.xmoney.payments.model.OrderChecksum
+import com.xmoney.payments.model.OrderPayload
+import com.xmoney.payments.model.PaymentIntent
+import com.xmoney.payments.model.PaymentResult
+import com.xmoney.payments.threeds.ThreeDSHostController
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import kotlinx.parcelize.Parcelize
 
-class GooglePayHostActivity : FragmentActivity() {
-    private val googlePayController = GooglePayWalletController(this)
-    private lateinit var engine: PaymentEngine
+class GooglePayHostActivity : FragmentActivity(), GooglePayCloseTarget {
+    private lateinit var session: PaymentSession
     private lateinit var threeDS: ThreeDSHostController
     private lateinit var config: ResolvedPaymentConfig
     private var requestId: String = ""
+    private var authorizer: DigitalWalletAuthorizing? = null
 
     private var didFinish = false
+    private var isProcessing = false
+    private var pendingWalletResult: androidx.activity.result.ActivityResult? = null
+
+    private val resolutionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        val wallet = authorizer
+        if (wallet != null) {
+            wallet.handleResolutionResult(result)
+            if (wallet.hasPendingWalletAuthorization) {
+                startPendingWallet(wallet)
+            }
+        } else {
+            pendingWalletResult = result
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        GooglePay.register()
 
         requestId = intent.getStringExtra(EXTRA_REQUEST_ID).orEmpty()
-        val session = if (requestId.isNotBlank()) GooglePaySessionRegistry.get(requestId) else null
-        val fromRegistry = session?.config
+        val sessionEntry = if (requestId.isNotBlank()) GooglePaySessionRegistry.get(requestId) else null
+        val fromRegistry = sessionEntry?.config
         val fromIntent = intent.getParcelableExtra<GooglePayRequestParcelable>(EXTRA_CONFIG)?.toConfig()
         config = fromRegistry ?: fromIntent ?: run {
             finishWithResult(PaymentResult(PaymentResult.Status.CANCELED, null, null, null))
@@ -55,26 +83,51 @@ class GooglePayHostActivity : FragmentActivity() {
 
         if (requestId.isNotBlank()) {
             GooglePaySessionRegistry.bindHost(requestId, this)
+            GooglePaySessionRegistry.bindCloseTarget(requestId, this)
         }
 
-        engine = PaymentEngine(config, applicationContext)
-        threeDS = ThreeDSHostController(this) { config.options.locale }
-
-        googlePayController.attach(
-            activity = this,
-            engine = engine,
-            threeDSPresenter = threeDS,
-            scope = lifecycleScope,
-            onProcessing = { processing ->
-                sessionOrEmpty()?.onEvent?.invoke(GooglePayEvent.Processing(processing))
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    requestClose()
+                }
             },
-            onResult = { result -> finishWithResult(result) },
         )
+
+        val paymentConfig = PaymentConfig(
+            publicKey = config.publicKey,
+            card = config.card,
+            paymentMethods = config.paymentMethods,
+            options = config.options,
+        )
+        val intent = PaymentIntent(
+            OrderPayload(config.orderPayload),
+            OrderChecksum(config.orderChecksum),
+        )
+        session = PaymentSession(paymentConfig, intent, applicationContext)
+        threeDS = ThreeDSHostController(this) { config.options.locale }
 
         setContent {
             GooglePayHostContent(
-                controller = googlePayController,
+                session = session,
+                activity = this,
                 config = config,
+                threeDS = threeDS,
+                onAuthorizer = { wallet ->
+                    authorizer = wallet
+                    wallet.bindResolutionLauncher(resolutionLauncher)
+                    val pending = pendingWalletResult
+                    pendingWalletResult = null
+                    if (pending != null) {
+                        wallet.handleResolutionResult(pending)
+                        if (pending.resultCode == android.app.Activity.RESULT_OK &&
+                            wallet.hasPendingWalletAuthorization
+                        ) {
+                            startPendingWallet(wallet)
+                        }
+                    }
+                },
                 onReady = {
                     sessionOrEmpty()?.onEvent?.invoke(GooglePayEvent.Ready)
                 },
@@ -86,7 +139,28 @@ class GooglePayHostActivity : FragmentActivity() {
                 onFailed = { message ->
                     finishWithResult(PaymentResult.failed("LOAD_ERROR", message))
                 },
+                onPay = { wallet ->
+                    startPendingWallet(wallet)
+                },
             )
+        }
+    }
+
+    override fun requestClose() {
+        if (isProcessing || !session.canDismiss) return
+        finishWithResult(PaymentResult(PaymentResult.Status.CANCELED, null, null, null))
+    }
+
+    private fun startPendingWallet(wallet: DigitalWalletAuthorizing) {
+        if (isProcessing || !session.isInteractionEnabled) return
+        isProcessing = true
+        lifecycleScope.launch {
+            val result = session.startWallet(wallet)
+            isProcessing = session.isProcessing
+            if (result.status == PaymentResult.Status.CANCELED && !session.isOrderConsumed) {
+                return@launch
+            }
+            finishWithResult(result)
         }
     }
 
@@ -96,8 +170,8 @@ class GooglePayHostActivity : FragmentActivity() {
     private fun finishWithResult(result: PaymentResult) {
         if (didFinish) return
         didFinish = true
-        val session = sessionOrEmpty()
-        session?.onResult?.invoke(result)
+        val registered = sessionOrEmpty()
+        registered?.onResult?.invoke(result)
         if (requestId.isNotBlank()) {
             GooglePaySessionRegistry.remove(requestId)
         }
@@ -122,27 +196,46 @@ class GooglePayHostActivity : FragmentActivity() {
 
 @Composable
 private fun GooglePayHostContent(
-    controller: GooglePayWalletController,
+    session: PaymentSession,
+    activity: FragmentActivity,
     config: ResolvedPaymentConfig,
+    threeDS: ThreeDSHostController,
+    onAuthorizer: (DigitalWalletAuthorizing) -> Unit,
     onReady: () -> Unit,
     onUnavailable: () -> Unit,
     onFailed: (String) -> Unit,
+    onPay: (DigitalWalletAuthorizing) -> Unit,
 ) {
-    var availability by remember { mutableStateOf<GooglePayAvailability?>(null) }
+    var state by remember { mutableStateOf<SheetState?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var isProcessing by remember { mutableStateOf(false) }
     var notifiedReady by remember { mutableStateOf(false) }
+    var wallet by remember { mutableStateOf<DigitalWalletAuthorizing?>(null) }
+
+    val intent = PaymentIntent(
+        OrderPayload(config.orderPayload),
+        OrderChecksum(config.orderChecksum),
+    )
 
     LaunchedEffect(Unit) {
         try {
-            val prepared = controller.prepare()
-            availability = prepared
-            if (!prepared.available || prepared.allowedPaymentMethodsJson.isNullOrBlank()) {
+            val loaded = session.bind(intent, activity)
+            val authorizer = session.makeWalletAuthorizer(threeDS, activity)
+            if (authorizer == null || !loaded.googlePayAvailable ||
+                loaded.googlePayAllowedPaymentMethods.isNullOrBlank()
+            ) {
                 onUnavailable()
-            } else if (!notifiedReady) {
+                return@LaunchedEffect
+            }
+            wallet = authorizer
+            onAuthorizer(authorizer)
+            state = loaded
+            if (!notifiedReady) {
                 notifiedReady = true
                 onReady()
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             val message = e.message ?: "Failed to load Google Pay"
             error = message
@@ -159,11 +252,11 @@ private fun GooglePayHostContent(
     ) {
         when {
             error != null -> Text(error!!, color = Color.White)
-            availability == null -> XCoinFlipLoader(color = Color.White)
+            state == null -> XCoinFlipLoader(color = Color(0xFF7C4DFF))
             else -> {
-                val methods = availability?.allowedPaymentMethodsJson
-                val orderInfo = availability?.orderInfo
-                if (methods.isNullOrBlank() || orderInfo == null) {
+                val methods = state?.googlePayAllowedPaymentMethods
+                val currentWallet = wallet
+                if (methods.isNullOrBlank() || currentWallet == null) {
                     Text("Google Pay is not available", color = Color.White)
                 } else {
                     Box(
@@ -175,10 +268,10 @@ private fun GooglePayHostContent(
                         GooglePayButton(
                             appearance = config.paymentMethods.googlePay.appearance,
                             allowedPaymentMethods = methods,
-                            enabled = !isProcessing && availability?.ready != false,
+                            enabled = !isProcessing && state?.googlePayReady != false,
                             onClick = {
                                 isProcessing = true
-                                controller.startPayment(orderInfo)
+                                onPay(currentWallet)
                             },
                             modifier = Modifier.fillMaxWidth(),
                         )

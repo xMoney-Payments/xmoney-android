@@ -4,7 +4,11 @@ import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
 
 sealed class PaymentSubmissionResult {
-    data class Needs3DS(val url: String) : PaymentSubmissionResult()
+    data class Needs3DS(
+        val url: String,
+        val formMethod: String = "GET",
+        val params: Map<String, String> = emptyMap(),
+    ) : PaymentSubmissionResult()
     data class Redirect(val url: String) : PaymentSubmissionResult()
     data class Transaction(val id: String) : PaymentSubmissionResult()
 }
@@ -29,7 +33,7 @@ data class TransactionCustomer(
     val creationTimestamp: Long? = null,
 ) : Parcelable {
     companion object {
-        fun fromApiMap(map: Map<String, Any?>): TransactionCustomer =
+        internal fun fromApiMap(map: Map<String, Any?>): TransactionCustomer =
             TransactionCustomer(
                 id = stringOrNumber(map["id"]),
                 siteId = stringOrNumber(map["siteId"]),
@@ -84,7 +88,7 @@ data class Transaction(
         get() = isComplete && status?.lowercase()?.contains("fail") != true
 
     companion object {
-        fun fromApiMap(map: Map<String, Any?>): Transaction {
+        internal fun fromApiMap(map: Map<String, Any?>): Transaction {
             @Suppress("UNCHECKED_CAST")
             val customerMap = map["customerData"] as? Map<String, Any?>
             return Transaction(

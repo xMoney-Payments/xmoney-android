@@ -48,7 +48,7 @@ internal fun PaymentSheetContent(
     isProcessing: Boolean,
     onPayCard: (CardInput) -> Unit,
     onSelectSaved: (SavedCard) -> Unit,
-    onDeleteSaved: (SavedCard) -> Unit,
+    onDeleteSaved: suspend (SavedCard) -> Unit,
     onGooglePay: () -> Unit,
     onCancel: () -> Unit,
 ) {

@@ -11,7 +11,7 @@ data class OrderInputCustomer(
     val tags: List<String> = emptyList(),
 ) {
     companion object {
-        fun fromApiMap(map: Map<String, Any?>): OrderInputCustomer =
+        internal fun fromApiMap(map: Map<String, Any?>): OrderInputCustomer =
             OrderInputCustomer(
                 identifier = nonBlank(map["identifier"] as? String),
                 firstName = nonBlank(map["firstName"] as? String),
@@ -40,7 +40,7 @@ data class OrderInputOrder(
     val firstBillDate: String? = null,
 ) {
     companion object {
-        fun fromApiMap(map: Map<String, Any?>): OrderInputOrder =
+        internal fun fromApiMap(map: Map<String, Any?>): OrderInputOrder =
             OrderInputOrder(
                 orderId = map["orderId"] as? String,
                 type = map["type"] as? String,
@@ -81,7 +81,7 @@ data class OrderInput(
     }
 
     companion object {
-        fun fromApiMap(map: Map<String, Any?>): OrderInput {
+        internal fun fromApiMap(map: Map<String, Any?>): OrderInput {
             @Suppress("UNCHECKED_CAST")
             val customerMap = map["customer"] as? Map<String, Any?>
             @Suppress("UNCHECKED_CAST")
@@ -136,7 +136,7 @@ data class SavedCard(
     val cardHolderCountry: String? = null,
 ) {
     companion object {
-        fun fromApiMap(item: Map<String, Any?>): SavedCard? {
+        internal fun fromApiMap(item: Map<String, Any?>): SavedCard? {
             val id = stringOrNumber(item["id"]) ?: return null
             val binInfo = item["binInfo"] as? Map<String, Any?>
             val cardType = nonBlank(item["cardType"] as? String)
@@ -212,7 +212,7 @@ data class SavedCardsResponse(
     val data: List<SavedCard>,
 ) {
     companion object {
-        fun fromApiMap(map: Map<String, Any?>): SavedCardsResponse {
+        internal fun fromApiMap(map: Map<String, Any?>): SavedCardsResponse {
             val raw = map["data"] as? List<*> ?: emptyList<Any?>()
             val cards = raw.mapNotNull { item ->
                 @Suppress("UNCHECKED_CAST")
@@ -247,7 +247,7 @@ data class WalletParams(
     val merchantOrigin: String? = null,
 ) {
     companion object {
-        fun fromApiMap(map: Map<String, Any?>): WalletParams {
+        internal fun fromApiMap(map: Map<String, Any?>): WalletParams {
             @Suppress("UNCHECKED_CAST")
             val data = (map["data"] as? Map<String, Any?>) ?: map
             return WalletParams(

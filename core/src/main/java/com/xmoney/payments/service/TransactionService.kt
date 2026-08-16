@@ -4,6 +4,7 @@ import com.xmoney.payments.config.SdkConstants
 import com.xmoney.payments.config.PaymentEnvironment
 import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.model.Transaction
+import com.xmoney.payments.network.ApiUrl
 import com.xmoney.payments.network.HttpClient
 
 import kotlinx.coroutines.delay
@@ -11,7 +12,7 @@ import kotlinx.coroutines.delay
 
 class TransactionService(private val http: HttpClient, private val env: PaymentEnvironment) {
     suspend fun getTransaction(id: String, sessionToken: String): Transaction {
-        val url = "${env.apiNextBaseURL}/${SdkConstants.TRANSACTIONS_PATH}/$id"
+        val url = ApiUrl.make(env.apiNextBaseURL, "${SdkConstants.TRANSACTIONS_PATH}/$id")
         return Transaction.fromApiMap(http.getJson(url, sessionToken))
     }
 

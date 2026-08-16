@@ -34,7 +34,7 @@ android {
 
 dependencies {
     api(project(":core"))
-    api(project(":embedded"))
+    api(project(":paymentelement"))
     implementation(project(":googlepay"))
 
     implementation(libs.androidx.core.ktx)

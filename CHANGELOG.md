@@ -6,6 +6,38 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Edit / Done saved-card management with inline Remove / Keep it confirm
+
+### Changed
+
+- Gradle module `:embedded` renamed to `:paymentelement` (folder, project, and artifact now match)
+- Shared `PaymentSession` owns bind generation, submit serialization, and consume rules (pre-auth Google Pay cancel does not consume)
+- `paymentelement` no longer depends on `googlepay`; Play Wallet installs via `GooglePay.register()` / ContentProvider
+- 3DS return URLs match scheme + host + path prefix (query-only shortcuts removed)
+- Multipart fields reject CR/LF/boundary; API path IDs are percent-encoded
+- `fromApiMap` parsers are internal; empty Google Pay tokens fail closed
+- `dismiss()` never falls back to `Activity.finish()` when the close target is gone
+- Cancellation during Google Pay host load is not reported as `LOAD_ERROR`
+- DELETE saved-card requests fail closed on non-2xx (confirm stays open)
+- Google Pay 3DS follows checkout-sdk `handlePaymentRedirect` (`pending-redirect` + `3d-pending` → `threeDSFlowUrl`)
+- 3DS challenge is a full-screen overlay (not a dialog window)
+- TEST Google Pay requests `PAN_ONLY` so the sheet returns an FPAN and the gateway can run 3DS (live still allows `CRYPTOGRAM_3DS`)
+
+### Changed (previous)
+
+- Google Pay fails closed when order amount or currency is missing (`0` amount still allowed)
+- Embedded and standalone Google Pay commit bind only after load succeeds; overlapping binds are generation-guarded
+- Payment Sheet / Google Pay `dismiss()` wait for an in-flight charge (idle close still cancels)
+- Session-load coin is always xMoney `#7C4DFF` (not merchant `appearance.colors.primary`)
+- Google Pay params load in parallel with site config and saved cards
+- 3DS challenge URLs must be `https` at parse time
+
+## [0.0.1] - 2026-08-12
+
+First public release on Maven Central (`com.xmoney`).
+
 ### Changed
 
 - Public API rename: packages `com.xmoney.payments` / `paymentsheet` / `paymentelement` / `googlepay`; artifacts `payments-core`, `paymentsheet`, `paymentelement`, `googlepay`

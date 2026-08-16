@@ -32,7 +32,11 @@ class HttpClient(
 
     suspend fun delete(url: String, bearer: String?) {
         withContext(Dispatchers.IO) {
-            client.newCall(baseRequest(url, bearer).delete().build()).execute().use { }
+            client.newCall(baseRequest(url, bearer).delete().build()).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw PaymentError.Network()
+                }
+            }
         }
     }
 
@@ -50,12 +54,14 @@ class HttpClient(
             )
         }
 
-    private fun buildMultipartBody(boundary: String, fields: Map<String, String>): ByteArray {
+    internal fun buildMultipartBody(boundary: String, fields: Map<String, String>): ByteArray {
         val body = StringBuilder()
         for ((key, value) in fields) {
+            val safeKey = sanitizedMultipartToken(key, boundary, "name")
+            val safeValue = sanitizedMultipartToken(value, boundary, "value")
             body.append("--").append(boundary).append("\r\n")
-            body.append("Content-Disposition: form-data; name=\"").append(key).append("\"\r\n\r\n")
-            body.append(value).append("\r\n")
+            body.append("Content-Disposition: form-data; name=\"").append(safeKey).append("\"\r\n\r\n")
+            body.append(safeValue).append("\r\n")
         }
         body.append("--").append(boundary).append("--\r\n")
         return body.toString().toByteArray(Charsets.UTF_8)
@@ -94,6 +100,13 @@ class HttpClient(
         }
 
         fun shared(): HttpClient = HttpClient(sharedOkHttpClient)
+
+        internal fun sanitizedMultipartToken(value: String, boundary: String, label: String): String {
+            if (value.contains("\r") || value.contains("\n") || value.contains(boundary)) {
+                throw PaymentError.Network("Invalid multipart field $label")
+            }
+            return value
+        }
 
         fun jsonToMap(obj: JSONObject): Map<String, Any?> {
             val map = HashMap<String, Any?>()

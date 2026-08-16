@@ -9,4 +9,11 @@ internal object ThreeDSUrlAllowlist {
             .trim()
         return scheme == "https" || scheme == "about"
     }
+
+    fun isHttpsChallenge(url: String): Boolean {
+        val scheme = url.substringBefore(':', missingDelimiterValue = "")
+            .lowercase()
+            .trim()
+        return scheme == "https"
+    }
 }

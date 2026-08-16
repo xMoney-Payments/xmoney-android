@@ -21,5 +21,8 @@ class PaymentErrorMerchantMessageTest {
     fun sdkAuthoredMessagesPassThrough() {
         val error = PaymentError.Session()
         assertEquals("Missing session token", error.merchantMessage())
+
+        val missingWallet = PaymentError.GooglePay(PaymentError.MISSING_GOOGLE_PAY_AMOUNT_OR_CURRENCY)
+        assertEquals(PaymentError.MISSING_GOOGLE_PAY_AMOUNT_OR_CURRENCY, missingWallet.merchantMessage())
     }
 }

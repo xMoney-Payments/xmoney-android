@@ -8,10 +8,8 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Message
 import android.view.Gravity
-import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
@@ -22,21 +20,27 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.core.os.bundleOf
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.fragment.app.DialogFragment
+import androidx.fragment.app.Fragment
 import com.xmoney.payments.R
 import com.xmoney.payments.config.Strings
+import com.xmoney.payments.util.DeviceMetadata
 @androidx.annotation.RestrictTo(androidx.annotation.RestrictTo.Scope.LIBRARY_GROUP)
 
-class ThreeDSDialog : DialogFragment() {
+class ThreeDSDialog : Fragment() {
     private var resolved = false
+    private var notifiedShown = false
     private var webView: WebView? = null
+    private var rootView: FrameLayout? = null
     private val popupWebViews = mutableListOf<WebView>()
     private var loadingOverlay: View? = null
     private var dotAnimators: AnimatorSet? = null
+    private val hiddenDialogs = mutableListOf<DialogFragment>()
 
     var hostListener: ThreeDSListener? = null
 
@@ -45,6 +49,12 @@ class ThreeDSDialog : DialogFragment() {
 
     private val locale: String
         get() = requireArguments().getString(ARG_LOCALE, "en")
+
+    private val formMethod: String
+        get() = requireArguments().getString(ARG_METHOD, "GET") ?: "GET"
+
+    private val formParams: Map<String, String>
+        get() = ThreeDSFormBody.fromBundle(requireArguments().getBundle(ARG_PARAMS))
 
     private val listener: ThreeDSListener?
         get() {
@@ -55,12 +65,6 @@ class ThreeDSDialog : DialogFragment() {
                 .filterIsInstance<ThreeDSListener>()
                 .firstOrNull()
         }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setStyle(STYLE_NORMAL, R.style.Theme_XMoney_ThreeDS)
-        isCancelable = false
-    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreateView(
@@ -75,6 +79,9 @@ class ThreeDSDialog : DialogFragment() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
             )
             setBackgroundColor(Color.WHITE)
+            elevation = 64f
+            isClickable = true
+            isFocusable = true
         }
 
         val challengeWebView = WebView(context).apply {
@@ -84,16 +91,18 @@ class ThreeDSDialog : DialogFragment() {
             ).also { it.topMargin = dp(HEADER_HEIGHT_DP) }
             setBackgroundColor(Color.WHITE)
             applySecureWebSettings(settings)
+            settings.userAgentString = DeviceMetadata.userAgent(context)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             webViewClient = createWebViewClient()
             webChromeClient = createWebChromeClient()
-            if (ThreeDSUrlAllowlist.isAllowed(challengeUrl)) {
-                loadUrl(challengeUrl)
+            if (ThreeDSUrlAllowlist.isHttpsChallenge(challengeUrl)) {
+                ThreeDSFormBody.load(this, challengeUrl, formMethod, formParams)
             } else {
                 finish(false)
             }
         }
         webView = challengeWebView
+        rootView = root
 
         val overlay = buildLoadingOverlay(context).also { loadingOverlay = it }
         val header = buildHeader()
@@ -122,6 +131,19 @@ class ThreeDSDialog : DialogFragment() {
         }
 
         return root
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        requireActivity().onBackPressedDispatcher.addCallback(
+            viewLifecycleOwner,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    finish(false)
+                }
+            },
+        )
+        notifyShown()
     }
 
     private fun buildLoadingOverlay(context: android.content.Context): View {
@@ -225,22 +247,11 @@ class ThreeDSDialog : DialogFragment() {
 
     override fun onStart() {
         super.onStart()
-        dialog?.window?.apply {
-            setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-            setBackgroundDrawableResource(android.R.color.white)
-            clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-        }
-        dialog?.setOnKeyListener { _, keyCode, event ->
-            if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
-                finish(false)
-                true
-            } else {
-                false
-            }
-        }
+        hideOtherDialogs()
     }
 
     override fun onDestroyView() {
+        restoreHiddenDialogs()
         dotAnimators?.cancel()
         dotAnimators = null
         destroyWebView(webView)
@@ -248,15 +259,16 @@ class ThreeDSDialog : DialogFragment() {
         popupWebViews.toList().forEach { destroyWebView(it) }
         popupWebViews.clear()
         loadingOverlay = null
+        rootView = null
         super.onDestroyView()
-    }
-
-    override fun onCancel(dialog: android.content.DialogInterface) {
-        finish(false)
     }
 
     fun dismissProgrammatically() {
         finish(true)
+    }
+
+    fun dismissAllowingStateLoss() {
+        removeSelf()
     }
 
     private fun buildHeader(): View {
@@ -309,6 +321,7 @@ class ThreeDSDialog : DialogFragment() {
     private fun createWebViewClient(): WebViewClient = object : WebViewClient() {
         override fun onPageFinished(view: WebView?, url: String?) {
             hideLoadingOverlay()
+            notifyShown()
         }
 
         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
@@ -331,19 +344,38 @@ class ThreeDSDialog : DialogFragment() {
             resultMsg: Message?,
         ): Boolean {
             val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
+            val root = rootView ?: return false
+            val chromeClient = this
             val popup = WebView(requireContext()).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                ).also { it.topMargin = dp(HEADER_HEIGHT_DP) }
                 applySecureWebSettings(settings)
+                settings.userAgentString = DeviceMetadata.userAgent(requireContext())
                 setBackgroundColor(Color.WHITE)
                 webViewClient = createWebViewClient()
+                webChromeClient = chromeClient
             }
             popupWebViews += popup
+            root.addView(popup)
             transport.webView = popup
             resultMsg.sendToTarget()
             return true
         }
+
+        override fun onCloseWindow(window: WebView?) {
+            val popup = window ?: return
+            popupWebViews.remove(popup)
+            (popup.parent as? ViewGroup)?.removeView(popup)
+            destroyWebView(popup)
+        }
     }
 
     private fun handleNavigation(url: String): Boolean {
+        if (isSamePage(url, challengeUrl)) {
+            return false
+        }
         if (!ThreeDSUrlAllowlist.isAllowed(url)) {
             return true
         }
@@ -354,25 +386,79 @@ class ThreeDSDialog : DialogFragment() {
         return false
     }
 
+    private fun notifyShown() {
+        if (notifiedShown || resolved) return
+        notifiedShown = true
+        listener?.onThreeDSShown()
+    }
+
+    private fun hideOtherDialogs() {
+        val manager = activity?.supportFragmentManager ?: return
+        hiddenDialogs.clear()
+        manager.fragments.filterIsInstance<DialogFragment>().forEach { other ->
+            val otherDialog = other.dialog ?: return@forEach
+            if (otherDialog.isShowing) {
+                otherDialog.hide()
+                hiddenDialogs += other
+            }
+        }
+    }
+
+    private fun restoreHiddenDialogs() {
+        hiddenDialogs.forEach { other ->
+            if (other.isAdded) {
+                other.dialog?.show()
+            }
+        }
+        hiddenDialogs.clear()
+    }
+
     private fun finish(success: Boolean) {
         if (resolved) return
         resolved = true
         listener?.onThreeDSFinished(success)
-        dismissAllowingStateLoss()
+        removeSelf()
+    }
+
+    private fun removeSelf() {
+        if (!isAdded) return
+        runCatching {
+            parentFragmentManager.beginTransaction()
+                .remove(this)
+                .commitNowAllowingStateLoss()
+        }
     }
 
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt()
 
+    private fun isSamePage(left: String, right: String): Boolean {
+        fun normalize(value: String): String =
+            value.substringBefore('#').substringBefore('?').trimEnd('/')
+        return normalize(left).equals(normalize(right), ignoreCase = true)
+    }
+
     companion object {
         const val TAG = "xmoney_threeds"
         private const val ARG_URL = "url"
         private const val ARG_LOCALE = "locale"
+        private const val ARG_METHOD = "method"
+        private const val ARG_PARAMS = "params"
         private const val HEADER_HEIGHT_DP = 60
         private val DOT_COLOR = Color.parseColor("#7C4DFF")
 
-        fun newInstance(url: String, locale: String): ThreeDSDialog = ThreeDSDialog().apply {
-            arguments = bundleOf(ARG_URL to url, ARG_LOCALE to locale)
+        fun newInstance(
+            url: String,
+            locale: String,
+            formMethod: String = "GET",
+            params: Map<String, String> = emptyMap(),
+        ): ThreeDSDialog = ThreeDSDialog().apply {
+            arguments = bundleOf(
+                ARG_URL to url,
+                ARG_LOCALE to locale,
+                ARG_METHOD to formMethod,
+                ARG_PARAMS to ThreeDSFormBody.toBundle(params),
+            )
         }
     }
 }
@@ -381,4 +467,5 @@ class ThreeDSDialog : DialogFragment() {
 interface ThreeDSListener {
     fun shouldInterceptThreeDSUrl(url: String): Boolean
     fun onThreeDSFinished(success: Boolean)
+    fun onThreeDSShown() {}
 }

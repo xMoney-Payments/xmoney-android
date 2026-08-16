@@ -21,7 +21,7 @@ data class CardHolderVerificationResult(
     val lastNameStatus: CardHolderMatchStatus? = null,
 ) {
     companion object {
-        fun fromApiMap(map: Map<String, Any?>?): CardHolderVerificationResult {
+        internal fun fromApiMap(map: Map<String, Any?>?): CardHolderVerificationResult {
             if (map == null) {
                 return CardHolderVerificationResult(status = CardHolderMatchStatus.NOT_VERIFIED)
             }
@@ -43,7 +43,7 @@ data class AccountValidationResponse(
     val nameValidationResults: CardHolderVerificationResult,
 ) {
     companion object {
-        fun fromApiMap(map: Map<String, Any?>): AccountValidationResponse {
+        internal fun fromApiMap(map: Map<String, Any?>): AccountValidationResponse {
             @Suppress("UNCHECKED_CAST")
             val results = map["nameValidationResults"] as? Map<String, Any?>
             return AccountValidationResponse(

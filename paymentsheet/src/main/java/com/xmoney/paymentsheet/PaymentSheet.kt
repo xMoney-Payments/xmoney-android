@@ -9,6 +9,7 @@ import com.xmoney.payments.config.PaymentConfig
 import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.payments.model.PaymentResult
 import com.xmoney.paymentsheet.internal.CheckoutSessionRegistry
+import com.xmoney.googlepay.GooglePay
 import java.util.UUID
 
 /**
@@ -32,6 +33,7 @@ class PaymentSheet(
         onEvent: (PaymentSheetEvent) -> Unit = {},
         onResult: (PaymentResult) -> Unit,
     ) {
+        GooglePay.register()
         val paymentConfig = configuration.resolve(intent)
         val requestId = UUID.randomUUID().toString()
         lastRequestId = requestId

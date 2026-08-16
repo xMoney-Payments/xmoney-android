@@ -36,6 +36,17 @@ class PaymentSheetActivity : FragmentActivity(), PaymentSheetViewModelOwner {
         }
 
         CheckoutSessionRegistry.bindHost(requestId, this)
+        CheckoutSessionRegistry.bindCloseTarget(requestId, object : CheckoutCloseTarget {
+            override fun requestClose() {
+                val fragment = supportFragmentManager.findFragmentByTag(PaymentSheetFragment.TAG)
+                    as? PaymentSheetFragment
+                if (fragment != null) {
+                    fragment.requestClose()
+                } else {
+                    finishWithResult(PaymentResult(PaymentResult.Status.CANCELED, null, null, null))
+                }
+            }
+        })
 
         val factory = PaymentSheetViewModel.Factory(applicationContext, config, requestId)
         paymentSheetViewModel = androidx.lifecycle.ViewModelProvider(this, factory)[PaymentSheetViewModel::class.java]

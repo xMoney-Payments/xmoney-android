@@ -18,6 +18,11 @@ android {
         consumerProguardFiles("consumer-rules.pro")
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.isReturnDefaultValues = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -34,9 +39,13 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.fragment.ktx)
+    implementation(libs.androidx.activity.ktx)
 
     testImplementation(libs.junit)
     testImplementation("org.json:json:20240303")
+    testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(libs.coroutines.test)
+    testImplementation(libs.robolectric)
 }
 
 apply(from = rootProject.file("gradle/maven-publishing.gradle"))

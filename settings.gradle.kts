@@ -16,4 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "xmoney-android"
 
-include(":core", ":googlepay", ":embedded", ":paymentsheet", ":example")
+include(":core", ":googlepay", ":paymentelement", ":paymentsheet", ":example")

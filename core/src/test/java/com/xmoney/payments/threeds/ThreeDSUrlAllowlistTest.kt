@@ -9,6 +9,9 @@ class ThreeDSUrlAllowlistTest {
     fun allowsHttpsAndAboutBlank() {
         assertTrue(ThreeDSUrlAllowlist.isAllowed("https://acs.example.com/challenge"))
         assertTrue(ThreeDSUrlAllowlist.isAllowed("about:blank"))
+        assertTrue(ThreeDSUrlAllowlist.isHttpsChallenge("https://acs.example.com/challenge"))
+        assertFalse(ThreeDSUrlAllowlist.isHttpsChallenge("http://acs.example.com/challenge"))
+        assertFalse(ThreeDSUrlAllowlist.isHttpsChallenge("about:blank"))
     }
 
     @Test

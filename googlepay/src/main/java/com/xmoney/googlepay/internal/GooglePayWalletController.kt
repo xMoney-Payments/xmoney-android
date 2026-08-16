@@ -7,75 +7,86 @@ import androidx.activity.result.ActivityResultCaller
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.wallet.PaymentData
+import com.xmoney.payments.engine.DigitalWalletAuthorizing
 import com.xmoney.payments.engine.PaymentEngine
+import com.xmoney.payments.engine.SheetState
 import com.xmoney.payments.engine.ThreeDSPresenter
+import com.xmoney.payments.model.OrderPayloadDecoder
 import com.xmoney.payments.model.OrderPayloadInfo
 import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.model.PaymentResult
+import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 class GooglePayWalletController(
     resultCaller: ActivityResultCaller? = null,
-) {
+) : DigitalWalletAuthorizing {
     private var activity: ComponentActivity? = null
     private var engine: PaymentEngine? = null
     private var threeDSPresenter: ThreeDSPresenter? = null
     private var handler: GooglePayHandler? = null
-
-    private var onProcessing: ((Boolean) -> Unit)? = null
-    private var onResult: ((PaymentResult) -> Unit)? = null
     private var scope: CoroutineScope? = null
 
     private var resolutionLauncher: ActivityResultLauncher<IntentSenderRequest>? =
         resultCaller?.registerForActivityResult(
             ActivityResultContracts.StartIntentSenderForResult(),
         ) { handleResolutionResult(it) }
+    private var autoRegisteredLauncher: ActivityResultLauncher<IntentSenderRequest>? = null
+    private var pendingPaymentData: PaymentData? = null
 
-    fun bindResolutionLauncher(launcher: ActivityResultLauncher<IntentSenderRequest>) {
+    private var startContinuation: CancellableContinuation<PaymentResult>? = null
+
+    override var didAuthorizePayment: Boolean = false
+        private set
+
+    override val hasPendingWalletAuthorization: Boolean
+        get() = pendingPaymentData != null
+
+    override fun bindResolutionLauncher(launcher: ActivityResultLauncher<IntentSenderRequest>) {
+        if (resolutionLauncher === launcher) return
+        unregisterAutoLauncher()
         resolutionLauncher = launcher
-    }
-
-    fun handleResolutionResult(result: ActivityResult) {
-        when (result.resultCode) {
-            Activity.RESULT_OK -> {
-                val paymentData = result.data?.let { PaymentData.getFromIntent(it) }
-                if (paymentData == null) {
-                    onProcessing?.invoke(false)
-                    return
-                }
-                submitToken(GooglePayHandler.extractToken(paymentData))
-            }
-            Activity.RESULT_CANCELED -> onProcessing?.invoke(false)
-            else -> emitResult(
-                PaymentResult(
-                    PaymentResult.Status.FAILED,
-                    null,
-                    "GOOGLE_PAY",
-                    "Google Pay was not completed",
-                ),
-            )
-        }
     }
 
     fun attach(
         activity: ComponentActivity,
         engine: PaymentEngine,
         threeDSPresenter: ThreeDSPresenter,
-        onProcessing: (Boolean) -> Unit,
-        onResult: (PaymentResult) -> Unit,
         scope: CoroutineScope = activity.lifecycleScope,
     ) {
         this.activity = activity
         this.engine = engine
         this.threeDSPresenter = threeDSPresenter
         this.scope = scope
-        this.onProcessing = onProcessing
-        this.onResult = onResult
         handler = GooglePayHandler(activity, engine.env)
+    }
+
+    private fun ensureResolutionLauncher(): ActivityResultLauncher<IntentSenderRequest>? {
+        resolutionLauncher?.let { return it }
+        val host = activity ?: return null
+        val registered = host.activityResultRegistry.register(
+            "xmoney-google-pay-resolution-${System.identityHashCode(this)}",
+            ActivityResultContracts.StartIntentSenderForResult(),
+        ) { handleResolutionResult(it) }
+        autoRegisteredLauncher = registered
+        resolutionLauncher = registered
+        return registered
+    }
+
+    private fun unregisterAutoLauncher() {
+        autoRegisteredLauncher?.unregister()
+        if (resolutionLauncher === autoRegisteredLauncher) {
+            resolutionLauncher = null
+        }
+        autoRegisteredLauncher = null
     }
 
     suspend fun prepare(): GooglePayAvailability {
@@ -88,95 +99,195 @@ class GooglePayWalletController(
         )
     }
 
-    suspend fun prepareSheetState(): com.xmoney.payments.engine.SheetState {
+    suspend fun prepareSheetState(): SheetState {
         val engine = engine ?: error("GooglePayController.attach() must be called first")
         val handler = handler ?: error("GooglePayController.attach() must be called first")
-        val baseState = engine.load(googlePayConfigured = false)
-        if (!engine.config.paymentMethods.googlePay.enabled) {
-            return baseState
-        }
-        val params = runCatching { engine.walletParams("googlePay") }.getOrNull()
-            ?: return baseState
-        val methods = handler.allowedPaymentMethodsJson(params)
-        val configured = methods.isNotBlank()
-        val ready = configured && runCatching { handler.isReadyToPay(params) }.getOrDefault(false)
-        return baseState.copy(
-            googlePayAvailable = configured,
-            googlePayAllowedPaymentMethods = methods.takeIf { configured },
-            googlePayReady = ready,
-        )
+        val baseState = engine.load(googlePayConfigured = true)
+        return decorate(engine, handler, baseState)
     }
 
-    fun startPayment(orderInfo: OrderPayloadInfo) {
-        val engine = engine ?: return
-        val handler = handler ?: return
-        val scope = scope ?: return
-        onProcessing?.invoke(true)
-        scope.launch {
-            try {
-                val params = engine.walletParams("googlePay")
-                val request = handler.loadPaymentDataRequest(params, orderInfo)
-                val task = handler.paymentsClient.loadPaymentData(request)
-                task.addOnCompleteListener { completed ->
-                    if (completed.isSuccessful) {
-                        val paymentData = completed.result
-                        if (paymentData != null) {
-                            submitToken(GooglePayHandler.extractToken(paymentData))
-                        } else {
-                            onProcessing?.invoke(false)
+    override suspend fun start(): PaymentResult {
+        val engine = engine ?: return failure("Google Pay is not available")
+        return start(OrderPayloadDecoder.info(engine.config.orderPayload))
+    }
+
+    suspend fun start(orderInfo: OrderPayloadInfo): PaymentResult {
+        val engine = engine ?: return failure("Google Pay is not available")
+        val handler = handler ?: return failure("Google Pay is not available")
+        val pending = pendingPaymentData
+        if (pending != null) {
+            pendingPaymentData = null
+            didAuthorizePayment = true
+            return suspendCancellableCoroutine { cont ->
+                startContinuation = cont
+                submitToken(pending)
+            }
+        }
+        didAuthorizePayment = false
+        return suspendCancellableCoroutine { cont ->
+            startContinuation = cont
+            val payScope = scope
+            if (payScope == null) {
+                cont.resume(failure("Google Pay is not available"))
+                return@suspendCancellableCoroutine
+            }
+            val job = payScope.launch {
+                try {
+                    val params = engine.walletParams("googlePay")
+                    val request = handler.loadPaymentDataRequest(params, orderInfo)
+                    val task = handler.paymentsClient.loadPaymentData(request)
+                    task.addOnCompleteListener { completed ->
+                        if (!cont.isActive) return@addOnCompleteListener
+                        if (completed.isSuccessful) {
+                            val paymentData = completed.result
+                            if (paymentData == null) {
+                                resumeCanceled()
+                                return@addOnCompleteListener
+                            }
+                            submitToken(paymentData)
+                            return@addOnCompleteListener
                         }
-                        return@addOnCompleteListener
-                    }
-                    val exception = completed.exception
-                    if (exception is ResolvableApiException) {
-                        val launcher = resolutionLauncher
-                        if (launcher != null) {
-                            launcher.launch(
-                                IntentSenderRequest.Builder(exception.resolution).build(),
-                            )
+                        val exception = completed.exception
+                        if (exception is ResolvableApiException) {
+                            val launcher = ensureResolutionLauncher()
+                            if (launcher != null) {
+                                launcher.launch(
+                                    IntentSenderRequest.Builder(exception.resolution).build(),
+                                )
+                            } else {
+                                resumeResult(
+                                    PaymentResult.failed(
+                                        "GOOGLE_PAY",
+                                        "Google Pay resolution launcher not registered",
+                                    ),
+                                )
+                            }
                         } else {
-                            emitResult(
+                            resumeResult(
                                 PaymentResult.failed(
                                     "GOOGLE_PAY",
-                                    "Google Pay resolution launcher not registered",
+                                    exception?.message ?: PaymentError.GENERIC_GOOGLE_PAY,
                                 ),
                             )
                         }
-                    } else {
-                        emitResult(
-                            PaymentResult.failed(
-                                "GOOGLE_PAY",
-                                exception?.message ?: PaymentError.GENERIC_GOOGLE_PAY,
-                            ),
-                        )
                     }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: PaymentError) {
+                    resumeResult(PaymentResult.failed(e))
+                } catch (e: Exception) {
+                    resumeResult(
+                        PaymentResult.failed(
+                            "GOOGLE_PAY",
+                            e.message ?: PaymentError.GENERIC_GOOGLE_PAY,
+                        ),
+                    )
                 }
+            }
+            cont.invokeOnCancellation { job.cancel() }
+        }
+    }
+
+    override fun handleResolutionResult(result: ActivityResult) {
+        when (result.resultCode) {
+            Activity.RESULT_OK -> {
+                val paymentData = result.data?.let { PaymentData.getFromIntent(it) }
+                if (paymentData == null) {
+                    resumeCanceled()
+                    return
+                }
+                if (startContinuation != null) {
+                    submitToken(paymentData)
+                } else {
+                    pendingPaymentData = paymentData
+                }
+            }
+            Activity.RESULT_CANCELED -> resumeCanceled()
+            else -> resumeResult(
+                PaymentResult(
+                    PaymentResult.Status.FAILED,
+                    null,
+                    "GOOGLE_PAY",
+                    "Google Pay was not completed",
+                ),
+            )
+        }
+    }
+
+    private fun submitToken(paymentData: PaymentData) {
+        val engine = engine ?: run {
+            resumeResult(failure("Google Pay is not available"))
+            return
+        }
+        val presenter = threeDSPresenter ?: run {
+            resumeResult(failure("Google Pay is not available"))
+            return
+        }
+        val scope = scope ?: run {
+            resumeResult(failure("Google Pay is not available"))
+            return
+        }
+        didAuthorizePayment = true
+        scope.launch {
+            try {
+                val token = GooglePayHandler.extractToken(paymentData)
+                val result = engine.submitWallet("googlePay", token, presenter)
+                resumeResult(result)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: PaymentError) {
+                resumeResult(PaymentResult.failed(e))
             } catch (e: Exception) {
-                emitResult(
+                resumeResult(
                     PaymentResult.failed("GOOGLE_PAY", e.message ?: PaymentError.GENERIC_GOOGLE_PAY),
                 )
             }
         }
     }
 
-    private fun submitToken(token: String) {
-        val engine = engine ?: return
-        val presenter = threeDSPresenter ?: return
-        val scope = scope ?: return
-        scope.launch {
-            try {
-                val result = engine.submitWallet("googlePay", token, presenter)
-                emitResult(result)
-            } catch (e: Exception) {
-                emitResult(
-                    if (e is PaymentError) PaymentResult.failed(e)
-                    else PaymentResult.failed("GOOGLE_PAY", e.message ?: PaymentError.GENERIC_GOOGLE_PAY),
-                )
-            }
+    private fun resumeCanceled() {
+        resumeResult(
+            PaymentResult(PaymentResult.Status.CANCELED, null, null, null),
+        )
+    }
+
+    private fun resumeResult(result: PaymentResult) {
+        val cont = startContinuation
+        startContinuation = null
+        if (cont != null && cont.isActive) {
+            cont.resume(result)
         }
     }
 
-    private fun emitResult(result: PaymentResult) {
-        onResult?.invoke(result)
+    private fun failure(message: String): PaymentResult =
+        PaymentResult.failed(PaymentError.GooglePay(message))
+
+    companion object {
+        suspend fun decorate(
+            engine: PaymentEngine,
+            activity: FragmentActivity,
+            state: SheetState,
+        ): SheetState {
+            if (!engine.config.paymentMethods.googlePay.enabled) return state
+            val handler = GooglePayHandler(activity, engine.env)
+            return decorate(engine, handler, state)
+        }
+
+        internal suspend fun decorate(
+            engine: PaymentEngine,
+            handler: GooglePayHandler,
+            state: SheetState,
+        ): SheetState {
+            val params = runCatching { engine.walletParams("googlePay") }.getOrNull()
+                ?: return state
+            val methods = handler.allowedPaymentMethodsJson(params)
+            val configured = methods.isNotBlank()
+            val ready = configured && runCatching { handler.isReadyToPay(params) }.getOrDefault(false)
+            return state.copy(
+                googlePayAvailable = configured,
+                googlePayAllowedPaymentMethods = methods.takeIf { configured },
+                googlePayReady = ready,
+            )
+        }
     }
 }

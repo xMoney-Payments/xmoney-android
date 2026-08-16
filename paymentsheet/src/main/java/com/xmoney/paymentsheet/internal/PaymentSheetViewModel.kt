@@ -10,13 +10,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.CreationExtras
-import com.xmoney.payments.engine.PaymentEngine
+import com.xmoney.payments.config.PaymentConfig
 import com.xmoney.payments.config.ResolvedPaymentConfig
+import com.xmoney.payments.engine.PaymentSession
+import com.xmoney.payments.model.OrderChecksum
+import com.xmoney.payments.model.OrderPayload
+import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.payments.model.PaymentResult
 
 class PaymentSheetViewModel(
     private val savedStateHandle: SavedStateHandle,
-    val engine: PaymentEngine,
+    val session: PaymentSession,
     val config: ResolvedPaymentConfig,
     val requestId: String,
 ) : ViewModel() {
@@ -26,6 +30,11 @@ class PaymentSheetViewModel(
     private var completed = false
     private var cachedTheme: CheckoutTheme? = null
     private var lastThemeDark: Boolean? = null
+
+    val intent: PaymentIntent = PaymentIntent(
+        OrderPayload(config.orderPayload),
+        OrderChecksum(config.orderChecksum),
+    )
 
     fun theme(isDark: Boolean): CheckoutTheme =
         cachedTheme.takeIf { lastThemeDark == isDark }
@@ -48,11 +57,21 @@ class PaymentSheetViewModel(
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
             val handle = extras.createSavedStateHandle()
-            val engine = PaymentEngine(config, context).also {
-                it.onCardHolderVerification =
-                    CheckoutSessionRegistry.get(requestId)?.onCardHolderVerification
+            val paymentConfig = PaymentConfig(
+                publicKey = config.publicKey,
+                card = config.card,
+                paymentMethods = config.paymentMethods,
+                options = config.options,
+            )
+            val intent = PaymentIntent(
+                OrderPayload(config.orderPayload),
+                OrderChecksum(config.orderChecksum),
+            )
+            val session = PaymentSession(paymentConfig, intent, context)
+            CheckoutSessionRegistry.get(requestId)?.onCardHolderVerification?.let {
+                session.onCardHolderVerification = it
             }
-            return PaymentSheetViewModel(handle, engine, config, requestId) as T
+            return PaymentSheetViewModel(handle, session, config, requestId) as T
         }
     }
 }

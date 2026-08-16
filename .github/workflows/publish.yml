@@ -40,7 +40,7 @@ jobs:
           echo "Publishing version $VERSION"
 
       - name: Run unit tests
-        run: ./gradlew :core:test :embedded:test :googlepay:test :paymentsheet:test --stacktrace
+        run: ./gradlew :core:test :googlepay:test :paymentelement:test :paymentsheet:test --stacktrace
 
       - name: Publish to Maven Central
         env:

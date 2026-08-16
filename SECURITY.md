@@ -20,7 +20,7 @@ Expect an initial response within **5 business days**. We will coordinate a fix 
 
 ## Scope
 
-This policy covers the published SDK modules in this repo: `core`, `googlepay`, `embedded`, and `paymentsheet`.
+This policy covers the published SDK modules in this repo: `core`, `googlepay`, `paymentelement`, and `paymentsheet`.
 
 Issues in merchant apps, backends, or non-SDK xMoney products are out of scope here — contact your xMoney account team.
 
