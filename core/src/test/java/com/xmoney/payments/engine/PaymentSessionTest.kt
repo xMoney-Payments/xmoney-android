@@ -11,7 +11,7 @@ import com.xmoney.payments.model.OrderChecksum
 import com.xmoney.payments.model.OrderPayload
 import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.model.PaymentIntent
-import com.xmoney.payments.model.PaymentResult
+import com.xmoney.payments.engine.EngineResult
 import com.xmoney.payments.network.HttpClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -100,15 +100,15 @@ class PaymentSessionTest {
             override val didAuthorizePayment: Boolean = false
             override fun bindResolutionLauncher(launcher: ActivityResultLauncher<IntentSenderRequest>) {}
             override fun handleResolutionResult(result: ActivityResult) {}
-            override suspend fun start(): PaymentResult {
+            override suspend fun start(): EngineResult {
                 delay(200)
-                return PaymentResult(PaymentResult.Status.CANCELED, null, null, null)
+                return EngineResult(EngineResult.Status.CANCELED, null, null, null)
             }
         }
         val first = async { session.startWallet(slow) }
         delay(20)
-        val second = session.startWallet(ImmediateWallet(didAuthorizePayment = true, status = PaymentResult.Status.COMPLETE))
-        assertEquals(PaymentResult.Status.CANCELED, second.status)
+        val second = session.startWallet(ImmediateWallet(didAuthorizePayment = true, status = EngineResult.Status.COMPLETE))
+        assertEquals(EngineResult.Status.CANCELED, second.status)
         first.await()
         assertFalse(session.isOrderConsumed)
     }
@@ -119,9 +119,9 @@ class PaymentSessionTest {
         val session = makeSession()
         session.bind(intent, activity)
         val result = session.startWallet(
-            ImmediateWallet(didAuthorizePayment = false, status = PaymentResult.Status.CANCELED),
+            ImmediateWallet(didAuthorizePayment = false, status = EngineResult.Status.CANCELED),
         )
-        assertEquals(PaymentResult.Status.CANCELED, result.status)
+        assertEquals(EngineResult.Status.CANCELED, result.status)
         assertFalse(session.isOrderConsumed)
         assertTrue(session.canDismiss)
     }
@@ -131,7 +131,7 @@ class PaymentSessionTest {
         enqueueToken()
         val session = makeSession()
         session.bind(intent, activity)
-        session.startWallet(ImmediateWallet(didAuthorizePayment = true, status = PaymentResult.Status.CANCELED))
+        session.startWallet(ImmediateWallet(didAuthorizePayment = true, status = EngineResult.Status.CANCELED))
         assertTrue(session.isOrderConsumed)
         assertFalse(session.isInteractionEnabled)
     }
@@ -145,9 +145,9 @@ class PaymentSessionTest {
             override val didAuthorizePayment: Boolean = true
             override fun bindResolutionLauncher(launcher: ActivityResultLauncher<IntentSenderRequest>) {}
             override fun handleResolutionResult(result: ActivityResult) {}
-            override suspend fun start(): PaymentResult {
+            override suspend fun start(): EngineResult {
                 delay(150)
-                return PaymentResult(PaymentResult.Status.COMPLETE, null, null, null)
+                return EngineResult(EngineResult.Status.COMPLETE, null, null, null)
             }
         }
         val job = async { session.startWallet(slow) }
@@ -245,11 +245,11 @@ class PaymentSessionTest {
 
     private class ImmediateWallet(
         override val didAuthorizePayment: Boolean,
-        private val status: PaymentResult.Status,
+        private val status: EngineResult.Status,
     ) : DigitalWalletAuthorizing {
         override fun bindResolutionLauncher(launcher: ActivityResultLauncher<IntentSenderRequest>) {}
         override fun handleResolutionResult(result: ActivityResult) {}
-        override suspend fun start(): PaymentResult =
-            PaymentResult(status, null, null, null)
+        override suspend fun start(): EngineResult =
+            EngineResult(status, null, null, null)
     }
 }

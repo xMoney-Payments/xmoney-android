@@ -113,31 +113,9 @@ data class Transaction(
     }
 }
 
-data class PaymentResult(
-    val status: Status,
-    val transaction: Transaction?,
-    val errorCode: String?,
-    val errorMessage: String?,
-) {
-    enum class Status(val raw: String) {
-        COMPLETE("complete"),
-        FAILED("failed"),
-        CANCELED("canceled"),
-    }
-
-    companion object {
-        fun failed(error: PaymentError): PaymentResult = PaymentResult(
-            status = Status.FAILED,
-            transaction = null,
-            errorCode = error.code,
-            errorMessage = error.merchantMessage(),
-        )
-
-        fun failed(code: String, message: String): PaymentResult = PaymentResult(
-            status = Status.FAILED,
-            transaction = null,
-            errorCode = code,
-            errorMessage = PaymentError.from(code, message).merchantMessage(),
-        )
-    }
+/** Merchant-facing terminal outcome for Sheet, Element, and Google Pay. */
+sealed class PaymentResult {
+    data class Complete(val transaction: Transaction) : PaymentResult()
+    data class Failed(val error: PaymentError) : PaymentResult()
+    data object Canceled : PaymentResult()
 }

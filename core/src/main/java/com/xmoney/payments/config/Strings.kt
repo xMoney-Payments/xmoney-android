@@ -6,7 +6,7 @@ import java.util.Locale
 
 object Strings {
     fun text(key: String, locale: String, args: Map<String, String> = emptyMap()): String {
-        val bundle = bundles[locale] ?: bundles["en-US"]!!
+        val bundle = bundleFor(locale)
         var value = bundle[key] ?: bundles["en-US"]!![key] ?: key
         args.forEach { (placeholder, replacement) ->
             value = value.replace("{{$placeholder}}", replacement)
@@ -23,15 +23,26 @@ object Strings {
         }
     }
 
-    fun formatAmount(amount: Double?, currency: String?): String? {
+    fun formatAmount(amount: Double?, currency: String?, locale: String = "en-US"): String? {
         if (amount == null) return null
         return try {
-            val format = NumberFormat.getCurrencyInstance(Locale.getDefault())
+            val format = NumberFormat.getCurrencyInstance(localeFor(locale))
             format.currency = Currency.getInstance(currency ?: "EUR")
             format.format(amount)
         } catch (_: Exception) {
             amount.toString()
         }
+    }
+
+    private fun localeFor(tag: String): Locale {
+        val parsed = Locale.forLanguageTag(tag.replace('_', '-'))
+        return if (parsed.language.isNullOrEmpty()) Locale.US else parsed
+    }
+
+    private fun bundleFor(locale: String): Map<String, String> {
+        bundles[locale]?.let { return it }
+        val language = locale.replace('_', '-').substringBefore('-').lowercase()
+        return bundles[language] ?: bundles["en-US"]!!
     }
 
     private val en = mapOf(
@@ -64,8 +75,8 @@ object Strings {
         "elements.saveCard" to "Save Card for Future Use",
         "placeholder.cardNumber" to "0000 - 0000 - 0000 - 0000",
         "placeholder.expDate" to "MM / YY",
-        "placeholder.cvv" to "000",
-        "placeholder.cardholderName" to "Cardholder name",
+        "placeholder.cvv" to "cvv",
+        "placeholder.cardholderName" to "Name on card",
         "errors.cardNumberRequired" to "Card number is required.",
         "errors.cardNumberUnsupported" to "Card type is not supported.",
         "errors.cardNumberTooShort" to "Card number is too short.",
@@ -123,8 +134,8 @@ object Strings {
         "elements.saveCard" to "Αποθήκευση κάρτας για μελλοντική χρήση",
         "placeholder.cardNumber" to "0000 - 0000 - 0000 - 0000",
         "placeholder.expDate" to "ΜΜ / ΕΕ",
-        "placeholder.cvv" to "000",
-        "placeholder.cardholderName" to "Όνομα κατόχου",
+        "placeholder.cvv" to "cvv",
+        "placeholder.cardholderName" to "Όνομα στην κάρτα",
         "errors.cardNumberRequired" to "Ο αριθμός κάρτας είναι υποχρεωτικός.",
         "errors.cardNumberUnsupported" to "Ο τύπος κάρτας δεν υποστηρίζεται.",
         "errors.cardNumberTooShort" to "Ο αριθμός κάρτας είναι πολύ σύντομος.",
@@ -182,8 +193,8 @@ object Strings {
         "elements.saveCard" to "Salvează cardul pentru utilizări viitoare",
         "placeholder.cardNumber" to "0000 - 0000 - 0000 - 0000",
         "placeholder.expDate" to "LL / AA",
-        "placeholder.cvv" to "000",
-        "placeholder.cardholderName" to "Numele titularului",
+        "placeholder.cvv" to "cvv",
+        "placeholder.cardholderName" to "Numele de pe card",
         "errors.cardNumberRequired" to "Numărul cardului este obligatoriu.",
         "errors.cardNumberUnsupported" to "Tipul de card nu este acceptat.",
         "errors.cardNumberTooShort" to "Numărul cardului este prea scurt.",
@@ -211,9 +222,195 @@ object Strings {
         "button.deposit" to "Depune {{amount}}",
     )
 
+    private val bg = mapOf(
+        "sheet.title" to "Плащане",
+        "sheet.cancel" to "Отказ",
+        "sheet.creditDebitCard" to "Кредитна / дебитна карта",
+        "sheet.poweredBy" to "Предоставено от",
+        "sheet.savedCards" to "Запазени карти",
+        "sheet.payingWith" to "Плащане с",
+        "sheet.useAnotherCard" to "Използвай друга карта",
+        "sheet.useOtherCard" to "Използвай друга карта",
+        "sheet.or" to "или",
+        "sheet.cardDetails" to "Данни за картата",
+        "sheet.enterCardDetails" to "Въведете данни за картата",
+        "sheet.visaOrMastercard" to "Visa или Mastercard",
+        "sheet.saveCardShort" to "Запази картата за следващия път",
+        "sheet.delete" to "Изтрий",
+        "sheet.edit" to "Редактирай",
+        "sheet.done" to "Готово",
+        "sheet.removeCardConfirm" to "Сигурни ли сте, че искате да премахнете тази карта?",
+        "sheet.remove" to "Премахни",
+        "sheet.keepIt" to "Запази я",
+        "sheet.default" to "По подразбиране",
+        "sheet.authentication" to "Удостоверяване",
+        "sheet.processingPayment" to "Обработка на плащането...",
+        "elements.cardNumber" to "Номер на картата",
+        "elements.cardholderName" to "Име на картодържателя",
+        "elements.expDate" to "Дата на валидност",
+        "elements.cvv" to "CVV",
+        "elements.saveCard" to "Запази картата за бъдеща употреба",
+        "placeholder.cardNumber" to "0000 - 0000 - 0000 - 0000",
+        "placeholder.expDate" to "ММ / ГГ",
+        "placeholder.cvv" to "cvv",
+        "placeholder.cardholderName" to "Име върху картата",
+        "errors.cardNumberRequired" to "Номерът на картата е задължителен.",
+        "errors.cardNumberUnsupported" to "Типът на картата не се поддържа.",
+        "errors.cardNumberTooShort" to "Номерът на картата е твърде кратък.",
+        "errors.cardNumberWrongLength" to "Дължината на номера на картата е невалидна.",
+        "errors.cardNumberInvalid" to "Номерът на картата е невалиден.",
+        "errors.expDateRequired" to "Датата на валидност е задължителна.",
+        "errors.expDateInvalidFormat" to "Форматът на датата на валидност е невалиден.",
+        "errors.expDateInvalidMonth" to "Месецът на валидност е невалиден.",
+        "errors.cardExpired" to "Картата е изтекла.",
+        "errors.cvvRequired" to "CVV е задължителен.",
+        "errors.cvvInvalid" to "CVV е невалиден.",
+        "errors.cardHolderNameRequired" to "Името на картодържателя е задължително.",
+        "errors.cardHolderNameNoDigits" to "Името на картодържателя не може да съдържа цифри.",
+        "errors.cardHolderNameInvalidChars" to "Разрешени са само букви, интервали, апострофи, тирета и точки.",
+        "button.pay" to "Плати {{amount}}",
+        "button.payNoAmount" to "Плати",
+        "button.processing" to "Обработка...",
+        "button.book" to "Резервирай {{amount}}",
+        "button.buy" to "Купи {{amount}}",
+        "button.checkout" to "Завърши поръчката {{amount}}",
+        "button.donate" to "Дари {{amount}}",
+        "button.order" to "Направи поръчка {{amount}}",
+        "button.subscribe" to "Абонирай се за {{amount}}",
+        "button.topUp" to "Зареди {{amount}}",
+        "button.deposit" to "Депозирай {{amount}}",
+    )
+
+    private val hu = mapOf(
+        "sheet.title" to "Fizetés",
+        "sheet.cancel" to "Mégse",
+        "sheet.creditDebitCard" to "Hitel- / bankkártya",
+        "sheet.poweredBy" to "Szolgáltató",
+        "sheet.savedCards" to "Mentett kártyák",
+        "sheet.payingWith" to "Fizetés ezzel",
+        "sheet.useAnotherCard" to "Másik kártya használata",
+        "sheet.useOtherCard" to "Másik kártya használata",
+        "sheet.or" to "vagy",
+        "sheet.cardDetails" to "Kártyaadatok",
+        "sheet.enterCardDetails" to "Adja meg a kártyaadatokat",
+        "sheet.visaOrMastercard" to "Visa vagy Mastercard",
+        "sheet.saveCardShort" to "Kártya mentése a következő alkalomra",
+        "sheet.delete" to "Törlés",
+        "sheet.edit" to "Szerkesztés",
+        "sheet.done" to "Kész",
+        "sheet.removeCardConfirm" to "Biztosan eltávolítja ezt a kártyát?",
+        "sheet.remove" to "Eltávolítás",
+        "sheet.keepIt" to "Megtartás",
+        "sheet.default" to "Alapértelmezett",
+        "sheet.authentication" to "Hitelesítés",
+        "sheet.processingPayment" to "Fizetés feldolgozása...",
+        "elements.cardNumber" to "Kártyaszám",
+        "elements.cardholderName" to "Kártyabirtokos neve",
+        "elements.expDate" to "Lejárati dátum",
+        "elements.cvv" to "CVV",
+        "elements.saveCard" to "Kártya mentése későbbi használatra",
+        "placeholder.cardNumber" to "0000 - 0000 - 0000 - 0000",
+        "placeholder.expDate" to "HH / ÉÉ",
+        "placeholder.cvv" to "cvv",
+        "placeholder.cardholderName" to "Név a kártyán",
+        "errors.cardNumberRequired" to "A kártyaszám kötelező.",
+        "errors.cardNumberUnsupported" to "A kártyatípus nem támogatott.",
+        "errors.cardNumberTooShort" to "A kártyaszám túl rövid.",
+        "errors.cardNumberWrongLength" to "A kártyaszám hossza érvénytelen.",
+        "errors.cardNumberInvalid" to "A kártyaszám érvénytelen.",
+        "errors.expDateRequired" to "A lejárati dátum kötelező.",
+        "errors.expDateInvalidFormat" to "A lejárati dátum formátuma érvénytelen.",
+        "errors.expDateInvalidMonth" to "A lejárati hónap érvénytelen.",
+        "errors.cardExpired" to "A kártya lejárt.",
+        "errors.cvvRequired" to "A CVV kötelező.",
+        "errors.cvvInvalid" to "A CVV érvénytelen.",
+        "errors.cardHolderNameRequired" to "A kártyabirtokos neve kötelező.",
+        "errors.cardHolderNameNoDigits" to "A kártyabirtokos neve nem tartalmazhat számokat.",
+        "errors.cardHolderNameInvalidChars" to "Csak betűk, szóközök, aposztrófok, kötőjelek és pontok engedélyezettek.",
+        "button.pay" to "Fizetés {{amount}}",
+        "button.payNoAmount" to "Fizetés",
+        "button.processing" to "Feldolgozás...",
+        "button.book" to "Foglalás {{amount}}",
+        "button.buy" to "Vásárlás {{amount}}",
+        "button.checkout" to "Pénztár {{amount}}",
+        "button.donate" to "Adományozás {{amount}}",
+        "button.order" to "Rendelés leadása {{amount}}",
+        "button.subscribe" to "Előfizetés {{amount}} összegre",
+        "button.topUp" to "Feltöltés {{amount}}",
+        "button.deposit" to "Befizetés {{amount}}",
+    )
+
+    private val pl = mapOf(
+        "sheet.title" to "Płatność",
+        "sheet.cancel" to "Anuluj",
+        "sheet.creditDebitCard" to "Karta kredytowa / debetowa",
+        "sheet.poweredBy" to "Obsługiwane przez",
+        "sheet.savedCards" to "Zapisane karty",
+        "sheet.payingWith" to "Płatność za pomocą",
+        "sheet.useAnotherCard" to "Użyj innej karty",
+        "sheet.useOtherCard" to "Użyj innej karty",
+        "sheet.or" to "lub",
+        "sheet.cardDetails" to "Dane karty",
+        "sheet.enterCardDetails" to "Wprowadź dane karty",
+        "sheet.visaOrMastercard" to "Visa lub Mastercard",
+        "sheet.saveCardShort" to "Zapisz kartę na następnym razem",
+        "sheet.delete" to "Usuń",
+        "sheet.edit" to "Edytuj",
+        "sheet.done" to "Gotowe",
+        "sheet.removeCardConfirm" to "Czy na pewno chcesz usunąć tę kartę?",
+        "sheet.remove" to "Usuń",
+        "sheet.keepIt" to "Zachowaj",
+        "sheet.default" to "Domyślna",
+        "sheet.authentication" to "Uwierzytelnianie",
+        "sheet.processingPayment" to "Przetwarzanie płatności...",
+        "elements.cardNumber" to "Numer karty",
+        "elements.cardholderName" to "Imię i nazwisko posiadacza karty",
+        "elements.expDate" to "Data ważności",
+        "elements.cvv" to "CVV",
+        "elements.saveCard" to "Zapisz kartę do późniejszego użycia",
+        "placeholder.cardNumber" to "0000 - 0000 - 0000 - 0000",
+        "placeholder.expDate" to "MM / RR",
+        "placeholder.cvv" to "cvv",
+        "placeholder.cardholderName" to "Imię i nazwisko na karcie",
+        "errors.cardNumberRequired" to "Numer karty jest wymagany.",
+        "errors.cardNumberUnsupported" to "Typ karty nie jest obsługiwany.",
+        "errors.cardNumberTooShort" to "Numer karty jest za krótki.",
+        "errors.cardNumberWrongLength" to "Długość numeru karty jest nieprawidłowa.",
+        "errors.cardNumberInvalid" to "Numer karty jest nieprawidłowy.",
+        "errors.expDateRequired" to "Data ważności jest wymagana.",
+        "errors.expDateInvalidFormat" to "Format daty ważności jest nieprawidłowy.",
+        "errors.expDateInvalidMonth" to "Miesiąc ważności jest nieprawidłowy.",
+        "errors.cardExpired" to "Karta wygasła.",
+        "errors.cvvRequired" to "CVV jest wymagany.",
+        "errors.cvvInvalid" to "CVV jest nieprawidłowy.",
+        "errors.cardHolderNameRequired" to "Imię i nazwisko posiadacza karty jest wymagane.",
+        "errors.cardHolderNameNoDigits" to "Imię i nazwisko posiadacza karty nie może zawierać cyfr.",
+        "errors.cardHolderNameInvalidChars" to "Dozwolone są tylko litery, spacje, apostrofy, myślniki i kropki.",
+        "button.pay" to "Zapłać {{amount}}",
+        "button.payNoAmount" to "Zapłać",
+        "button.processing" to "Przetwarzanie...",
+        "button.book" to "Zarezerwuj {{amount}}",
+        "button.buy" to "Kup {{amount}}",
+        "button.checkout" to "Finalizuj zamówienie {{amount}}",
+        "button.donate" to "Przekaż darowiznę {{amount}}",
+        "button.order" to "Złóż zamówienie {{amount}}",
+        "button.subscribe" to "Subskrybuj za {{amount}}",
+        "button.topUp" to "Doładuj {{amount}}",
+        "button.deposit" to "Wpłać {{amount}}",
+    )
+
     private val bundles = mapOf(
         "en-US" to en,
+        "en" to en,
         "el-GR" to el,
+        "el" to el,
         "ro-RO" to ro,
+        "ro" to ro,
+        "bg-BG" to bg,
+        "bg" to bg,
+        "hu-HU" to hu,
+        "hu" to hu,
+        "pl-PL" to pl,
+        "pl" to pl,
     )
 }

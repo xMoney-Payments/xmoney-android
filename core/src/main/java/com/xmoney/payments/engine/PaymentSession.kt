@@ -8,7 +8,6 @@ import com.xmoney.payments.model.CardHolderVerificationResult
 import com.xmoney.payments.model.CardInput
 import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.model.PaymentIntent
-import com.xmoney.payments.model.PaymentResult
 import com.xmoney.payments.network.HttpClient
 import kotlinx.coroutines.CancellationException
 
@@ -86,13 +85,13 @@ class PaymentSession(
         return loaded
     }
 
-    suspend fun submitNewCard(input: CardInput, presenter: ThreeDSPresenter): PaymentResult =
+    suspend fun submitNewCard(input: CardInput, presenter: ThreeDSPresenter): EngineResult =
         submit(didAuthorize = true) { engine.submitNewCard(input, presenter) }
 
-    suspend fun submitSavedCard(cardId: String, presenter: ThreeDSPresenter): PaymentResult =
+    suspend fun submitSavedCard(cardId: String, presenter: ThreeDSPresenter): EngineResult =
         submit(didAuthorize = true) { engine.submitSavedCard(cardId, presenter) }
 
-    suspend fun startWallet(authorizer: DigitalWalletAuthorizing): PaymentResult {
+    suspend fun startWallet(authorizer: DigitalWalletAuthorizing): EngineResult {
         if (!beginOperation()) return canceled
         val result = authorizer.start()
         finish(result, authorizer.didAuthorizePayment)
@@ -124,8 +123,8 @@ class PaymentSession(
 
     private suspend fun submit(
         didAuthorize: Boolean,
-        operation: suspend () -> PaymentResult,
-    ): PaymentResult {
+        operation: suspend () -> EngineResult,
+    ): EngineResult {
         if (!beginOperation()) return canceled
         return try {
             val result = operation()
@@ -147,15 +146,15 @@ class PaymentSession(
         return true
     }
 
-    private fun finish(result: PaymentResult, didAuthorize: Boolean) {
+    private fun finish(result: EngineResult, didAuthorize: Boolean) {
         isProcessing = false
         if (OrderConsumption.shouldConsume(result.status, didAuthorize)) {
             isOrderConsumed = true
         }
     }
 
-    private fun finishFailed(error: PaymentError): PaymentResult {
-        val failed = PaymentResult.failed(error)
+    private fun finishFailed(error: PaymentError): EngineResult {
+        val failed = EngineResult.failed(error)
         finish(failed, didAuthorize = true)
         return failed
     }
@@ -166,8 +165,8 @@ class PaymentSession(
 
         private fun key(payload: String, checksum: String): String = "$payload:$checksum"
 
-        private val canceled = PaymentResult(
-            status = PaymentResult.Status.CANCELED,
+        private val canceled = EngineResult(
+            status = EngineResult.Status.CANCELED,
             transaction = null,
             errorCode = null,
             errorMessage = null,

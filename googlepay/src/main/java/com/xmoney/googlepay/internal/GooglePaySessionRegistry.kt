@@ -18,6 +18,8 @@ internal object GooglePaySessionRegistry {
         val config: ResolvedPaymentConfig? = null,
         var host: WeakReference<FragmentActivity>? = null,
         var closeTarget: WeakReference<GooglePayCloseTarget>? = null,
+        var isAvailable: Boolean = false,
+        var isReady: Boolean = false,
     )
 
     private val sessions = ConcurrentHashMap<String, Session>()

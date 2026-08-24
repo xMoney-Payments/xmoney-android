@@ -266,19 +266,25 @@ internal fun NewCardBlock(
     theme: CheckoutTheme,
     content: @Composable () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(
-                RoundedCornerShape(
-                    bottomStart = 15.dp,
-                    bottomEnd = 15.dp,
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(
+                    RoundedCornerShape(
+                        topStart = 15.dp,
+                        topEnd = 15.dp,
+                        bottomStart = theme.paymentContainerRadius,
+                        bottomEnd = theme.paymentContainerRadius,
+                    ),
+                )
+                .background(theme.selectedBackground)
+                .padding(
+                    start = PaymentContainerInset,
+                    end = PaymentContainerInset,
+                    bottom = PaymentContainerInset,
                 ),
-            )
-            .background(theme.selectedBackground)
-            .padding(bottom = PaymentContainerInset),
-        verticalArrangement = Arrangement.spacedBy(0.dp),
-    ) {
+            verticalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
         content()
     }
 }

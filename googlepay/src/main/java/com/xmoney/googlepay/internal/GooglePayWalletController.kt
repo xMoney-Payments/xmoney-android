@@ -18,7 +18,7 @@ import com.xmoney.payments.engine.ThreeDSPresenter
 import com.xmoney.payments.model.OrderPayloadDecoder
 import com.xmoney.payments.model.OrderPayloadInfo
 import com.xmoney.payments.model.PaymentError
-import com.xmoney.payments.model.PaymentResult
+import com.xmoney.payments.engine.EngineResult
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -42,7 +42,7 @@ class GooglePayWalletController(
     private var autoRegisteredLauncher: ActivityResultLauncher<IntentSenderRequest>? = null
     private var pendingPaymentData: PaymentData? = null
 
-    private var startContinuation: CancellableContinuation<PaymentResult>? = null
+    private var startContinuation: CancellableContinuation<EngineResult>? = null
 
     override var didAuthorizePayment: Boolean = false
         private set
@@ -106,12 +106,12 @@ class GooglePayWalletController(
         return decorate(engine, handler, baseState)
     }
 
-    override suspend fun start(): PaymentResult {
+    override suspend fun start(): EngineResult {
         val engine = engine ?: return failure("Google Pay is not available")
         return start(OrderPayloadDecoder.info(engine.config.orderPayload))
     }
 
-    suspend fun start(orderInfo: OrderPayloadInfo): PaymentResult {
+    suspend fun start(orderInfo: OrderPayloadInfo): EngineResult {
         val engine = engine ?: return failure("Google Pay is not available")
         val handler = handler ?: return failure("Google Pay is not available")
         val pending = pendingPaymentData
@@ -156,7 +156,7 @@ class GooglePayWalletController(
                                 )
                             } else {
                                 resumeResult(
-                                    PaymentResult.failed(
+                                    EngineResult.failed(
                                         "GOOGLE_PAY",
                                         "Google Pay resolution launcher not registered",
                                     ),
@@ -164,7 +164,7 @@ class GooglePayWalletController(
                             }
                         } else {
                             resumeResult(
-                                PaymentResult.failed(
+                                EngineResult.failed(
                                     "GOOGLE_PAY",
                                     exception?.message ?: PaymentError.GENERIC_GOOGLE_PAY,
                                 ),
@@ -174,10 +174,10 @@ class GooglePayWalletController(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: PaymentError) {
-                    resumeResult(PaymentResult.failed(e))
+                    resumeResult(EngineResult.failed(e))
                 } catch (e: Exception) {
                     resumeResult(
-                        PaymentResult.failed(
+                        EngineResult.failed(
                             "GOOGLE_PAY",
                             e.message ?: PaymentError.GENERIC_GOOGLE_PAY,
                         ),
@@ -204,8 +204,8 @@ class GooglePayWalletController(
             }
             Activity.RESULT_CANCELED -> resumeCanceled()
             else -> resumeResult(
-                PaymentResult(
-                    PaymentResult.Status.FAILED,
+                EngineResult(
+                    EngineResult.Status.FAILED,
                     null,
                     "GOOGLE_PAY",
                     "Google Pay was not completed",
@@ -236,10 +236,10 @@ class GooglePayWalletController(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: PaymentError) {
-                resumeResult(PaymentResult.failed(e))
+                resumeResult(EngineResult.failed(e))
             } catch (e: Exception) {
                 resumeResult(
-                    PaymentResult.failed("GOOGLE_PAY", e.message ?: PaymentError.GENERIC_GOOGLE_PAY),
+                    EngineResult.failed("GOOGLE_PAY", e.message ?: PaymentError.GENERIC_GOOGLE_PAY),
                 )
             }
         }
@@ -247,11 +247,11 @@ class GooglePayWalletController(
 
     private fun resumeCanceled() {
         resumeResult(
-            PaymentResult(PaymentResult.Status.CANCELED, null, null, null),
+            EngineResult(EngineResult.Status.CANCELED, null, null, null),
         )
     }
 
-    private fun resumeResult(result: PaymentResult) {
+    private fun resumeResult(result: EngineResult) {
         val cont = startContinuation
         startContinuation = null
         if (cont != null && cont.isActive) {
@@ -259,8 +259,8 @@ class GooglePayWalletController(
         }
     }
 
-    private fun failure(message: String): PaymentResult =
-        PaymentResult.failed(PaymentError.GooglePay(message))
+    private fun failure(message: String): EngineResult =
+        EngineResult.failed(PaymentError.GooglePay(message))
 
     companion object {
         suspend fun decorate(

@@ -36,7 +36,7 @@ import com.xmoney.payments.engine.DigitalWalletAuthorizing
 import com.xmoney.payments.engine.SheetState
 import com.xmoney.payments.model.CardInput
 import com.xmoney.payments.model.PaymentError
-import com.xmoney.payments.model.PaymentResult
+import com.xmoney.payments.engine.EngineResult
 import com.xmoney.payments.model.SavedCard
 import com.xmoney.payments.threeds.ThreeDSHostController
 import com.xmoney.payments.validation.CardFieldValidators
@@ -61,6 +61,8 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
     private var didFinish = false
     private var authorizer: DigitalWalletAuthorizing? = null
     private var pendingWalletResult: androidx.activity.result.ActivityResult? = null
+    private var sheetBehavior: BottomSheetBehavior<View>? = null
+    private var behaviorCallback: BottomSheetBehavior.BottomSheetCallback? = null
 
     private val threeDSHostController by lazy {
         ThreeDSHostController(requireActivity()) { viewModel.config.options.locale }
@@ -97,11 +99,30 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
         dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { sheet ->
             sheet.setBackgroundColor(android.graphics.Color.TRANSPARENT)
             sheet.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
-            BottomSheetBehavior.from(sheet).apply {
-                state = BottomSheetBehavior.STATE_EXPANDED
-                skipCollapsed = true
-                isDraggable = false
+            bindSheetBehavior(sheet)
+        }
+    }
+
+    private fun bindSheetBehavior(sheet: View) {
+        val behavior = BottomSheetBehavior.from(sheet)
+        behavior.state = BottomSheetBehavior.STATE_EXPANDED
+        behavior.skipCollapsed = true
+        behavior.isHideable = true
+        behavior.isDraggable = !isProcessing
+        if (sheetBehavior !== behavior) {
+            behaviorCallback?.let { sheetBehavior?.removeBottomSheetCallback(it) }
+            val callback = object : BottomSheetBehavior.BottomSheetCallback() {
+                override fun onStateChanged(bottomSheet: View, newState: Int) {
+                    if (newState == BottomSheetBehavior.STATE_HIDDEN) {
+                        requestClose()
+                    }
+                }
+
+                override fun onSlide(bottomSheet: View, slideOffset: Float) = Unit
             }
+            behaviorCallback = callback
+            behavior.addBottomSheetCallback(callback)
+            sheetBehavior = behavior
         }
     }
 
@@ -182,9 +203,9 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: PaymentError) {
-                finish(PaymentResult.failed(e))
+                finish(EngineResult.failed(e))
             } catch (e: Exception) {
-                finish(PaymentResult.failed("LOAD_ERROR", e.message ?: PaymentError.GENERIC_LOAD))
+                finish(EngineResult.failed("LOAD_ERROR", e.message ?: PaymentError.GENERIC_LOAD))
             }
         }
     }
@@ -195,7 +216,7 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
         setProcessingState(true)
         lifecycleScope.launch {
             val result = session.startWallet(wallet)
-            if (result.status == PaymentResult.Status.CANCELED && !session.isOrderConsumed) {
+            if (result.status == EngineResult.Status.CANCELED && !session.isOrderConsumed) {
                 setProcessingState(false)
                 return@launch
             }
@@ -223,7 +244,7 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
         uiState = UiState.Loaded(updated)
     }
 
-    private fun runSubmission(block: suspend () -> PaymentResult) {
+    private fun runSubmission(block: suspend () -> EngineResult) {
         setProcessingState(true)
         lifecycleScope.launch {
             try {
@@ -233,9 +254,9 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
                 setProcessingState(false)
                 throw e
             } catch (e: PaymentError) {
-                finish(PaymentResult.failed(e))
+                finish(EngineResult.failed(e))
             } catch (e: Exception) {
-                finish(PaymentResult.failed("PAYMENT_ERROR", e.message ?: PaymentError.GENERIC_PAYMENT))
+                finish(EngineResult.failed("PAYMENT_ERROR", e.message ?: PaymentError.GENERIC_PAYMENT))
             }
         }
     }
@@ -243,15 +264,16 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
     private fun setProcessingState(processing: Boolean) {
         isProcessing = processing
         isCancelable = !processing
+        sheetBehavior?.isDraggable = !processing
         viewModel.onEvent(PaymentSheetEvent.Processing(processing))
     }
 
     override fun requestClose() {
         if (isProcessing) return
-        finish(PaymentResult(PaymentResult.Status.CANCELED, null, null, null))
+        finish(EngineResult(EngineResult.Status.CANCELED, null, null, null))
     }
 
-    private fun finish(result: PaymentResult) {
+    private fun finish(result: EngineResult) {
         if (didFinish) return
         didFinish = true
         viewModel.finish(result)
@@ -262,7 +284,7 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
         super.onDismiss(dialog)
         if (!didFinish) {
             didFinish = true
-            viewModel.finish(PaymentResult(PaymentResult.Status.CANCELED, null, null, null))
+            viewModel.finish(EngineResult(EngineResult.Status.CANCELED, null, null, null))
         }
     }
 

@@ -40,8 +40,8 @@ internal fun savedCardMeta(card: SavedCard, locale: String): String {
 internal fun savedCardBrandForIcon(card: SavedCard): String? =
     savedCardNetworkBrand(card)?.lowercase()
 
-private fun savedCardIssuerLabel(card: SavedCard): String {
-    card.issuerName?.takeIf { it.isNotBlank() }?.let { return it.trim() }
+internal fun savedCardIssuerLabel(card: SavedCard): String {
+    card.bankName?.takeIf { it.isNotBlank() }?.let { return it.trim() }
     card.cardType?.takeIf { it.isNotBlank() && !isKnownCardBrand(it) }?.let { return it.trim() }
     val masked = card.cardNumber?.trim().orEmpty()
     if (masked.isNotEmpty()) {

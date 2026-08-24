@@ -8,7 +8,6 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.annotation.RestrictTo
 import androidx.fragment.app.FragmentActivity
 import com.xmoney.payments.config.WalletAppearance
-import com.xmoney.payments.model.PaymentResult
 
 /** Wallet authorizer implemented by Google Pay (Play Wallet lives outside core). */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
@@ -27,7 +26,7 @@ interface DigitalWalletAuthorizing {
 
     fun handleResolutionResult(result: ActivityResult)
 
-    suspend fun start(): PaymentResult
+    suspend fun start(): EngineResult
 }
 
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)

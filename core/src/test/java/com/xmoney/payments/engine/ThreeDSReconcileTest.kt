@@ -1,7 +1,7 @@
 package com.xmoney.payments.engine
 
 import com.xmoney.payments.model.PaymentError
-import com.xmoney.payments.model.PaymentResult
+import com.xmoney.payments.engine.EngineResult
 import com.xmoney.payments.model.Transaction
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -33,7 +33,7 @@ class ThreeDSReconcileTest {
     fun resultFromTransaction_mapsCompleteSuccess() {
         val tx = Transaction(id = "1", status = "complete-ok")
         val result = resultFromTransaction(tx)
-        assertEquals(PaymentResult.Status.COMPLETE, result.status)
+        assertEquals(EngineResult.Status.COMPLETE, result.status)
         assertSame(tx, result.transaction)
         assertEquals(null, result.errorCode)
     }
@@ -42,13 +42,13 @@ class ThreeDSReconcileTest {
     fun resultFromTransaction_mapsCompleteFail() {
         val tx = Transaction(id = null, status = "complete-failed")
         val result = resultFromTransaction(tx)
-        assertEquals(PaymentResult.Status.FAILED, result.status)
+        assertEquals(EngineResult.Status.FAILED, result.status)
         assertEquals("PAYMENT_ERROR", result.errorCode)
     }
 
     @Test
     fun softCancel_immediateComplete_returnsCompleteWithoutWaiting() = runBlocking {
-        val poll = CompletableDeferred<PaymentResult>()
+        val poll = CompletableDeferred<EngineResult>()
         val result = reconcileCanceledThreeDS(
             fetchTransaction = {
                 Transaction(id = "t1", status = "complete")
@@ -56,7 +56,7 @@ class ThreeDSReconcileTest {
             pollDeferred = poll,
             graceMs = 5_000L,
         )
-        assertEquals(PaymentResult.Status.COMPLETE, result.status)
+        assertEquals(EngineResult.Status.COMPLETE, result.status)
         assertTrue(poll.isCancelled)
     }
 
@@ -64,7 +64,7 @@ class ThreeDSReconcileTest {
     fun softCancel_pendingThenGraceTimeout_returnsCanceled() = runBlocking {
         val poll = async {
             delay(10_000L)
-            PaymentResult(PaymentResult.Status.COMPLETE, Transaction(id = null, status = null), null, null)
+            EngineResult(EngineResult.Status.COMPLETE, Transaction(id = null, status = null), null, null)
         }
         val started = System.currentTimeMillis()
         val result = reconcileCanceledThreeDS(
@@ -73,15 +73,15 @@ class ThreeDSReconcileTest {
             graceMs = 80L,
         )
         val elapsed = System.currentTimeMillis() - started
-        assertEquals(PaymentResult.Status.CANCELED, result.status)
+        assertEquals(EngineResult.Status.CANCELED, result.status)
         assertTrue("grace should be short, was ${elapsed}ms", elapsed < 2_000L)
         assertTrue(poll.isCancelled)
     }
 
     @Test
     fun softCancel_pendingThenPollWinsWithinGrace_returnsPollResult() = runBlocking {
-        val complete = PaymentResult(
-            status = PaymentResult.Status.COMPLETE,
+        val complete = EngineResult(
+            status = EngineResult.Status.COMPLETE,
             transaction = Transaction(id = null, status = "complete"),
             errorCode = null,
             errorMessage = null,
@@ -95,7 +95,7 @@ class ThreeDSReconcileTest {
             pollDeferred = poll,
             graceMs = 2_000L,
         )
-        assertEquals(PaymentResult.Status.COMPLETE, result.status)
+        assertEquals(EngineResult.Status.COMPLETE, result.status)
         assertSame(complete, result)
     }
 
@@ -103,8 +103,8 @@ class ThreeDSReconcileTest {
     fun softCancel_immediateFetchFails_fallsThroughToGrace() = runBlocking {
         val poll = async {
             delay(30L)
-            PaymentResult(
-                PaymentResult.Status.FAILED,
+            EngineResult(
+                EngineResult.Status.FAILED,
                 Transaction(id = null, status = "complete-failed"),
                 "PAYMENT_ERROR",
                 "Transaction complete-failed",
@@ -115,6 +115,6 @@ class ThreeDSReconcileTest {
             pollDeferred = poll,
             graceMs = 2_000L,
         )
-        assertEquals(PaymentResult.Status.FAILED, result.status)
+        assertEquals(EngineResult.Status.FAILED, result.status)
     }
 }

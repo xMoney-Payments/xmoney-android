@@ -2,13 +2,24 @@ package com.xmoney.googlepay
 
 import androidx.fragment.app.FragmentActivity
 import com.xmoney.payments.config.PaymentConfig
+import com.xmoney.payments.engine.PaymentSession
 import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.payments.model.PaymentResult
 import com.xmoney.googlepay.internal.GooglePayHostActivity
 import com.xmoney.googlepay.internal.GooglePaySessionRegistry
 import com.xmoney.googlepay.internal.GooglePayBootstrap
+import kotlinx.coroutines.CancellationException
 import java.lang.ref.WeakReference
 import java.util.UUID
+
+/**
+ * Site/config allows Google Pay ([isAvailable]) and Play Wallet reports a
+ * usable method ([isReady]). Same flags as [GooglePayController].
+ */
+data class GooglePayAvailability(
+    val isAvailable: Boolean,
+    val isReady: Boolean,
+)
 
 /**
  * Public entry point for standalone Google Pay.
@@ -27,6 +38,34 @@ class GooglePay(
         @JvmStatic
         fun register() {
             GooglePayBootstrap.install()
+        }
+    }
+
+    /**
+     * Bind without UI and return controller-equivalent availability flags.
+     * Failures (missing Play Wallet, load error) resolve to both flags false.
+     */
+    suspend fun availability(
+        activity: FragmentActivity,
+        intent: PaymentIntent,
+    ): GooglePayAvailability {
+        GooglePay.register()
+        val config = configuration.copy(
+            paymentMethods = configuration.paymentMethods.copy(
+                googlePay = configuration.paymentMethods.googlePay.copy(enabled = true),
+            ),
+        )
+        return try {
+            val session = PaymentSession(config, intent, activity.applicationContext)
+            val loaded = session.bind(intent, activity)
+            GooglePayAvailability(
+                isAvailable = loaded.googlePayAvailable,
+                isReady = loaded.googlePayReady,
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            GooglePayAvailability(isAvailable = false, isReady = false)
         }
     }
 

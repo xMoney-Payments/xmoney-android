@@ -34,9 +34,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -170,6 +172,7 @@ internal fun SavedCardPickerRow(
                 ) {
                     CardBrandIcon(
                         brand = savedCardBrandForIcon(card),
+                        theme = theme,
                         size = CardBrandIconSize.SavedCardRow,
                     )
                 }
@@ -177,14 +180,32 @@ internal fun SavedCardPickerRow(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    SheetText(
-                        savedCardDisplayName(card),
-                        theme = theme,
-                        fontSize = 16f,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = (-0.01).sp,
-                        lineHeight = 20f,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        SheetText(
+                            savedCardIssuerLabel(card),
+                            theme = theme,
+                            modifier = Modifier.weight(1f, fill = false),
+                            fontSize = 16f,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = (-0.01).sp,
+                            lineHeight = 20f,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        SheetText(
+                            savedCardMaskedNumber(card),
+                            theme = theme,
+                            fontSize = 16f,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = (-0.01).sp,
+                            lineHeight = 20f,
+                            maxLines = 1,
+                        )
+                    }
                     SheetText(
                         savedCardMeta(card, locale),
                         theme = theme,
@@ -421,6 +442,7 @@ internal fun UseOtherCardRow(
                     modifier = Modifier.weight(1f),
                 )
                 VisaMastercardMarks(
+                    theme = theme,
                     size = CardBrandIconSize.UseOtherCardPair,
                     modifier = Modifier.padding(start = 4.dp),
                 )
@@ -444,6 +466,12 @@ internal fun SelectedCheckmark(theme: CheckoutTheme) {
             modifier = Modifier
                 .width(12.dp)
                 .height(9.dp),
+            colorFilter = ColorFilter.tint(contrastingOn(theme.primary)),
         )
     }
 }
+
+/** White check on a light primary (e.g. Pulse lime) is invisible; pick ink from luminance. */
+private fun contrastingOn(background: Color): Color =
+    if (background.luminance() > 0.4f) Color.Black else Color.White
+

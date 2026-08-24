@@ -16,7 +16,7 @@ import com.xmoney.payments.engine.PaymentSession
 import com.xmoney.payments.model.OrderChecksum
 import com.xmoney.payments.model.OrderPayload
 import com.xmoney.payments.model.PaymentIntent
-import com.xmoney.payments.model.PaymentResult
+import com.xmoney.payments.engine.EngineResult
 
 class PaymentSheetViewModel(
     private val savedStateHandle: SavedStateHandle,
@@ -25,7 +25,7 @@ class PaymentSheetViewModel(
     val requestId: String,
 ) : ViewModel() {
     var onEvent: (PaymentSheetEvent) -> Unit = {}
-    var onComplete: (PaymentResult) -> Unit = {}
+    var onComplete: (EngineResult) -> Unit = {}
 
     private var completed = false
     private var cachedTheme: CheckoutTheme? = null
@@ -43,7 +43,7 @@ class PaymentSheetViewModel(
                 lastThemeDark = isDark
             }
 
-    fun finish(result: PaymentResult) {
+    fun finish(result: EngineResult) {
         if (completed) return
         completed = true
         onComplete(result)

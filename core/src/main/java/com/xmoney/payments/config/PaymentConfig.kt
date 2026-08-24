@@ -48,6 +48,7 @@ enum class SubmitButtonType(val value: String) {
 
 @Parcelize
 data class SubmitButtonConfig(
+    /** Embedded only. Payment Sheet always shows the SDK Pay button. */
     val visible: Boolean = true,
     val type: SubmitButtonType = SubmitButtonType.PAY,
 ) : Parcelable
@@ -61,7 +62,7 @@ enum class ValidationMode(val value: String) {
 
     companion object {
         fun from(raw: String?): ValidationMode =
-            entries.firstOrNull { it.value == raw } ?: ON_CHANGE
+            entries.firstOrNull { it.value == raw } ?: ON_TOUCHED
     }
 }
 
@@ -120,7 +121,7 @@ data class CardConfig(
     val savedCards: SavedCardsConfig = SavedCardsConfig(),
     val cardHolderVerification: CardHolderVerification? = null,
     val inputs: CardInputsConfig = CardInputsConfig(),
-    val validationMode: ValidationMode = ValidationMode.ON_CHANGE,
+    val validationMode: ValidationMode = ValidationMode.ON_TOUCHED,
     val submitButton: SubmitButtonConfig = SubmitButtonConfig(),
 ) : Parcelable
 

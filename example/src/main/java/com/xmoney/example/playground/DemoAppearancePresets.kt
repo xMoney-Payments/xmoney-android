@@ -1,4 +1,4 @@
-package com.xmoney.example
+package com.xmoney.example.playground
 
 import com.xmoney.payments.config.AppearanceColors
 import com.xmoney.payments.config.AppearanceConfig

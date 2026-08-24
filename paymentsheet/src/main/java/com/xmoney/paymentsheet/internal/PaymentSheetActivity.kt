@@ -6,7 +6,8 @@ import android.os.Bundle
 import android.os.Parcelable
 import androidx.fragment.app.FragmentActivity
 import com.xmoney.payments.config.ResolvedPaymentConfig
-import com.xmoney.payments.model.PaymentResult
+import com.xmoney.payments.engine.EngineResult
+import com.xmoney.payments.engine.OrderConsumption
 import com.xmoney.payments.model.Transaction
 import kotlinx.parcelize.Parcelize
 
@@ -24,14 +25,14 @@ class PaymentSheetActivity : FragmentActivity(), PaymentSheetViewModelOwner {
         val config = session?.config
             ?: parcelable?.config
             ?: run {
-                finishWithResult(PaymentResult(PaymentResult.Status.CANCELED, null, null, null))
+                finishWithResult(EngineResult(EngineResult.Status.CANCELED, null, null, null))
                 return
             }
         if (requestId.isBlank()) {
             requestId = parcelable?.requestId.orEmpty()
         }
         if (requestId.isBlank()) {
-            finishWithResult(PaymentResult(PaymentResult.Status.CANCELED, null, null, null))
+            finishWithResult(EngineResult(EngineResult.Status.CANCELED, null, null, null))
             return
         }
 
@@ -43,7 +44,7 @@ class PaymentSheetActivity : FragmentActivity(), PaymentSheetViewModelOwner {
                 if (fragment != null) {
                     fragment.requestClose()
                 } else {
-                    finishWithResult(PaymentResult(PaymentResult.Status.CANCELED, null, null, null))
+                    finishWithResult(EngineResult(EngineResult.Status.CANCELED, null, null, null))
                 }
             }
         })
@@ -55,7 +56,7 @@ class PaymentSheetActivity : FragmentActivity(), PaymentSheetViewModelOwner {
         }
         paymentSheetViewModel.onComplete = { result ->
             val registered = CheckoutSessionRegistry.get(requestId)
-            registered?.onResult?.invoke(result)
+            registered?.onResult?.invoke(OrderConsumption.merchantResult(result))
             CheckoutSessionRegistry.remove(requestId)
             finishWithResult(result)
         }
@@ -65,7 +66,7 @@ class PaymentSheetActivity : FragmentActivity(), PaymentSheetViewModelOwner {
         }
     }
 
-    private fun finishWithResult(result: PaymentResult) {
+    private fun finishWithResult(result: EngineResult) {
         setResult(RESULT_OK, Intent().putExtra(EXTRA_RESULT, ParcelableResult.from(result)))
         finish()
     }
@@ -104,15 +105,15 @@ data class ParcelableResult(
     val errorCode: String?,
     val errorMessage: String?,
 ) : Parcelable {
-    fun toResult(): PaymentResult = PaymentResult(
-        status = PaymentResult.Status.entries.first { it.raw == status },
+    fun toResult(): EngineResult = EngineResult(
+        status = EngineResult.Status.entries.first { it.raw == status },
         transaction = transaction,
         errorCode = errorCode,
         errorMessage = errorMessage,
     )
 
     companion object {
-        fun from(result: PaymentResult): ParcelableResult = ParcelableResult(
+        fun from(result: EngineResult): ParcelableResult = ParcelableResult(
             status = result.status.raw,
             transaction = result.transaction,
             errorCode = result.errorCode,

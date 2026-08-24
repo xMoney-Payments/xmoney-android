@@ -164,6 +164,7 @@ internal fun LabeledCardFields(
                     trailing = {
                         CardBrandIcon(
                             brand = brand,
+                            theme = theme,
                             size = CardBrandIconSize.FieldTrailing,
                             tint = if (brand == null) theme.mutedIcon else null,
                         )
@@ -211,11 +212,9 @@ internal fun LabeledCardFields(
                         fieldHeight = fieldHeight,
                         trailing = {
                             Image(
-                                painter = painterResource(R.drawable.xmoney_ic_lock),
+                                painter = painterResource(R.drawable.xmoney_ic_cvv),
                                 contentDescription = null,
-                                modifier = Modifier
-                                    .width(19.dp)
-                                    .height(20.dp),
+                                modifier = Modifier.size(20.dp),
                                 colorFilter = ColorFilter.tint(theme.mutedIcon),
                             )
                         },
@@ -253,8 +252,9 @@ internal fun LabeledCardFields(
 @Composable
 internal fun ErrorBadgeMessage(message: String, theme: CheckoutTheme) {
     Row(
+        modifier = Modifier.padding(start = 2.dp, end = 2.dp, top = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(
             modifier = Modifier
@@ -283,12 +283,13 @@ internal fun SaveCardCheckbox(
     onToggle: () -> Unit,
 ) {
     Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onToggle() }
-            .padding(vertical = 4.dp),
+            .padding(top = 6.dp)
+            .padding(horizontal = 2.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(11.dp),
     ) {
         Box(
             modifier = Modifier

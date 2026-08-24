@@ -50,7 +50,7 @@ class ApiResponseModelsTest {
                       "expiryYear": "2034",
                       "nameOnCard": "Minas Kitsos",
                       "cardHolderCountry": "RO",
-                      "bankName": ""
+                      "bankName": "ING"
                     },
                     {
                       "id": 143072,
@@ -80,13 +80,14 @@ class ApiResponseModelsTest {
         assertEquals("12/34", first.cardExpiryDate)
         assertEquals("Minas Kitsos", first.nameOnCard)
         assertEquals("RO", first.cardHolderCountry)
-        assertNull(first.issuerName)
+        assertEquals("ING", first.bankName)
 
         val second = cards[1]
         assertEquals("143072", second.id)
         assertEquals("visa", second.cardBrand)
         assertEquals("12/28", second.cardExpiryDate)
         assertNull(second.cardHolderCountry)
+        assertNull(second.bankName)
     }
 
     @Test

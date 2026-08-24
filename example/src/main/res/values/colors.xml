@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="xmn_bg">#F4F3FB</color>
+    <color name="xmn_card">#FFFFFF</color>
+    <color name="xmn_text">#16141A</color>
+    <color name="xmn_muted">#8016141A</color>
+    <color name="xmn_purple">#7C4DFF</color>
+    <color name="xmn_lime">#DCFC97</color>
+</resources>

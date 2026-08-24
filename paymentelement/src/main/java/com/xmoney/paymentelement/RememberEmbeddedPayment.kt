@@ -18,7 +18,7 @@ fun rememberEmbeddedPayment(
 ): EmbeddedPaymentController {
     val activity = LocalContext.current as FragmentActivity
     val currentOnResult = rememberUpdatedState(onResult)
-    val controller = remember(configuration, activity) {
+    val controller = remember(configuration.publicKey, activity) {
         EmbeddedPaymentController(
             configuration = configuration,
             activity = activity,

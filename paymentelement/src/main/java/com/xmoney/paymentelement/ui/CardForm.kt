@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Divider
@@ -32,9 +33,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.xmoney.paymentelement.R
 import com.xmoney.paymentelement.theme.CheckoutTheme
+import com.xmoney.payments.config.CardValidationDisplay
 import com.xmoney.payments.config.ResolvedPaymentConfig
 import com.xmoney.payments.config.Strings
-import com.xmoney.payments.config.ValidationMode
 import com.xmoney.payments.model.CardInput
 import com.xmoney.payments.validation.CardFieldValidators
 import com.xmoney.payments.validation.CardFieldValidators.localizedMessage
@@ -45,6 +46,12 @@ private val errorDisplayOrder = listOf(
     CardField.CVV,
     CardField.HOLDER,
 )
+
+private enum class DisplayTrigger {
+    CHANGE,
+    BLUR,
+    SUBMIT,
+}
 
 @Composable
 internal fun CardForm(
@@ -68,6 +75,7 @@ internal fun CardForm(
     val blurred = remember { mutableStateMapOf<CardField, Boolean>() }
     val focused = remember { mutableStateMapOf<CardField, Boolean>() }
     val errors = remember { mutableStateMapOf<CardField, CardFieldValidators.FieldError?>() }
+    val displayedErrors = remember { mutableStateMapOf<CardField, CardFieldValidators.FieldError?>() }
     val validationMode = config.card.validationMode
 
     fun currentInput(): CardInput {
@@ -91,55 +99,67 @@ internal fun CardForm(
             errors[CardField.HOLDER] = CardFieldValidators.validateHolderName(input.holderName)
         } else {
             errors.remove(CardField.HOLDER)
+            displayedErrors.remove(CardField.HOLDER)
         }
         return errors.values.all { it == null }
     }
 
-    fun emitChange(validateNow: Boolean) {
+    fun emitChange(trigger: DisplayTrigger, blurredField: CardField? = null) {
         val input = currentInput()
-        val isValid = if (validateNow) runValidation() else errors.values.all { it == null }
+        val isValid = runValidation()
+        when (trigger) {
+            DisplayTrigger.SUBMIT -> {
+                errorDisplayOrder.forEach { field ->
+                    displayedErrors[field] = errors[field]
+                }
+            }
+            DisplayTrigger.BLUR -> {
+                if (blurredField != null) {
+                    displayedErrors[blurredField] = errors[blurredField]
+                }
+            }
+            DisplayTrigger.CHANGE -> {
+                errorDisplayOrder.forEach { field ->
+                    if (CardValidationDisplay.shouldRefreshDisplayedErrorOnChange(
+                            validationMode,
+                            blurred[field] == true,
+                            showErrors,
+                        )
+                    ) {
+                        displayedErrors[field] = errors[field]
+                    }
+                }
+            }
+        }
         onChange(input, isValid)
     }
 
     fun onFieldValueChange() {
-        when (validationMode) {
-            ValidationMode.ON_CHANGE -> emitChange(validateNow = true)
-            ValidationMode.ON_TOUCHED -> {
-                emitChange(validateNow = blurred.isNotEmpty())
-            }
-            ValidationMode.ON_BLUR,
-            ValidationMode.ON_SUBMIT,
-            -> emitChange(validateNow = false)
-        }
+        emitChange(DisplayTrigger.CHANGE)
     }
 
     fun onFieldBlur(field: CardField) {
         blurred[field] = true
-        when (validationMode) {
-            ValidationMode.ON_SUBMIT -> emitChange(validateNow = false)
-            else -> emitChange(validateNow = true)
-        }
+        emitChange(DisplayTrigger.BLUR, blurredField = field)
     }
 
     LaunchedEffect(showErrors) {
-        if (showErrors) emitChange(validateNow = true)
+        if (showErrors) emitChange(DisplayTrigger.SUBMIT)
     }
 
     fun shouldShowError(field: CardField): Boolean {
-        if (errors[field] == null) return false
-        return when (validationMode) {
-            ValidationMode.ON_CHANGE -> true
-            ValidationMode.ON_SUBMIT -> showErrors
-            ValidationMode.ON_BLUR,
-            ValidationMode.ON_TOUCHED,
-            -> showErrors || blurred[field] == true
-        }
+        if (displayedErrors[field] == null) return false
+        return CardValidationDisplay.shouldShowError(
+            validationMode,
+            blurred[field] == true,
+            showErrors,
+        )
     }
 
-    val hasVisibleError = errorDisplayOrder.any { shouldShowError(it) && errors[it] != null }
+    val hasVisibleError = errorDisplayOrder.any { shouldShowError(it) }
     val borderColor = if (hasVisibleError) theme.errorBorder else theme.fieldBorder
     val borderWidth = if (hasVisibleError) 1.5.dp else 1.dp
-    val firstVisibleError = errorDisplayOrder.firstOrNull { shouldShowError(it) && errors[it] != null }
+    val firstVisibleError = errorDisplayOrder.firstOrNull { shouldShowError(it) }
     val holderIsLast = showHolderName && !holderFirst
     val spacedInputs = config.card.inputs.isSpaced
     val locale = config.options.locale
@@ -152,7 +172,7 @@ internal fun CardForm(
 
     fun fieldErrorMessage(field: CardField): String? {
         if (!shouldShowError(field)) return null
-        return errors[field]?.localizedMessage(locale)
+        return displayedErrors[field]?.localizedMessage(locale)
     }
 
     Column(
@@ -252,6 +272,7 @@ internal fun CardForm(
                     trailing = {
                         CardBrandIcon(
                             brand = brand,
+                            theme = theme,
                             size = CardBrandIconSize.FieldTrailing,
                             tint = if (brand == null) theme.mutedIcon else null,
                         )
@@ -297,11 +318,9 @@ internal fun CardForm(
                         modifier = Modifier.weight(1f),
                         trailing = {
                             Image(
-                                painter = painterResource(R.drawable.xmoney_ic_lock),
+                                painter = painterResource(R.drawable.xmoney_ic_cvv),
                                 contentDescription = null,
-                                modifier = Modifier
-                                    .width(19.dp)
-                                    .height(20.dp),
+                                modifier = Modifier.size(20.dp),
                                 colorFilter = ColorFilter.tint(theme.mutedIcon),
                             )
                         },
@@ -329,11 +348,12 @@ internal fun CardForm(
                 }
             }
         }
+        }
 
         if (!spacedInputs) {
             firstVisibleError?.let { field ->
                 ErrorBadgeMessage(
-                    message = errors[field]!!.localizedMessage(locale),
+                    message = displayedErrors[field]!!.localizedMessage(locale),
                     theme = theme,
                 )
             }
@@ -349,7 +369,6 @@ internal fun CardForm(
                     onFieldValueChange()
                 },
             )
-        }
         }
     }
 }

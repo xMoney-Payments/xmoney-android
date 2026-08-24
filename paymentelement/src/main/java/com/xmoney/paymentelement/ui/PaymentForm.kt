@@ -16,7 +16,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -46,6 +45,7 @@ import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Divider
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -94,6 +94,8 @@ fun PaymentForm(
     modifier: Modifier = Modifier,
     header: @Composable (() -> Unit)? = null,
     isOrderConsumed: Boolean = false,
+    isUpdatingOrder: Boolean = false,
+    onBindSubmit: ((() -> Unit) -> Unit)? = null,
 ) {
     val isDark = UIHelpers.isDarkMode(config, isSystemInDarkTheme())
     val theme = remember(config, isDark) { CheckoutTheme.resolve(config, isDark) }
@@ -102,7 +104,7 @@ fun PaymentForm(
     val horizontalPadding = if (embedded) 16.dp else SheetContentHorizontalPadding
     val topPadding = if (embedded) 12.dp else SheetContentTopPadding
     val bottomPadding = if (embedded) 8.dp else SheetContentBottomPadding
-    val interactionEnabled = !isProcessing && !isOrderConsumed
+    val interactionEnabled = !isProcessing && !isUpdatingOrder && !isOrderConsumed
 
     var savedListExpanded by remember(hasSavedCards) { mutableStateOf(hasSavedCards) }
     var selectedMethod by remember(hasSavedCards) {
@@ -131,6 +133,33 @@ fun PaymentForm(
             isEditingSavedCards = false
             pendingDeleteId = null
         }
+    }
+
+    val submitSelected: () -> Unit = {
+        val useNewCard = !hasSavedCards || selectedMethod == PaymentMethod.NewCard
+        if (useNewCard) {
+            if (!cardFormValid) {
+                showCardErrors = true
+            } else {
+                onPayCard(cardInput)
+            }
+        } else {
+            val saved = state.savedCards.firstOrNull { it.id == selectedSavedId }
+            if (saved != null) onSelectSaved(saved)
+        }
+    }
+
+    DisposableEffect(
+        onBindSubmit,
+        hasSavedCards,
+        selectedMethod,
+        selectedSavedId,
+        cardFormValid,
+        cardInput,
+        interactionEnabled,
+    ) {
+        onBindSubmit?.invoke(submitSelected)
+        onDispose { onBindSubmit?.invoke {} }
     }
 
     Column(
@@ -238,7 +267,6 @@ fun PaymentForm(
                                 theme = theme,
                                 showHolderName = true,
                                 showSaveOptIn = config.card.savedCards.optInVisible && !state.orderInfo.isVerifyCard,
-                                holderFirst = true,
                                 sectionLabel = if (config.card.inputs.isSpaced) {
                                     null
                                 } else {
@@ -259,7 +287,6 @@ fun PaymentForm(
                         theme = theme,
                         showHolderName = true,
                         showSaveOptIn = config.card.savedCards.optInVisible && !state.orderInfo.isVerifyCard,
-                        holderFirst = true,
                         sectionLabel = if (config.card.inputs.isSpaced) {
                             null
                         } else {
@@ -283,16 +310,10 @@ fun PaymentForm(
             state = state,
             isProcessing = isProcessing,
             interactionEnabled = interactionEnabled,
-            hasSavedCards = hasSavedCards,
-            selectedMethod = selectedMethod,
-            selectedSavedId = selectedSavedId,
-            cardFormValid = cardFormValid,
-            onShowCardErrors = { showCardErrors = true },
-            onPayCard = onPayCard,
-            onSelectSaved = onSelectSaved,
-            cardInput = cardInput,
+            onSubmit = submitSelected,
             horizontalPadding = horizontalPadding,
             compact = embedded,
+            showSubmitButton = !embedded || config.card.submitButton.visible,
         )
     }
 }
@@ -304,22 +325,16 @@ private fun PaymentFormFooter(
     state: SheetState,
     isProcessing: Boolean,
     interactionEnabled: Boolean,
-    hasSavedCards: Boolean,
-    selectedMethod: PaymentMethod,
-    selectedSavedId: String?,
-    cardFormValid: Boolean,
-    onShowCardErrors: () -> Unit,
-    onPayCard: (CardInput) -> Unit,
-    onSelectSaved: (SavedCard) -> Unit,
-    cardInput: CardInput,
+    onSubmit: () -> Unit,
     horizontalPadding: Dp = SheetContentHorizontalPadding,
     compact: Boolean = false,
+    showSubmitButton: Boolean = true,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .then(
-                if (compact) Modifier else Modifier.border(width = 1.dp, color = theme.footerBorder),
+                if (compact) Modifier else Modifier.topHairline(theme.footerBorder),
             )
             .padding(horizontal = horizontalPadding)
             .padding(
@@ -328,10 +343,13 @@ private fun PaymentFormFooter(
             ),
         verticalArrangement = Arrangement.spacedBy(SheetFooterContentSpacing),
     ) {
-        if (config.card.submitButton.visible) {
-            val amount = Strings.formatAmount(state.orderInfo.amount, state.orderInfo.currency)
+        if (showSubmitButton) {
+            val amount = Strings.formatAmount(
+                state.orderInfo.amount,
+                state.orderInfo.currency,
+                config.options.locale,
+            )
             val payTitle = Strings.submitButtonTitle(config.card.submitButton.type.value, config.options.locale, amount)
-            val useNewCard = !hasSavedCards || selectedMethod == PaymentMethod.NewCard
 
             SubmitButton(
                 theme = theme,
@@ -339,19 +357,7 @@ private fun PaymentFormFooter(
                 locale = config.options.locale,
                 enabled = interactionEnabled,
                 isProcessing = isProcessing,
-                dimmed = false,
-                onClick = {
-                    if (useNewCard) {
-                        if (!cardFormValid) {
-                            onShowCardErrors()
-                        } else {
-                            onPayCard(cardInput)
-                        }
-                    } else {
-                        val saved = state.savedCards.firstOrNull { it.id == selectedSavedId }
-                        if (saved != null) onSelectSaved(saved)
-                    }
-                },
+                onClick = onSubmit,
             )
         }
 
@@ -368,7 +374,7 @@ private fun OrDivider(theme: CheckoutTheme, locale: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Divider(modifier = Modifier.weight(1f), color = theme.componentDivider.copy(alpha = 0.1f))
+        Divider(modifier = Modifier.weight(1f), color = theme.orDivider)
         SheetText(
             Strings.text("sheet.or", locale),
             theme = theme,
@@ -376,6 +382,6 @@ private fun OrDivider(theme: CheckoutTheme, locale: String) {
             fontSize = 13f,
             fontWeight = FontWeight.Medium,
         )
-        Divider(modifier = Modifier.weight(1f), color = theme.componentDivider.copy(alpha = 0.1f))
+        Divider(modifier = Modifier.weight(1f), color = theme.orDivider)
     }
 }

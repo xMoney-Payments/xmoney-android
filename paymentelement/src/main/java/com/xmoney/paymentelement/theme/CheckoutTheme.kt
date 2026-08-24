@@ -43,6 +43,9 @@ data class CheckoutTheme(
     val errorBorder: Color,
     val errorText: Color,
     val footerBorder: Color,
+    val sheetHandle: Color,
+    val orDivider: Color,
+    val visaMarkTint: Color?,
     val paymentContainerRadius: Dp,
     val formFieldRadius: Dp,
     val formFieldHeight: Dp,
@@ -59,8 +62,10 @@ data class CheckoutTheme(
 
     companion object {
         val BrandPrimary = Color(0xFF7C4DFF)
+        const val DefaultPrimaryButtonRadius = 9999f
         private val LightInk = Color(0xFF16141A)
         private val DarkInk = Color(0xFFF7F6F9)
+        private val DarkChrome = Color(0xFFFFFFFF)
 
         fun resolve(config: ResolvedPaymentConfig, isDark: Boolean): CheckoutTheme {
             val appearance = config.options.appearance
@@ -93,6 +98,8 @@ data class CheckoutTheme(
 
             val primary = color({ it.primary }, defaults.primary)
             val icon = color({ it.icon }, defaults.icon)
+            fun chromeAlpha(alpha: Int): Color =
+                (if (isDark) DarkChrome else ink).copy(alpha = alpha / 255f)
 
             return CheckoutTheme(
                 primary = primary,
@@ -115,19 +122,22 @@ data class CheckoutTheme(
                 primaryButtonText = parseColor(pbMode?.text ?: pbShared?.text) ?: Color.White,
                 primaryButtonBorder = parseColor(pbMode?.border ?: pbShared?.border)
                     ?: primary,
-                primaryButtonBorderRadius = (pbShapes?.borderRadius ?: 12f).dp,
+                primaryButtonBorderRadius = (pbShapes?.borderRadius ?: DefaultPrimaryButtonRadius).dp,
                 primaryButtonBorderWidth = (pbShapes?.borderWidth ?: 0f).dp,
-                selectedBackground = primary.copy(alpha = 0x0F / 255f),
-                accentIconBackground = primary.copy(alpha = 0x1F / 255f),
+                selectedBackground = primary.copy(alpha = if (isDark) 0x2E / 255f else 0x0F / 255f),
+                accentIconBackground = primary.copy(alpha = if (isDark) 0x3D / 255f else 0x1F / 255f),
                 containerBorder = optionalColor({ it.containerBorder }, inkAlpha(0x17)),
                 neutralChip = inkAlpha(0x0D),
                 fieldBorder = inkAlpha(0x1A),
                 fieldDivider = inkAlpha(0x14),
                 mutedIcon = if (isDark) icon else inkAlpha(0x52),
-                unselectedRing = if (isDark) inkAlpha(0x66) else inkAlpha(0x29),
+                unselectedRing = if (isDark) chromeAlpha(0x33) else inkAlpha(0x29),
                 errorBorder = Color(0xFFEF4444),
                 errorText = Color(0xFFDC2626),
-                footerBorder = inkAlpha(0x0F),
+                footerBorder = chromeAlpha(if (isDark) 0x14 else 0x0F),
+                sheetHandle = chromeAlpha(if (isDark) 0x29 else 0x1F),
+                orDivider = chromeAlpha(0x1A),
+                visaMarkTint = if (isDark) Color.White else null,
                 paymentContainerRadius = 20.dp,
                 formFieldRadius = 16.dp,
                 formFieldHeight = 54.dp,
@@ -196,8 +206,8 @@ data class CheckoutTheme(
             )
             val dark = Palette(
                 primary = Color(0xFF7C4DFF),
-                background = Color(0xFF16141A),
-                componentBackground = Color(0xFF201E25),
+                background = Color(0xFF18181B),
+                componentBackground = Color(0xFF18181B),
                 componentBorder = Color(0xFF3F3B48),
                 componentDivider = Color(0xFF3F3B48),
                 primaryText = Color(0xFFF7F6F9),

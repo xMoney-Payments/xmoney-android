@@ -22,6 +22,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -50,13 +51,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.focus.FocusDirection
@@ -95,6 +101,16 @@ internal const val SecondaryMetaAlpha = 0.45f
 internal const val PressScale = 0.98f
 internal const val SheetInDurationMs = 300
 
+internal fun Modifier.topHairline(color: Color, width: Dp = 1.dp): Modifier = drawBehind {
+    val stroke = width.toPx()
+    drawLine(
+        color = color,
+        start = Offset(0f, stroke / 2f),
+        end = Offset(size.width, stroke / 2f),
+        strokeWidth = stroke,
+    )
+}
+
 @Composable
 internal fun SheetText(
     text: String,
@@ -106,6 +122,8 @@ internal fun SheetText(
     textAlign: TextAlign? = null,
     letterSpacing: TextUnit = TextUnit.Unspecified,
     lineHeight: Float? = null,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
 ) {
     Text(
         text = text,
@@ -117,6 +135,8 @@ internal fun SheetText(
         textAlign = textAlign,
         letterSpacing = letterSpacing,
         lineHeight = lineHeight?.let { theme.scaledSp(it) } ?: TextUnit.Unspecified,
+        maxLines = maxLines,
+        overflow = overflow,
     )
 }
 
@@ -152,15 +172,39 @@ internal fun SubmitButton(
     locale: String,
     enabled: Boolean,
     isProcessing: Boolean,
-    dimmed: Boolean,
     onClick: () -> Unit,
 ) {
-    val background = if (dimmed) theme.primary.copy(alpha = 0.3f) else theme.primaryButtonBackground
+    val background = theme.primaryButtonBackground
+    val shape = RoundedCornerShape(theme.primaryButtonBorderRadius)
+    val showShadow = enabled && !isProcessing
     Button(
         onClick = onClick,
         enabled = enabled && !isProcessing,
-        modifier = Modifier.fillMaxWidth().height(52.dp),
-        shape = RoundedCornerShape(9999.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .alpha(if (!enabled && !isProcessing) 0.5f else 1f)
+            .then(
+                if (showShadow) {
+                    Modifier.shadow(
+                        elevation = 8.dp,
+                        shape = shape,
+                        ambientColor = theme.primary.copy(alpha = 0.30f),
+                        spotColor = theme.primary.copy(alpha = 0.30f),
+                    )
+                } else {
+                    Modifier
+                },
+            ),
+        shape = shape,
+        elevation = ButtonDefaults.elevation(
+            defaultElevation = 0.dp,
+            pressedElevation = 0.dp,
+            disabledElevation = 0.dp,
+            hoveredElevation = 0.dp,
+            focusedElevation = 0.dp,
+        ),
+        contentPadding = PaddingValues(horizontal = 24.dp),
         colors = ButtonDefaults.buttonColors(
             backgroundColor = background,
             disabledBackgroundColor = background,

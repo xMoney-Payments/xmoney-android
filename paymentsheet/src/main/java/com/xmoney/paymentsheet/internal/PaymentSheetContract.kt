@@ -9,6 +9,8 @@ import android.content.Context
 import android.content.Intent
 import androidx.activity.result.contract.ActivityResultContract
 import com.xmoney.payments.config.ResolvedPaymentConfig
+import com.xmoney.payments.engine.EngineResult
+import com.xmoney.payments.engine.OrderConsumption
 import com.xmoney.payments.model.PaymentResult
 
 class PaymentSheetContract : ActivityResultContract<PaymentSheetRequest, PaymentResult>() {
@@ -22,8 +24,8 @@ class PaymentSheetContract : ActivityResultContract<PaymentSheetRequest, Payment
     @Suppress("DEPRECATION")
     override fun parseResult(resultCode: Int, intent: Intent?): PaymentResult {
         val parcelable = intent?.getParcelableExtra<ParcelableResult>(PaymentSheetActivity.EXTRA_RESULT)
-        return parcelable?.toResult()
-            ?: PaymentResult(PaymentResult.Status.CANCELED, null, null, null)
+        val engine = parcelable?.toResult() ?: EngineResult.canceled()
+        return OrderConsumption.merchantResult(engine)
     }
 }
 

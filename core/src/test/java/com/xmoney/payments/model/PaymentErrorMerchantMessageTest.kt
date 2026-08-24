@@ -1,5 +1,6 @@
 package com.xmoney.payments.model
 
+import com.xmoney.payments.engine.EngineResult
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -8,7 +9,7 @@ class PaymentErrorMerchantMessageTest {
     fun networkAlwaysUsesGenericMessage() {
         val error = PaymentError.Network("secret server dump")
         assertEquals(PaymentError.GENERIC_NETWORK, error.merchantMessage())
-        assertEquals(PaymentError.GENERIC_NETWORK, PaymentResult.failed(error).errorMessage)
+        assertEquals(PaymentError.GENERIC_NETWORK, EngineResult.failed(error).errorMessage)
     }
 
     @Test

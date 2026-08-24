@@ -1,4 +1,4 @@
-package com.xmoney.example
+package com.xmoney.example.playground
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,6 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.xmoney.example.theme.ExampleColors
+import com.xmoney.example.theme.ExampleRadii
 
 @Composable
 fun ClassicsGallery(
@@ -42,7 +44,7 @@ fun ClassicsGallery(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "Design",
+                text = "Presets",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -78,8 +80,8 @@ private fun ClassicDesignChip(
     showDescription: Boolean,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(12.dp)
-    val borderColor = if (selected) DemoColors.Accent else MaterialTheme.colorScheme.outline
+    val shape = RoundedCornerShape(ExampleRadii.inner)
+    val borderColor = if (selected) ExampleColors.Purple else MaterialTheme.colorScheme.outline
     val borderWidth = if (selected) 2.dp else 1.dp
     val accent = parseDemoHexColor(preset.swatches.firstOrNull() ?: "#7C4DFF") ?: Color.Gray
 
@@ -101,7 +103,7 @@ private fun ClassicDesignChip(
                     .size(14.dp)
                     .clip(CircleShape)
                     .background(accent)
-                    .border(1.dp, Color(0x2216141A), CircleShape),
+                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
             )
             Text(
                 text = preset.label,

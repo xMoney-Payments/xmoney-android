@@ -129,7 +129,7 @@ data class SavedCard(
     val cardType: String?,
     val cardExpiryDate: String?,
     val isDefault: Boolean = false,
-    val issuerName: String? = null,
+    val bankName: String? = null,
     val cardBrand: String? = null,
     val nameOnCard: String? = null,
     val customerId: String? = null,
@@ -142,11 +142,7 @@ data class SavedCard(
             val cardType = nonBlank(item["cardType"] as? String)
                 ?: nonBlank(item["type"] as? String)
 
-            val issuerName = nonBlank(item["issuerName"] as? String)
-                ?: nonBlank(item["cardIssuer"] as? String)
-                ?: nonBlank(item["bankName"] as? String)
-                ?: nonBlank(binInfo?.get("bank") as? String)
-                ?: cardType?.takeIf { !isKnownCardBrand(it) }
+            val bankName = nonBlank(item["bankName"] as? String)
 
             val cardBrand = nonBlank(item["cardBrand"] as? String)
                 ?: nonBlank(binInfo?.get("brand") as? String)
@@ -158,7 +154,7 @@ data class SavedCard(
                 cardType = cardType,
                 cardExpiryDate = parseExpiryDate(item),
                 isDefault = parseBoolean(item["isDefault"]) || parseBoolean(item["default"]),
-                issuerName = issuerName,
+                bankName = bankName,
                 cardBrand = cardBrand,
                 nameOnCard = nonBlank(item["nameOnCard"] as? String),
                 customerId = stringOrNumber(item["customerId"]),

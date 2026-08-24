@@ -9,11 +9,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
+import com.xmoney.payments.config.AppearanceConfig
 import com.xmoney.payments.config.PaymentConfig
 import com.xmoney.payments.config.ResolvedPaymentConfig
+import com.xmoney.payments.config.UserInterfaceStyle
 import com.xmoney.payments.config.WalletAppearance
 import com.xmoney.payments.engine.DigitalWalletAuthorizing
 import com.xmoney.payments.engine.DigitalWalletFactory
+import com.xmoney.payments.engine.EngineResult
+import com.xmoney.payments.engine.OrderConsumption
 import com.xmoney.payments.engine.PaymentSession
 import com.xmoney.payments.engine.SheetState
 import com.xmoney.payments.model.CardInput
@@ -30,14 +34,15 @@ import kotlinx.coroutines.launch
  * Orchestrates the embedded Payment Element: Google Pay, new card, and saved cards.
  *
  * After COMPLETE, FAILED, or post-submit CANCELED the bound order is consumed —
- * the surface stays mounted but unusable until [bind] with a new order.
+ * the surface stays mounted but unusable until [updateOrder] with a new order.
  */
 class EmbeddedPaymentController(
-    private val configuration: PaymentConfig,
+    configuration: PaymentConfig,
     private val activity: FragmentActivity,
     private val onResult: (PaymentResult) -> Unit,
 ) {
-    private val session = PaymentSession(configuration, placeholderIntent(), activity.applicationContext)
+    private var liveConfiguration = configuration
+    private val session = PaymentSession(liveConfiguration, placeholderIntent(), activity.applicationContext)
 
     var sheetState: SheetState? by mutableStateOf(null)
         private set
@@ -45,21 +50,39 @@ class EmbeddedPaymentController(
         private set
     var isOrderConsumed: Boolean by mutableStateOf(false)
         private set
+    /** False during [updateOrder], an in-flight charge, or after the order is consumed. */
+    var isInteractionEnabled: Boolean by mutableStateOf(true)
+        private set
     var paymentConfig: ResolvedPaymentConfig? by mutableStateOf(null)
         private set
 
     val googlePayAppearance: WalletAppearance
-        get() = configuration.paymentMethods.googlePay.appearance
+        get() = liveConfiguration.paymentMethods.googlePay.appearance
 
-    val isInteractionEnabled: Boolean
-        get() = session.isInteractionEnabled
-
+    internal var isUpdatingOrder by mutableStateOf(false)
+        private set
+    private var bindGeneration = 0
     private var threeDS: ThreeDSHostController? = null
     private var authorizer: DigitalWalletAuthorizing? = null
     private var resolutionLauncher: ActivityResultLauncher<IntentSenderRequest>? = null
     private var pendingResolution: ActivityResult? = null
     private var onEvent: (EmbeddedEvent) -> Unit = {}
     private var boundIntent: PaymentIntent? = null
+    private var submitHandler: (() -> Unit)? = null
+
+    /**
+     * Submit the currently selected method (new card or saved card).
+     * Use with [com.xmoney.payments.config.SubmitButtonConfig.visible] = false
+     * so the merchant owns the Pay CTA.
+     */
+    fun confirm() {
+        if (!isInteractionEnabled) return
+        submitHandler?.invoke()
+    }
+
+    internal fun bindSubmitHandler(handler: (() -> Unit)?) {
+        submitHandler = handler
+    }
 
     fun bindWalletResolutionLauncher(launcher: ActivityResultLauncher<IntentSenderRequest>) {
         resolutionLauncher = launcher
@@ -78,22 +101,70 @@ class EmbeddedPaymentController(
         }
     }
 
-    suspend fun bind(
+    fun updateAppearance(appearance: AppearanceConfig) {
+        liveConfiguration = liveConfiguration.copy(
+            options = liveConfiguration.options.copy(appearance = appearance),
+        )
+        boundIntent?.let { paymentConfig = liveConfiguration.resolve(it) }
+    }
+
+    fun updateWalletAppearance(appearance: WalletAppearance) {
+        liveConfiguration = liveConfiguration.copy(
+            paymentMethods = liveConfiguration.paymentMethods.copy(
+                googlePay = liveConfiguration.paymentMethods.googlePay.copy(appearance = appearance),
+            ),
+        )
+        boundIntent?.let { paymentConfig = liveConfiguration.resolve(it) }
+    }
+
+    fun updateLocale(locale: String) {
+        liveConfiguration = liveConfiguration.copy(
+            options = liveConfiguration.options.copy(locale = locale),
+        )
+        boundIntent?.let { paymentConfig = liveConfiguration.resolve(it) }
+    }
+
+    fun updateStyle(style: UserInterfaceStyle) {
+        liveConfiguration = liveConfiguration.copy(
+            options = liveConfiguration.options.copy(style = style),
+        )
+        boundIntent?.let { paymentConfig = liveConfiguration.resolve(it) }
+    }
+
+    /**
+     * Rebind a new signed order without tearing down the embedded surface.
+     *
+     * Pay, [confirm], and Google Pay are no-ops until this returns
+     * ([isInteractionEnabled]). The Pay button keeps its current title — this
+     * does not emit [EmbeddedEvent.Processing]. A newer [updateOrder] cancels
+     * the in-flight one ([CancellationException]); the new intent is installed
+     * only after success.
+     */
+    suspend fun updateOrder(
         order: PaymentIntent,
         onEvent: (EmbeddedEvent) -> Unit = {},
     ) {
         this.onEvent = onEvent
-        boundIntent = order
-        paymentConfig = configuration.resolve(order)
-        val threeDSHost = ThreeDSHostController(activity) { configuration.options.locale }
+        if (boundIntent == order && sheetState != null && !isOrderConsumed) {
+            paymentConfig = liveConfiguration.resolve(order)
+            onEvent(EmbeddedEvent.Ready)
+            return
+        }
+        val generation = ++bindGeneration
+        applyUpdatingOrder(true)
+        val threeDSHost = ThreeDSHostController(activity) { liveConfiguration.options.locale }
         try {
             val loaded = session.bind(order, activity)
+            if (generation != bindGeneration) throw CancellationException()
+            boundIntent = order
+            paymentConfig = liveConfiguration.resolve(order)
             threeDS = threeDSHost
             authorizer = session.makeWalletAuthorizer(threeDSHost, activity)
             resolutionLauncher?.let { authorizer?.bindResolutionLauncher(it) }
             sheetState = loaded
             isOrderConsumed = session.isOrderConsumed
             isProcessing = session.isProcessing
+            applyUpdatingOrder(false)
             onEvent(EmbeddedEvent.Ready)
             val pending = pendingResolution
             pendingResolution = null
@@ -106,30 +177,41 @@ class EmbeddedPaymentController(
                 }
             }
         } catch (e: CancellationException) {
+            if (generation == bindGeneration) {
+                applyUpdatingOrder(false)
+            }
             throw e
         } catch (e: Exception) {
-            updateProcessing(false)
+            if (generation != bindGeneration) throw CancellationException()
+            applyUpdatingOrder(false)
             onResult(
-                if (e is PaymentError) PaymentResult.failed(e)
-                else PaymentResult.failed("LOAD_ERROR", e.message ?: PaymentError.GENERIC_LOAD),
+                OrderConsumption.merchantResult(
+                    if (e is PaymentError) EngineResult.failed(e)
+                    else EngineResult.failed("LOAD_ERROR", e.message ?: PaymentError.GENERIC_LOAD),
+                ),
             )
+            throw e
         }
     }
 
     fun startGooglePay() {
-        if (!session.isInteractionEnabled) return
+        if (!isInteractionEnabled) return
         val wallet = authorizer ?: return
         val presenter = threeDS ?: return
         if (DigitalWalletFactory.makeGooglePay == null) return
         updateProcessing(true)
         activity.lifecycleScope.launch {
             val result = session.startWallet(wallet)
+            if (result.status == EngineResult.Status.CANCELED && !session.isOrderConsumed) {
+                updateProcessing(false)
+                return@launch
+            }
             deliverResult(result)
         }
     }
 
     fun payWithCard(input: CardInput) {
-        if (!session.isInteractionEnabled) return
+        if (!isInteractionEnabled) return
         val config = paymentConfig ?: return
         val invalid = CardFieldValidators.validateCardNumber(input.number) != null ||
             CardFieldValidators.validateExpiry(input.expiryMonth, input.expiryYear) != null ||
@@ -143,17 +225,17 @@ class EmbeddedPaymentController(
     }
 
     fun paySavedCard(card: SavedCard) {
-        if (!session.isInteractionEnabled) return
+        if (!isInteractionEnabled) return
         val presenter = threeDS ?: return
         runSubmission { session.submitSavedCard(card.id, presenter) }
     }
 
     suspend fun deleteSavedCard(card: SavedCard) {
-        if (!session.isInteractionEnabled) return
+        if (!isInteractionEnabled) return
         sheetState = session.deleteSavedCard(card.id)
     }
 
-    private fun runSubmission(block: suspend () -> PaymentResult) {
+    private fun runSubmission(block: suspend () -> EngineResult) {
         updateProcessing(true)
         activity.lifecycleScope.launch {
             try {
@@ -162,27 +244,34 @@ class EmbeddedPaymentController(
                 updateProcessing(false)
                 throw e
             } catch (e: PaymentError) {
-                deliverResult(PaymentResult.failed(e))
+                deliverResult(EngineResult.failed(e))
             } catch (e: Exception) {
-                deliverResult(PaymentResult.failed("PAYMENT_ERROR", e.message ?: PaymentError.GENERIC_PAYMENT))
+                deliverResult(EngineResult.failed("PAYMENT_ERROR", e.message ?: PaymentError.GENERIC_PAYMENT))
             }
         }
     }
 
-    private fun deliverResult(result: PaymentResult) {
+    private fun deliverResult(result: EngineResult) {
         isProcessing = session.isProcessing
         isOrderConsumed = session.isOrderConsumed
-        if (result.status != PaymentResult.Status.CANCELED || session.isOrderConsumed) {
-            onEvent(EmbeddedEvent.Processing(false))
-        } else {
-            onEvent(EmbeddedEvent.Processing(false))
-        }
-        onResult(result)
+        syncInteractionEnabled()
+        onEvent(EmbeddedEvent.Processing(false))
+        onResult(OrderConsumption.merchantResult(result))
     }
 
     private fun updateProcessing(processing: Boolean) {
         isProcessing = processing
+        syncInteractionEnabled()
         onEvent(EmbeddedEvent.Processing(processing))
+    }
+
+    private fun applyUpdatingOrder(updating: Boolean) {
+        isUpdatingOrder = updating
+        syncInteractionEnabled()
+    }
+
+    private fun syncInteractionEnabled() {
+        isInteractionEnabled = !isUpdatingOrder && session.isInteractionEnabled
     }
 
     companion object {

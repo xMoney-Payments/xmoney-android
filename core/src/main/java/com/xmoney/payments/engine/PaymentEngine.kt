@@ -11,7 +11,6 @@ import com.xmoney.payments.model.SavedCard
 import com.xmoney.payments.model.SiteConfig
 import com.xmoney.payments.model.WalletParams
 import com.xmoney.payments.model.PaymentError
-import com.xmoney.payments.model.PaymentResult
 import com.xmoney.payments.network.HttpClient
 import com.xmoney.payments.service.AccountService
 import com.xmoney.payments.service.CardsService
@@ -117,7 +116,7 @@ class PaymentEngine(
     suspend fun refreshSavedCards(): List<SavedCard> =
         runCatching { cards.getCards(sessionToken) }.getOrDefault(emptyList())
 
-    suspend fun submitNewCard(card: CardInput, presenter: ThreeDSPresenter): PaymentResult {
+    suspend fun submitNewCard(card: CardInput, presenter: ThreeDSPresenter): EngineResult {
         val verification = config.card.cardHolderVerification
         if (verification != null) {
             if (!nameCheckValidationEnabled) {
@@ -133,8 +132,8 @@ class PaymentEngine(
             )
             val callback = onCardHolderVerification ?: verification.onCardHolderVerification
             if (!callback(result)) {
-                return PaymentResult(
-                    status = PaymentResult.Status.FAILED,
+                return EngineResult(
+                    status = EngineResult.Status.FAILED,
                     transaction = null,
                     errorCode = "CARD_HOLDER_VERIFICATION",
                     errorMessage = PaymentError.VERIFICATION_REJECTED,
@@ -145,12 +144,12 @@ class PaymentEngine(
         return submit(fields, presenter)
     }
 
-    suspend fun submitSavedCard(cardId: String, presenter: ThreeDSPresenter): PaymentResult {
+    suspend fun submitSavedCard(cardId: String, presenter: ThreeDSPresenter): EngineResult {
         val fields = payment.savedCardFields(cardId, config.orderPayload, config.orderChecksum)
         return submit(fields, presenter)
     }
 
-    suspend fun submitWallet(walletType: String, token: String, presenter: ThreeDSPresenter): PaymentResult {
+    suspend fun submitWallet(walletType: String, token: String, presenter: ThreeDSPresenter): EngineResult {
         val fields = payment.walletFields(walletType, token, config.orderPayload, config.orderChecksum)
         return submit(fields, presenter)
     }
@@ -164,7 +163,7 @@ class PaymentEngine(
 
     suspend fun deleteSavedCard(cardId: String) = cards.deleteCard(cardId, sessionToken)
 
-    private suspend fun submit(fields: Map<String, String>, presenter: ThreeDSPresenter): PaymentResult {
+    private suspend fun submit(fields: Map<String, String>, presenter: ThreeDSPresenter): EngineResult {
         val response = payment.confirmPayment(fields)
         val parsed = payment.parse(response)
 
@@ -194,7 +193,7 @@ class PaymentEngine(
         return cachedBackUrl
     }
 
-    private suspend fun resolveByPolling(transactionId: String?): PaymentResult {
+    private suspend fun resolveByPolling(transactionId: String?): EngineResult {
         if (transactionId == null) throw PaymentError.Payment("Missing transaction id")
         val tx = transactions.poll(transactionId, sessionToken)
         return resultFromTransaction(tx)
@@ -205,7 +204,7 @@ class PaymentEngine(
         transactionId: String,
         presenter: ThreeDSPresenter,
         returnUrlMatcher: (String) -> Boolean,
-    ): PaymentResult = coroutineScope {
+    ): EngineResult = coroutineScope {
         val shown = CompletableDeferred<Unit>()
         val threeDSDeferred = async {
             presenter.presentThreeDS(

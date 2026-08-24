@@ -20,6 +20,9 @@ import com.xmoney.paymentelement.ui.XCoinFlipLoader
  * Merchant-hosted Payment Element. Renders available methods (Google Pay,
  * saved cards, new card) inside the app UI — same form as Payment Sheet
  * without the bottom-sheet chrome.
+ *
+ * When [intent] changes, calls [EmbeddedPaymentController.updateOrder].
+ * Pay stays locked until that returns.
  */
 @Composable
 fun PaymentElement(
@@ -30,7 +33,7 @@ fun PaymentElement(
 ) {
     val currentOnEvent by rememberUpdatedState(onEvent)
     LaunchedEffect(controller, intent) {
-        controller.bind(intent) { currentOnEvent(it) }
+        controller.updateOrder(intent) { currentOnEvent(it) }
     }
 
     val state = controller.sheetState
@@ -50,11 +53,13 @@ fun PaymentElement(
                 config = config,
                 state = state,
                 isProcessing = controller.isProcessing,
+                isUpdatingOrder = controller.isUpdatingOrder,
                 isOrderConsumed = controller.isOrderConsumed,
                 onPayCard = { controller.payWithCard(it) },
                 onSelectSaved = { controller.paySavedCard(it) },
                 onDeleteSaved = { controller.deleteSavedCard(it) },
                 onGooglePay = { controller.startGooglePay() },
+                onBindSubmit = { controller.bindSubmitHandler(it) },
                 modifier = modifier,
             )
         }

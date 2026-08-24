@@ -58,6 +58,18 @@ class ThemeResolutionTest {
     }
 
     @Test
+    fun darkSelectedWashesUseStrongerPrimaryAlpha() {
+        val primaryHex = "#0E7C66"
+        val theme = resolveAppearance(
+            mapOf("colors" to mapOf("primary" to primaryHex)),
+            isDark = true,
+        )
+        val primary = requireColor(primaryHex)
+        assertEquals(primary.copy(alpha = 0x2E / 255f), theme.selectedBackground)
+        assertEquals(primary.copy(alpha = 0x3D / 255f), theme.accentIconBackground)
+    }
+
+    @Test
     fun containerBorderNoneIsTransparent() {
         val theme = resolveAppearance(
             mapOf("colors" to mapOf("containerBorder" to "none")),
@@ -87,6 +99,25 @@ class ThemeResolutionTest {
     }
 
     @Test
+    fun primaryButtonDefaultsToPill() {
+        val theme = resolveAppearance(emptyMap(), isDark = false)
+        assertEquals(CheckoutTheme.DefaultPrimaryButtonRadius, theme.primaryButtonBorderRadius.value, 0.001f)
+    }
+
+    @Test
+    fun primaryButtonShapesBorderRadiusReachesTheme() {
+        val theme = resolveAppearance(
+            mapOf(
+                "primaryButton" to mapOf(
+                    "shapes" to mapOf("borderRadius" to 8),
+                ),
+            ),
+            isDark = false,
+        )
+        assertEquals(8f, theme.primaryButtonBorderRadius.value, 0.001f)
+    }
+
+    @Test
     fun brandPrimaryIsXMoneyPurple() {
         assertEquals(Color(0xFF7C4DFF), CheckoutTheme.BrandPrimary)
     }
@@ -104,19 +135,36 @@ class ThemeResolutionTest {
     fun darkModeChromeUsesLightInk() {
         val theme = resolveAppearance(emptyMap(), isDark = true)
         val ink = Color(0xFFF7F6F9)
+        val chrome = Color.White
+        assertEquals(Color(0xFF18181B), theme.background)
+        assertEquals(Color(0xFF18181B), theme.componentBackground)
         assertEquals(Color(0xFF797585), theme.mutedIcon)
-        assertEquals(ink.copy(alpha = 0x66 / 255f), theme.unselectedRing)
+        assertEquals(chrome.copy(alpha = 0x33 / 255f), theme.unselectedRing)
         assertEquals(ink.copy(alpha = 0x1A / 255f), theme.fieldBorder)
         assertEquals(ink.copy(alpha = 0x14 / 255f), theme.fieldDivider)
+        assertEquals(chrome.copy(alpha = 0x29 / 255f), theme.sheetHandle)
+        assertEquals(chrome.copy(alpha = 0x1A / 255f), theme.orDivider)
+        assertEquals(chrome.copy(alpha = 0x14 / 255f), theme.footerBorder)
     }
 
     @Test
     fun lightModeChromePreserved() {
         val theme = resolveAppearance(emptyMap(), isDark = false)
+        val ink = Color(0xFF16141A)
         assertEquals(Color(0x5216141A), theme.mutedIcon)
         assertEquals(Color(0x2916141A), theme.unselectedRing)
         assertEquals(Color(0x1A16141A), theme.fieldBorder)
         assertEquals(Color(0x1416141A), theme.fieldDivider)
+        assertEquals(ink.copy(alpha = 0x1F / 255f), theme.sheetHandle)
+        assertEquals(ink.copy(alpha = 0x1A / 255f), theme.orDivider)
+        assertEquals(ink.copy(alpha = 0x0F / 255f), theme.footerBorder)
+        assertEquals(null, theme.visaMarkTint)
+    }
+
+    @Test
+    fun darkVisaMarkIsWhite() {
+        val theme = resolveAppearance(emptyMap(), isDark = true)
+        assertEquals(Color.White, theme.visaMarkTint)
     }
 
     @Test
