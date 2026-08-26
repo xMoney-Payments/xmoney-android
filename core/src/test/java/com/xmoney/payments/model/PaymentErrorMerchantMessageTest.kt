@@ -1,5 +1,6 @@
 package com.xmoney.payments.model
 
+import com.xmoney.payments.engine.EngineResult
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -8,7 +9,7 @@ class PaymentErrorMerchantMessageTest {
     fun networkAlwaysUsesGenericMessage() {
         val error = PaymentError.Network("secret server dump")
         assertEquals(PaymentError.GENERIC_NETWORK, error.merchantMessage())
-        assertEquals(PaymentError.GENERIC_NETWORK, PaymentResult.failed(error).errorMessage)
+        assertEquals(PaymentError.GENERIC_NETWORK, EngineResult.failed(error).errorMessage)
     }
 
     @Test
@@ -21,5 +22,8 @@ class PaymentErrorMerchantMessageTest {
     fun sdkAuthoredMessagesPassThrough() {
         val error = PaymentError.Session()
         assertEquals("Missing session token", error.merchantMessage())
+
+        val missingWallet = PaymentError.GooglePay(PaymentError.MISSING_GOOGLE_PAY_AMOUNT_OR_CURRENCY)
+        assertEquals(PaymentError.MISSING_GOOGLE_PAY_AMOUNT_OR_CURRENCY, missingWallet.merchantMessage())
     }
 }

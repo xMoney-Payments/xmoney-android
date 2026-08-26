@@ -67,20 +67,38 @@ android {
     }
 }
 
+// Local modules by default. To verify the published Maven artifacts:
+//   ./gradlew :example:assembleDebug -PuseMavenSdk
+//   ./gradlew :example:assembleDebug -PuseMavenSdk=true
+val useMavenSdk = providers.gradleProperty("useMavenSdk")
+    .map { it.isEmpty() || it.equals("true", ignoreCase = true) }
+    .orElse(false)
+    .get()
+val publishedSdkVersion = "0.0.1"
+
 dependencies {
-    implementation(project(":paymentsheet"))
-    implementation(project(":googlepay"))
-    implementation(project(":embedded"))
+    if (useMavenSdk) {
+        implementation("com.xmoney:paymentsheet:$publishedSdkVersion")
+        implementation("com.xmoney:googlepay:$publishedSdkVersion")
+        implementation("com.xmoney:paymentelement:$publishedSdkVersion")
+    } else {
+        implementation(project(":paymentsheet"))
+        implementation(project(":googlepay"))
+        implementation(project(":paymentelement"))
+    }
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.coroutines.android)
     implementation(libs.okhttp)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons.extended)
 }

@@ -1,12 +1,14 @@
 package com.xmoney.googlepay.internal
 
 import com.xmoney.payments.model.OrderPayloadInfo
+import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.model.WalletParams
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class GooglePayHandlerTest {
@@ -29,10 +31,11 @@ class GooglePayHandlerTest {
     )
 
     @Test
-    fun allowedPaymentMethodsJson_includesTokenization() {
+    fun allowedPaymentMethodsJson_omitsTokenizationForButton() {
         val json = JSONArray(GooglePayHandlerTestHelper.allowedPaymentMethodsJson(params))
         val method = json.getJSONObject(0)
-        assertTrue(method.has("tokenizationSpecification"))
+        assertFalse(method.has("tokenizationSpecification"))
+        assertTrue(method.has("parameters"))
     }
 
     @Test
@@ -55,6 +58,70 @@ class GooglePayHandlerTest {
     fun formatPaymentAmount_usesTwoDecimalPlaces() {
         assertEquals("19.99", GooglePayHandler.formatPaymentAmount(19.99))
         assertEquals("100.00", GooglePayHandler.formatPaymentAmount(100.0))
+        assertEquals("0.00", GooglePayHandler.formatPaymentAmount(0.0))
+    }
+
+    @Test
+    fun transactionInfo_failsClosedWhenAmountMissing() {
+        try {
+            GooglePayHandler.transactionInfo(params, orderInfo.copy(amount = null))
+            fail("expected PaymentError.GooglePay")
+        } catch (e: PaymentError.GooglePay) {
+            assertEquals(
+                PaymentError.MISSING_GOOGLE_PAY_AMOUNT_OR_CURRENCY,
+                e.message,
+            )
+        }
+    }
+
+    @Test
+    fun transactionInfo_failsClosedWhenCurrencyMissing() {
+        try {
+            GooglePayHandler.transactionInfo(params, orderInfo.copy(currency = null))
+            fail("expected PaymentError.GooglePay")
+        } catch (e: PaymentError.GooglePay) {
+            assertEquals(
+                PaymentError.MISSING_GOOGLE_PAY_AMOUNT_OR_CURRENCY,
+                e.message,
+            )
+        }
+    }
+
+    @Test
+    fun requireWalletToken_failsClosedWhenEmpty() {
+        try {
+            GooglePayHandler.requireWalletToken("")
+            fail("expected PaymentError.GooglePay")
+        } catch (e: PaymentError.GooglePay) {
+            assertEquals(PaymentError.EMPTY_GOOGLE_PAY_TOKEN, e.message)
+        }
+        try {
+            GooglePayHandler.requireWalletToken("   ")
+            fail("expected PaymentError.GooglePay")
+        } catch (e: PaymentError.GooglePay) {
+            assertEquals(PaymentError.EMPTY_GOOGLE_PAY_TOKEN, e.message)
+        }
+        assertEquals("tok", GooglePayHandler.requireWalletToken("tok"))
+    }
+
+    @Test
+    fun transactionInfo_allowsZeroAmount() {
+        val info = GooglePayHandler.transactionInfo(params, orderInfo.copy(amount = 0.0))
+        assertEquals("0.00", info.getString("totalPrice"))
+        assertEquals("EUR", info.getString("currencyCode"))
+    }
+
+    @Test
+    fun testEnvironmentRequestsPanOnlyForIssuer3DS() {
+        assertEquals(listOf("PAN_ONLY"), GooglePayHandler.allowedAuthMethods(isLive = false))
+    }
+
+    @Test
+    fun liveEnvironmentKeepsCryptogram3DS() {
+        assertEquals(
+            listOf("PAN_ONLY", "CRYPTOGRAM_3DS"),
+            GooglePayHandler.allowedAuthMethods(isLive = true),
+        )
     }
 }
 
@@ -66,19 +133,8 @@ internal object GooglePayHandlerTestHelper {
             .put(
                 "parameters",
                 JSONObject()
-                    .put("allowedAuthMethods", JSONArray(listOf("PAN_ONLY", "CRYPTOGRAM_3DS")))
+                    .put("allowedAuthMethods", JSONArray(GooglePayHandler.allowedAuthMethods(isLive = false)))
                     .put("allowedCardNetworks", networks)
-            )
-            .put(
-                "tokenizationSpecification",
-                JSONObject()
-                    .put("type", "PAYMENT_GATEWAY")
-                    .put(
-                        "parameters",
-                        JSONObject()
-                            .put("gateway", params.gateway ?: "")
-                            .put("gatewayMerchantId", params.gatewayMerchantId ?: "")
-                    )
             )
         return JSONArray().put(method).toString()
     }
@@ -90,7 +146,7 @@ internal object GooglePayHandlerTestHelper {
             .put(
                 "parameters",
                 JSONObject()
-                    .put("allowedAuthMethods", JSONArray(listOf("PAN_ONLY", "CRYPTOGRAM_3DS")))
+                    .put("allowedAuthMethods", JSONArray(GooglePayHandler.allowedAuthMethods(isLive = false)))
                     .put("allowedCardNetworks", networks)
             )
         return JSONObject()
@@ -104,11 +160,7 @@ internal object GooglePayHandlerTestHelper {
         val merchantInfo = JSONObject().put("merchantName", params.merchantName ?: "Merchant")
         params.merchantId?.takeIf { it.isNotBlank() }?.let { merchantInfo.put("merchantId", it) }
 
-        val transactionInfo = JSONObject()
-            .put("totalPrice", GooglePayHandler.formatPaymentAmount(orderInfo.amount))
-            .put("totalPriceStatus", "FINAL")
-            .put("currencyCode", orderInfo.currency ?: "EUR")
-        params.merchantCountry?.takeIf { it.isNotBlank() }?.let { transactionInfo.put("countryCode", it) }
+        val transactionInfo = GooglePayHandler.transactionInfo(params, orderInfo)
 
         return JSONObject()
             .put("apiVersion", 2)

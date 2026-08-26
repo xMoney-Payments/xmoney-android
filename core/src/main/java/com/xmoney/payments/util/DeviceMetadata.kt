@@ -1,6 +1,7 @@
 package com.xmoney.payments.util
 
 import android.content.Context
+import android.webkit.WebSettings
 import java.util.Locale
 import java.util.TimeZone
 
@@ -11,7 +12,7 @@ object DeviceMetadata {
         val tzOffsetMinutes = -TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000
         return mapOf(
             "browserLanguage" to Locale.getDefault().toLanguageTag(),
-            "browserUserAgent" to userAgent(),
+            "browserUserAgent" to userAgent(context),
             "browserColorDepth" to "24",
             "browserScreenHeight" to metrics.heightPixels.toString(),
             "browserScreenWidth" to metrics.widthPixels.toString(),
@@ -24,10 +25,13 @@ object DeviceMetadata {
     fun httpHeaders(): Map<String, String> = mapOf(
         "Accept" to "*/*",
         "Accept-Language" to Locale.getDefault().toLanguageTag(),
-        "User-Agent" to userAgent(),
+        "User-Agent" to fallbackUserAgent(),
     )
 
-    private fun userAgent(): String {
+    fun userAgent(context: Context): String =
+        runCatching { WebSettings.getDefaultUserAgent(context) }.getOrElse { fallbackUserAgent() }
+
+    private fun fallbackUserAgent(): String {
         val version = android.os.Build.VERSION.RELEASE
         val model = android.os.Build.MODEL
         return "Mozilla/5.0 (Linux; Android $version; $model) " +

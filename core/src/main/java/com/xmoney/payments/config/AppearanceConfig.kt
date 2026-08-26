@@ -149,34 +149,9 @@ enum class WalletButtonType(val value: String) {
     }
 }
 
-enum class WalletBorderType(val value: String) {
-    DEFAULT_BORDER("default_border"),
-    NO_BORDER("no_border"),
-    ;
-
-    companion object {
-        fun from(raw: String?): WalletBorderType? =
-            raw?.let { entries.firstOrNull { e -> e.value.equals(it, ignoreCase = true) } }
-    }
-}
-
-enum class WalletButtonStyle(val value: String) {
-    DEFAULT("default"),
-    ;
-
-    companion object {
-        fun from(raw: String?): WalletButtonStyle? {
-            if (raw.isNullOrBlank()) return null
-            return entries.firstOrNull { it.value.equals(raw, ignoreCase = true) }
-        }
-    }
-}
-
 @Parcelize
 data class WalletAppearance(
-    val style: WalletButtonStyle? = null,
     val color: WalletButtonColor? = null,
     val radius: Float? = null,
     val type: WalletButtonType? = null,
-    val borderType: WalletBorderType? = null,
 ) : Parcelable

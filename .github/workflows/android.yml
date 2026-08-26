@@ -19,11 +19,14 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
       - name: Run unit tests
-        run: ./gradlew :core:test :embedded:test :googlepay:test :paymentsheet:test --stacktrace
+        run: ./gradlew :core:test :googlepay:test :paymentelement:test :paymentsheet:test --stacktrace
 
       - name: Assemble example app
         run: ./gradlew :example:assembleDebug --stacktrace

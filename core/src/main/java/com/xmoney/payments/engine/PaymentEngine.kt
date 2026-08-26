@@ -11,7 +11,6 @@ import com.xmoney.payments.model.SavedCard
 import com.xmoney.payments.model.SiteConfig
 import com.xmoney.payments.model.WalletParams
 import com.xmoney.payments.model.PaymentError
-import com.xmoney.payments.model.PaymentResult
 import com.xmoney.payments.network.HttpClient
 import com.xmoney.payments.service.AccountService
 import com.xmoney.payments.service.CardsService
@@ -22,13 +21,20 @@ import com.xmoney.payments.service.TransactionService
 
 import android.content.Context
 import androidx.annotation.RestrictTo
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.selects.select
 
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 interface ThreeDSPresenter {
-    suspend fun presentThreeDS(url: String, returnUrlMatcher: (String) -> Boolean): Boolean
+    suspend fun presentThreeDS(
+        url: String,
+        returnUrlMatcher: (String) -> Boolean,
+        formMethod: String = "GET",
+        params: Map<String, String> = emptyMap(),
+        onShown: () -> Unit = {},
+    ): Boolean
     fun dismissThreeDS()
 }
 
@@ -44,12 +50,15 @@ data class SheetState(
 )
 
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
-class PaymentEngine(val config: ResolvedPaymentConfig, context: Context) {
+class PaymentEngine(
+    val config: ResolvedPaymentConfig,
+    context: Context,
+    http: HttpClient = HttpClient.shared(),
+) {
     val env: PaymentEnvironment = PaymentEnvironment.from(config.publicKey)
         ?: throw PaymentError.InvalidKey()
 
     private val appContext = context.applicationContext
-    private val http = HttpClient.shared()
     private val account = AccountService(http, env)
     private val configService = ConfigService(http, env)
     private val cards = CardsService(http, env)
@@ -60,8 +69,9 @@ class PaymentEngine(val config: ResolvedPaymentConfig, context: Context) {
     private var sessionToken: String = ""
     private var nameCheckValidationEnabled: Boolean = false
     private var cachedOrderInfo: OrderPayloadInfo? = null
-    private var cachedBackUrlHost: String? = null
-    private var backUrlHostResolved: Boolean = false
+    private var cachedBackUrl: java.net.URI? = null
+    private var backUrlResolved: Boolean = false
+    private val cachedWalletParams = mutableMapOf<String, WalletParams>()
 
     var onCardHolderVerification: ((CardHolderVerificationResult) -> Boolean)? =
         config.card.cardHolderVerification?.onCardHolderVerification
@@ -82,9 +92,17 @@ class PaymentEngine(val config: ResolvedPaymentConfig, context: Context) {
             if (showSavedCards) runCatching { cards.getCards(sessionToken) }.getOrDefault(emptyList())
             else emptyList()
         }
+        val walletTask = async {
+            if (googlePayConfigured && config.paymentMethods.googlePay.enabled) {
+                runCatching { walletParams("googlePay") }.getOrNull()
+            } else {
+                null
+            }
+        }
 
         val siteConfig = configTask.await()
         nameCheckValidationEnabled = siteConfig.nameCheckValidationEnabled
+        walletTask.await()
 
         SheetState(
             sessionToken = sessionToken,
@@ -98,7 +116,7 @@ class PaymentEngine(val config: ResolvedPaymentConfig, context: Context) {
     suspend fun refreshSavedCards(): List<SavedCard> =
         runCatching { cards.getCards(sessionToken) }.getOrDefault(emptyList())
 
-    suspend fun submitNewCard(card: CardInput, presenter: ThreeDSPresenter): PaymentResult {
+    suspend fun submitNewCard(card: CardInput, presenter: ThreeDSPresenter): EngineResult {
         val verification = config.card.cardHolderVerification
         if (verification != null) {
             if (!nameCheckValidationEnabled) {
@@ -114,8 +132,8 @@ class PaymentEngine(val config: ResolvedPaymentConfig, context: Context) {
             )
             val callback = onCardHolderVerification ?: verification.onCardHolderVerification
             if (!callback(result)) {
-                return PaymentResult(
-                    status = PaymentResult.Status.FAILED,
+                return EngineResult(
+                    status = EngineResult.Status.FAILED,
                     transaction = null,
                     errorCode = "CARD_HOLDER_VERIFICATION",
                     errorMessage = PaymentError.VERIFICATION_REJECTED,
@@ -126,32 +144,38 @@ class PaymentEngine(val config: ResolvedPaymentConfig, context: Context) {
         return submit(fields, presenter)
     }
 
-    suspend fun submitSavedCard(cardId: String, presenter: ThreeDSPresenter): PaymentResult {
+    suspend fun submitSavedCard(cardId: String, presenter: ThreeDSPresenter): EngineResult {
         val fields = payment.savedCardFields(cardId, config.orderPayload, config.orderChecksum)
         return submit(fields, presenter)
     }
 
-    suspend fun submitWallet(walletType: String, token: String, presenter: ThreeDSPresenter): PaymentResult {
+    suspend fun submitWallet(walletType: String, token: String, presenter: ThreeDSPresenter): EngineResult {
         val fields = payment.walletFields(walletType, token, config.orderPayload, config.orderChecksum)
         return submit(fields, presenter)
     }
 
-    suspend fun walletParams(walletType: String): WalletParams =
-        wallets.getParams(walletType, sessionToken)
+    suspend fun walletParams(walletType: String): WalletParams {
+        cachedWalletParams[walletType]?.let { return it }
+        val params = wallets.getParams(walletType, sessionToken)
+        cachedWalletParams[walletType] = params
+        return params
+    }
 
     suspend fun deleteSavedCard(cardId: String) = cards.deleteCard(cardId, sessionToken)
 
-    private suspend fun submit(fields: Map<String, String>, presenter: ThreeDSPresenter): PaymentResult {
+    private suspend fun submit(fields: Map<String, String>, presenter: ThreeDSPresenter): EngineResult {
         val response = payment.confirmPayment(fields)
         val parsed = payment.parse(response)
 
         return when (val submission = parsed.submission) {
             is PaymentSubmissionResult.Needs3DS -> {
                 val transactionId = requireTransactionIdForThreeDS(parsed.transactionId)
-                val backUrl = backUrlHost()
-                val matcher: (String) -> Boolean = { returnUrl -> matchesReturn(returnUrl, backUrl) }
+                val backUrl = backUrl()
+                val matcher: (String) -> Boolean = { returnUrl ->
+                    backUrl != null && OrderPayloadDecoder.matchesReturnURL(returnUrl, backUrl)
+                }
                 handleThreeDSWithBackgroundRefresh(
-                    submission.url,
+                    submission,
                     transactionId,
                     presenter,
                     matcher,
@@ -162,34 +186,39 @@ class PaymentEngine(val config: ResolvedPaymentConfig, context: Context) {
         }
     }
 
-    private fun backUrlHost(): String? {
-        if (backUrlHostResolved) return cachedBackUrlHost
-        backUrlHostResolved = true
-        cachedBackUrlHost = OrderPayloadDecoder.backUrlHost(config.orderPayload)
-        return cachedBackUrlHost
+    private fun backUrl(): java.net.URI? {
+        if (backUrlResolved) return cachedBackUrl
+        backUrlResolved = true
+        cachedBackUrl = OrderPayloadDecoder.backUrl(config.orderPayload)
+        return cachedBackUrl
     }
 
-    private fun matchesReturn(returnUrl: String, backUrlHost: String?): Boolean {
-        val uri = runCatching { android.net.Uri.parse(returnUrl) }.getOrNull() ?: return false
-        if (backUrlHost != null && uri.host == backUrlHost) return true
-        val names = uri.queryParameterNames
-        return names.contains("result") || names.contains("status")
-    }
-
-    private suspend fun resolveByPolling(transactionId: String?): PaymentResult {
+    private suspend fun resolveByPolling(transactionId: String?): EngineResult {
         if (transactionId == null) throw PaymentError.Payment("Missing transaction id")
         val tx = transactions.poll(transactionId, sessionToken)
         return resultFromTransaction(tx)
     }
 
     private suspend fun handleThreeDSWithBackgroundRefresh(
-        url: String,
+        challenge: PaymentSubmissionResult.Needs3DS,
         transactionId: String,
         presenter: ThreeDSPresenter,
         returnUrlMatcher: (String) -> Boolean,
-    ): PaymentResult = coroutineScope {
-        val pollDeferred = async { resolveByPolling(transactionId) }
-        val threeDSDeferred = async { presenter.presentThreeDS(url, returnUrlMatcher) }
+    ): EngineResult = coroutineScope {
+        val shown = CompletableDeferred<Unit>()
+        val threeDSDeferred = async {
+            presenter.presentThreeDS(
+                challenge.url,
+                returnUrlMatcher,
+                challenge.formMethod,
+                challenge.params,
+                onShown = { shown.complete(Unit) },
+            )
+        }
+        val pollDeferred = async {
+            shown.await()
+            resolveByPolling(transactionId)
+        }
         try {
             select {
                 pollDeferred.onAwait { result ->

@@ -8,6 +8,10 @@ import com.xmoney.paymentsheet.PaymentSheetEvent
 import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 
+internal fun interface CheckoutCloseTarget {
+    fun requestClose()
+}
+
 internal object CheckoutSessionRegistry {
     data class Session(
         val onEvent: (PaymentSheetEvent) -> Unit = {},
@@ -15,6 +19,7 @@ internal object CheckoutSessionRegistry {
         val onCardHolderVerification: ((CardHolderVerificationResult) -> Boolean)? = null,
         val config: ResolvedPaymentConfig? = null,
         var host: WeakReference<FragmentActivity>? = null,
+        var closeTarget: WeakReference<CheckoutCloseTarget>? = null,
     )
 
     private val sessions = ConcurrentHashMap<String, Session>()
@@ -33,8 +38,13 @@ internal object CheckoutSessionRegistry {
         sessions[requestId]?.host = WeakReference(activity)
     }
 
+    fun bindCloseTarget(requestId: String, target: CheckoutCloseTarget) {
+        sessions[requestId]?.closeTarget = WeakReference(target)
+    }
+
     fun finishHost(requestId: String?) {
         if (requestId.isNullOrBlank()) return
-        sessions[requestId]?.host?.get()?.finish()
+        val session = sessions[requestId] ?: return
+        session.closeTarget?.get()?.requestClose()
     }
 }

@@ -6,6 +6,9 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -25,23 +28,24 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
-import com.xmoney.googlepay.internal.GooglePayWalletController
+import com.xmoney.googlepay.GooglePay
 import com.xmoney.paymentelement.theme.CheckoutTheme
 import com.xmoney.paymentelement.ui.UIHelpers
 import com.xmoney.paymentelement.ui.XCoinFlipLoader
-import com.xmoney.payments.engine.PaymentEngine
+import com.xmoney.payments.engine.DigitalWalletAuthorizing
 import com.xmoney.payments.engine.SheetState
 import com.xmoney.payments.model.CardInput
 import com.xmoney.payments.model.PaymentError
-import com.xmoney.payments.model.PaymentResult
+import com.xmoney.payments.engine.EngineResult
 import com.xmoney.payments.model.SavedCard
 import com.xmoney.payments.threeds.ThreeDSHostController
 import com.xmoney.payments.validation.CardFieldValidators
 import com.xmoney.paymentsheet.PaymentSheetEvent
 import com.xmoney.paymentsheet.ui.PaymentSheetContent
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-class PaymentSheetFragment : BottomSheetDialogFragment() {
+class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
     private sealed class UiState {
         data object Loading : UiState()
         data class Loaded(val state: SheetState) : UiState()
@@ -50,17 +54,39 @@ class PaymentSheetFragment : BottomSheetDialogFragment() {
 
     private val viewModel: PaymentSheetViewModel
         get() = (requireActivity() as PaymentSheetViewModelOwner).paymentSheetViewModel
-    private val engine get() = viewModel.engine
+    private val session get() = viewModel.session
 
     private var uiState by mutableStateOf<UiState>(UiState.Loading)
     private var isProcessing by mutableStateOf(false)
     private var didFinish = false
+    private var authorizer: DigitalWalletAuthorizing? = null
+    private var pendingWalletResult: androidx.activity.result.ActivityResult? = null
+    private var sheetBehavior: BottomSheetBehavior<View>? = null
+    private var behaviorCallback: BottomSheetBehavior.BottomSheetCallback? = null
 
     private val threeDSHostController by lazy {
         ThreeDSHostController(requireActivity()) { viewModel.config.options.locale }
     }
 
-    private val googlePayController = GooglePayWalletController(this)
+    private lateinit var resolutionLauncher: ActivityResultLauncher<IntentSenderRequest>
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        GooglePay.register()
+        resolutionLauncher = registerForActivityResult(
+            ActivityResultContracts.StartIntentSenderForResult(),
+        ) { result ->
+            val wallet = authorizer
+            if (wallet != null) {
+                wallet.handleResolutionResult(result)
+                if (wallet.hasPendingWalletAuthorization) {
+                    startGooglePay()
+                }
+            } else {
+                pendingWalletResult = result
+            }
+        }
+    }
 
     override fun onStart() {
         super.onStart()
@@ -73,11 +99,30 @@ class PaymentSheetFragment : BottomSheetDialogFragment() {
         dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { sheet ->
             sheet.setBackgroundColor(android.graphics.Color.TRANSPARENT)
             sheet.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
-            BottomSheetBehavior.from(sheet).apply {
-                state = BottomSheetBehavior.STATE_EXPANDED
-                skipCollapsed = true
-                isDraggable = false
+            bindSheetBehavior(sheet)
+        }
+    }
+
+    private fun bindSheetBehavior(sheet: View) {
+        val behavior = BottomSheetBehavior.from(sheet)
+        behavior.state = BottomSheetBehavior.STATE_EXPANDED
+        behavior.skipCollapsed = true
+        behavior.isHideable = true
+        behavior.isDraggable = !isProcessing
+        if (sheetBehavior !== behavior) {
+            behaviorCallback?.let { sheetBehavior?.removeBottomSheetCallback(it) }
+            val callback = object : BottomSheetBehavior.BottomSheetCallback() {
+                override fun onStateChanged(bottomSheet: View, newState: Int) {
+                    if (newState == BottomSheetBehavior.STATE_HIDDEN) {
+                        requestClose()
+                    }
+                }
+
+                override fun onSlide(bottomSheet: View, slideOffset: Float) = Unit
             }
+            behaviorCallback = callback
+            behavior.addBottomSheetCallback(callback)
+            sheetBehavior = behavior
         }
     }
 
@@ -94,17 +139,8 @@ class PaymentSheetFragment : BottomSheetDialogFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        googlePayController.attach(
-            activity = requireActivity(),
-            engine = viewModel.engine,
-            threeDSPresenter = threeDSHostController,
-            scope = lifecycleScope,
-            onProcessing = { processing -> setProcessingState(processing) },
-            onResult = { result ->
-                finish(result)
-            },
-        )
-        loadState(viewModel)
+        CheckoutSessionRegistry.bindCloseTarget(viewModel.requestId, this)
+        loadState()
     }
 
     @androidx.compose.runtime.Composable
@@ -118,7 +154,7 @@ class PaymentSheetFragment : BottomSheetDialogFragment() {
                     Box(
                         modifier = Modifier.fillMaxWidth().padding(40.dp),
                         contentAlignment = Alignment.Center,
-                    ) { XCoinFlipLoader(color = theme.primary) }
+                    ) { XCoinFlipLoader(color = CheckoutTheme.BrandPrimary) }
                 }
             }
 
@@ -141,36 +177,51 @@ class PaymentSheetFragment : BottomSheetDialogFragment() {
                 onSelectSaved = { paySavedCard(it) },
                 onDeleteSaved = { deleteSavedCard(it) },
                 onGooglePay = { startGooglePay() },
-                onCancel = { finish(PaymentResult(PaymentResult.Status.CANCELED, null, null, null)) },
+                onCancel = { requestClose() },
             )
         }
     }
 
-    private fun loadState(session: PaymentSheetViewModel) {
+    private fun loadState() {
         lifecycleScope.launch {
             try {
-                val state = loadSheetState(session.engine)
+                val state = session.bind(viewModel.intent, requireActivity())
+                authorizer = session.makeWalletAuthorizer(threeDSHostController, requireActivity())
+                authorizer?.bindResolutionLauncher(resolutionLauncher)
                 uiState = UiState.Loaded(state)
-                session.onEvent(PaymentSheetEvent.Ready)
+                viewModel.onEvent(PaymentSheetEvent.Ready)
+                val pending = pendingWalletResult
+                pendingWalletResult = null
+                if (pending != null) {
+                    authorizer?.handleResolutionResult(pending)
+                    if (pending.resultCode == android.app.Activity.RESULT_OK &&
+                        authorizer?.hasPendingWalletAuthorization == true
+                    ) {
+                        startGooglePay()
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: PaymentError) {
-                finish(PaymentResult.failed(e))
+                finish(EngineResult.failed(e))
             } catch (e: Exception) {
-                finish(PaymentResult.failed("LOAD_ERROR", e.message ?: PaymentError.GENERIC_LOAD))
+                finish(EngineResult.failed("LOAD_ERROR", e.message ?: PaymentError.GENERIC_LOAD))
             }
         }
     }
 
-    private suspend fun loadSheetState(engine: PaymentEngine): SheetState {
-        return if (engine.config.paymentMethods.googlePay.enabled) {
-            googlePayController.prepareSheetState()
-        } else {
-            engine.load(googlePayConfigured = false)
-        }
-    }
-
     private fun startGooglePay() {
-        val state = (uiState as? UiState.Loaded)?.state ?: return
-        googlePayController.startPayment(state.orderInfo)
+        val wallet = authorizer ?: return
+        if (!session.isInteractionEnabled) return
+        setProcessingState(true)
+        lifecycleScope.launch {
+            val result = session.startWallet(wallet)
+            if (result.status == EngineResult.Status.CANCELED && !session.isOrderConsumed) {
+                setProcessingState(false)
+                return@launch
+            }
+            finish(result)
+        }
     }
 
     private fun payWithCard(input: CardInput) {
@@ -179,46 +230,50 @@ class PaymentSheetFragment : BottomSheetDialogFragment() {
             CardFieldValidators.validateCVV(input.cvv) != null ||
             CardFieldValidators.validateHolderName(input.holderName) != null
         if (invalid) return
-        engine.onCardHolderVerification =
+        session.onCardHolderVerification =
             CheckoutSessionRegistry.get(viewModel.requestId)?.onCardHolderVerification
                 ?: viewModel.config.card.cardHolderVerification?.onCardHolderVerification
-        runSubmission { engine.submitNewCard(input, threeDSHostController) }
+        runSubmission { session.submitNewCard(input, threeDSHostController) }
     }
 
     private fun paySavedCard(card: SavedCard) =
-        runSubmission { engine.submitSavedCard(card.id, threeDSHostController) }
+        runSubmission { session.submitSavedCard(card.id, threeDSHostController) }
 
-    private fun deleteSavedCard(card: SavedCard) {
-        lifecycleScope.launch {
-            runCatching { engine.deleteSavedCard(card.id) }
-            runCatching {
-                val refreshed = engine.refreshSavedCards()
-                val current = (uiState as? UiState.Loaded)?.state ?: return@runCatching
-                uiState = UiState.Loaded(current.copy(savedCards = refreshed))
-            }
-        }
+    private suspend fun deleteSavedCard(card: SavedCard) {
+        val updated = session.deleteSavedCard(card.id)
+        uiState = UiState.Loaded(updated)
     }
 
-    private fun runSubmission(block: suspend () -> PaymentResult) {
+    private fun runSubmission(block: suspend () -> EngineResult) {
         setProcessingState(true)
         lifecycleScope.launch {
             try {
                 val result = block()
                 finish(result)
+            } catch (e: CancellationException) {
+                setProcessingState(false)
+                throw e
             } catch (e: PaymentError) {
-                finish(PaymentResult.failed(e))
+                finish(EngineResult.failed(e))
             } catch (e: Exception) {
-                finish(PaymentResult.failed("PAYMENT_ERROR", e.message ?: PaymentError.GENERIC_PAYMENT))
+                finish(EngineResult.failed("PAYMENT_ERROR", e.message ?: PaymentError.GENERIC_PAYMENT))
             }
         }
     }
 
     private fun setProcessingState(processing: Boolean) {
         isProcessing = processing
+        isCancelable = !processing
+        sheetBehavior?.isDraggable = !processing
         viewModel.onEvent(PaymentSheetEvent.Processing(processing))
     }
 
-    private fun finish(result: PaymentResult) {
+    override fun requestClose() {
+        if (isProcessing) return
+        finish(EngineResult(EngineResult.Status.CANCELED, null, null, null))
+    }
+
+    private fun finish(result: EngineResult) {
         if (didFinish) return
         didFinish = true
         viewModel.finish(result)
@@ -229,7 +284,7 @@ class PaymentSheetFragment : BottomSheetDialogFragment() {
         super.onDismiss(dialog)
         if (!didFinish) {
             didFinish = true
-            viewModel.finish(PaymentResult(PaymentResult.Status.CANCELED, null, null, null))
+            viewModel.finish(EngineResult(EngineResult.Status.CANCELED, null, null, null))
         }
     }
 

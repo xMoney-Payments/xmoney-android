@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.maven.publish)
+    alias(libs.plugins.dokka)
 }
 
 group = property("GROUP").toString()
@@ -34,7 +35,7 @@ android {
 
 dependencies {
     api(project(":core"))
-    api(project(":embedded"))
+    api(project(":paymentelement"))
     implementation(project(":googlepay"))
 
     implementation(libs.androidx.core.ktx)

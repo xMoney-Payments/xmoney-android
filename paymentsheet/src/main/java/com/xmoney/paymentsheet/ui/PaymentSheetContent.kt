@@ -48,7 +48,7 @@ internal fun PaymentSheetContent(
     isProcessing: Boolean,
     onPayCard: (CardInput) -> Unit,
     onSelectSaved: (SavedCard) -> Unit,
-    onDeleteSaved: (SavedCard) -> Unit,
+    onDeleteSaved: suspend (SavedCard) -> Unit,
     onGooglePay: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -93,7 +93,7 @@ private fun SheetHandle(theme: CheckoutTheme) {
                 .width(38.dp)
                 .height(4.dp)
                 .clip(RoundedCornerShape(9999.dp))
-                .background(theme.componentDivider.copy(alpha = 0.12f)),
+                .background(theme.sheetHandle),
         )
     }
 }
@@ -105,7 +105,9 @@ private fun SheetHeader(
     onCancel: () -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(

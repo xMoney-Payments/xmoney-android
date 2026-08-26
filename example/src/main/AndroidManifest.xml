@@ -4,7 +4,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.XMoneyExample">
@@ -17,9 +17,21 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".samples.PaymentSheetSampleActivity" />
+        <activity android:name=".samples.EmbeddedPaymentSampleActivity" />
+        <activity android:name=".samples.GooglePaySampleActivity" />
+        <activity android:name=".samples.PaymentSheetActivitySample" />
+        <activity android:name=".samples.GooglePayActivitySample" />
+        <activity android:name=".samples.MerchantPayButtonSampleActivity" />
+        <activity android:name=".samples.CardHolderVerificationSampleActivity" />
+        <activity android:name=".samples.EmbeddedViewsSampleActivity" />
+        <activity android:name=".samples.UpdateOrderSampleActivity" />
+        <activity android:name=".scenarios.shop.ShopActivity" />
+        <activity android:name=".scenarios.hearth.HearthActivity" />
+        <activity android:name=".scenarios.pulse.PulseActivity" />
+        <activity android:name=".playground.PlaygroundActivity" />
         <meta-data
             android:name="com.google.android.gms.wallet.api.enabled"
             android:value="true" />
     </application>
-
 </manifest>

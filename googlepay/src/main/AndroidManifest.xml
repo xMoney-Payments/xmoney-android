@@ -1,11 +1,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <uses-permission android:name="android.permission.INTERNET" />
 
-  <application>
+    <application>
+    <provider
+      android:name="com.xmoney.googlepay.internal.GooglePayInstallProvider"
+      android:authorities="${applicationId}.xmoney.googlepay.install"
+      android:exported="false"
+      android:initOrder="100" />
     <activity
       android:name="com.xmoney.googlepay.internal.GooglePayHostActivity"
       android:exported="false"
-      android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+      android:theme="@android:style/Theme.Material.Light.NoActionBar" />
     <meta-data
       android:name="com.google.android.gms.wallet.api.enabled"
       android:value="true" />

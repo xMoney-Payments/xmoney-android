@@ -9,6 +9,7 @@ import com.google.android.gms.wallet.Wallet
 import com.google.android.gms.wallet.WalletConstants
 import com.xmoney.payments.model.OrderPayloadInfo
 import com.xmoney.payments.model.WalletParams
+import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.config.PaymentEnvironment
 import java.util.Locale
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -16,7 +17,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.coroutines.resume
 
-class GooglePayHandler(activity: Activity, env: PaymentEnvironment) {
+class GooglePayHandler(activity: Activity, private val env: PaymentEnvironment) {
     private val client: PaymentsClient = Wallet.getPaymentsClient(
         activity,
         Wallet.WalletOptions.Builder()
@@ -42,7 +43,7 @@ class GooglePayHandler(activity: Activity, env: PaymentEnvironment) {
     val paymentsClient: PaymentsClient get() = client
 
     fun allowedPaymentMethodsJson(params: WalletParams): String =
-        paymentDataRequest(params).getJSONArray("allowedPaymentMethods").toString()
+        isReadyToPayRequest(params).getJSONArray("allowedPaymentMethods").toString()
 
     internal fun buildPaymentDataRequestJson(params: WalletParams, orderInfo: OrderPayloadInfo): JSONObject =
         paymentDataRequest(params).apply {
@@ -68,14 +69,8 @@ class GooglePayHandler(activity: Activity, env: PaymentEnvironment) {
         return info
     }
 
-    private fun transactionInfoJson(params: WalletParams, orderInfo: OrderPayloadInfo): JSONObject {
-        val info = JSONObject()
-            .put("totalPrice", formatPaymentAmount(orderInfo.amount))
-            .put("totalPriceStatus", "FINAL")
-            .put("currencyCode", orderInfo.currency ?: "EUR")
-        params.merchantCountry?.takeIf { it.isNotBlank() }?.let { info.put("countryCode", it) }
-        return info
-    }
+    private fun transactionInfoJson(params: WalletParams, orderInfo: OrderPayloadInfo): JSONObject =
+        transactionInfo(params, orderInfo)
 
     private fun cardPaymentMethodParameters(params: WalletParams): JSONObject {
         val allowedNetworks = allowedNetworksJson(params)
@@ -84,7 +79,7 @@ class GooglePayHandler(activity: Activity, env: PaymentEnvironment) {
             .put(
                 "parameters",
                 JSONObject()
-                    .put("allowedAuthMethods", JSONArray(listOf("PAN_ONLY", "CRYPTOGRAM_3DS")))
+                    .put("allowedAuthMethods", JSONArray(allowedAuthMethods(env.isLive)))
                     .put("allowedCardNetworks", allowedNetworks)
             )
     }
@@ -111,13 +106,41 @@ class GooglePayHandler(activity: Activity, env: PaymentEnvironment) {
     companion object {
         fun extractToken(paymentData: PaymentData): String {
             val json = JSONObject(paymentData.toJson())
-            return json
+            val token = json
                 .getJSONObject("paymentMethodData")
                 .getJSONObject("tokenizationData")
-                .getString("token")
+                .optString("token")
+            return requireWalletToken(token)
         }
 
-        fun formatPaymentAmount(amount: Double?): String =
-            String.format(Locale.US, "%.2f", amount ?: 0.0)
+        fun requireWalletToken(token: String): String {
+            if (token.isBlank()) {
+                throw PaymentError.GooglePay(PaymentError.EMPTY_GOOGLE_PAY_TOKEN)
+            }
+            return token
+        }
+
+        /**
+         * TEST requests PAN_ONLY so Google Pay returns an FPAN the gateway can 3DS.
+         * Live keeps CRYPTOGRAM_3DS for Wallet tokens.
+         */
+        internal fun allowedAuthMethods(isLive: Boolean): List<String> =
+            if (isLive) listOf("PAN_ONLY", "CRYPTOGRAM_3DS") else listOf("PAN_ONLY")
+
+        fun formatPaymentAmount(amount: Double): String =
+            String.format(Locale.US, "%.2f", amount)
+
+        fun transactionInfo(params: WalletParams, orderInfo: OrderPayloadInfo): JSONObject {
+            val amount = orderInfo.amount
+                ?: throw PaymentError.GooglePay(PaymentError.MISSING_GOOGLE_PAY_AMOUNT_OR_CURRENCY)
+            val currency = orderInfo.currency?.takeIf { it.isNotBlank() }
+                ?: throw PaymentError.GooglePay(PaymentError.MISSING_GOOGLE_PAY_AMOUNT_OR_CURRENCY)
+            val info = JSONObject()
+                .put("totalPrice", formatPaymentAmount(amount))
+                .put("totalPriceStatus", "FINAL")
+                .put("currencyCode", currency)
+            params.merchantCountry?.takeIf { it.isNotBlank() }?.let { info.put("countryCode", it) }
+            return info
+        }
     }
 }

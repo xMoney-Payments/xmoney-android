@@ -26,7 +26,7 @@ class GooglePayButtonThemeTest {
 
     @Test
     fun resolvesButtonTypeFromAppearance() {
-        assertEquals(ButtonType.Plain, resolveButtonType(null))
+        assertEquals(ButtonType.Pay, resolveButtonType(null))
         assertEquals(ButtonType.Pay, resolveButtonType(WalletButtonType.PAY))
         assertEquals(ButtonType.Buy, resolveButtonType(WalletButtonType.BUY))
         assertEquals(ButtonType.Checkout, resolveButtonType(WalletButtonType.CHECKOUT))

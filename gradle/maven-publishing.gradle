@@ -1,4 +1,19 @@
 mavenPublishing {
     publishToMavenCentral(true)
     signAllPublications()
+    // AGP's withJavadocJar() uses a bundled Dokka that cannot read Java 17
+    // sealed classes (PermittedSubclasses requires ASM9). Use Dokka 2 instead.
+    configureBasedOnAppliedPlugins(true, false)
+}
+
+def dokkaJavadocJar = tasks.register("dokkaJavadocJar", Jar) {
+    description = "Packages Dokka HTML into a javadoc jar for Maven Central"
+    from(tasks.named("dokkaGeneratePublicationHtml"))
+    archiveClassifier.set("javadoc")
+}
+
+afterEvaluate {
+    publishing.publications.withType(MavenPublication).configureEach {
+        artifact(dokkaJavadocJar)
+    }
 }

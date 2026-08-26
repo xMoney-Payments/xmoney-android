@@ -77,7 +77,7 @@ internal fun resolveButtonType(type: WalletButtonType?): ButtonType =
         WalletButtonType.CHECKOUT -> ButtonType.Checkout
         WalletButtonType.DONATE -> ButtonType.Donate
         WalletButtonType.ORDER -> ButtonType.Order
-        WalletButtonType.PAY -> ButtonType.Pay
         WalletButtonType.SUBSCRIBE -> ButtonType.Subscribe
-        WalletButtonType.PLAIN, null -> ButtonType.Plain
+        WalletButtonType.PLAIN -> ButtonType.Plain
+        WalletButtonType.PAY, null -> ButtonType.Pay
     }

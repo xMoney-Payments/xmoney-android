@@ -8,6 +8,7 @@ import com.xmoney.payments.model.CardHolderVerificationResult
 import com.xmoney.payments.model.CardInput
 import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.model.SessionTokenResponse
+import com.xmoney.payments.network.ApiUrl
 import com.xmoney.payments.network.HttpClient
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -17,7 +18,7 @@ import java.util.TimeZone
 
 class AccountService(private val http: HttpClient, private val env: PaymentEnvironment) {
     suspend fun getSessionToken(orderPayload: String, orderChecksum: String): String {
-        val url = "${env.apiNextBaseURL}/${SdkConstants.SESSION_TOKEN_PATH}"
+        val url = ApiUrl.make(env.apiNextBaseURL, SdkConstants.SESSION_TOKEN_PATH)
         val result = http.postJson(url, mapOf("payload" to orderPayload, "checksum" to orderChecksum))
         return SessionTokenResponse.fromApiMap(result).token
             ?: throw PaymentError.Session()
@@ -35,7 +36,7 @@ class AccountService(private val http: HttpClient, private val env: PaymentEnvir
             currency = currency,
             transactionLocalDateTime = isoNow(),
         )
-        val url = "${env.apiNextBaseURL}/${SdkConstants.ACCOUNT_VALIDATION_PATH}"
+        val url = ApiUrl.make(env.apiNextBaseURL, SdkConstants.ACCOUNT_VALIDATION_PATH)
         val result = http.postJson(url, payload, bearer = sessionToken)
         return AccountValidationResponse.fromApiMap(result).nameValidationResults
     }
