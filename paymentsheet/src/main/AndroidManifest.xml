@@ -5,6 +5,8 @@
     <activity
       android:name=".internal.PaymentSheetActivity"
       android:exported="false"
+      android:excludeFromRecents="true"
+      android:finishOnTaskLaunch="true"
       android:windowSoftInputMode="adjustResize"
       android:theme="@android:style/Theme.Translucent.NoTitleBar" />
   </application>

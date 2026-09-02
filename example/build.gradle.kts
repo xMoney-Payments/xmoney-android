@@ -74,7 +74,7 @@ val useMavenSdk = providers.gradleProperty("useMavenSdk")
     .map { it.isEmpty() || it.equals("true", ignoreCase = true) }
     .orElse(false)
     .get()
-val publishedSdkVersion = "0.0.1"
+val publishedSdkVersion = "0.0.3"
 
 dependencies {
     if (useMavenSdk) {

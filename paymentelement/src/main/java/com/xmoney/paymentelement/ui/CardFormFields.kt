@@ -36,6 +36,8 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -156,7 +158,7 @@ internal fun LabeledCardFields(
                 ContainedFieldRow(
                     theme = theme,
                     value = number,
-                    placeholder = Strings.text("placeholder.cardNumber", locale),
+                    placeholder = Strings.text("placeholder.cardNumber.spaced", locale),
                     keyboardType = KeyboardType.Number,
                     imeAction = ImeAction.Next,
                     fieldHeight = fieldHeight,
@@ -206,7 +208,7 @@ internal fun LabeledCardFields(
                     ContainedFieldRow(
                         theme = theme,
                         value = cvv,
-                        placeholder = Strings.text("placeholder.cvv", locale),
+                        placeholder = Strings.text("placeholder.cvv.spaced", locale),
                         keyboardType = KeyboardType.Number,
                         imeAction = if (holderIsLast) ImeAction.Next else ImeAction.Done,
                         fieldHeight = fieldHeight,
@@ -332,6 +334,7 @@ internal fun ContainedFieldRow(
     keyboardType: KeyboardType,
     fieldHeight: Dp,
     modifier: Modifier = Modifier,
+    contentDescription: String? = null,
     trailing: @Composable (() -> Unit)? = null,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     imeAction: ImeAction = ImeAction.Default,
@@ -380,7 +383,15 @@ internal fun ContainedFieldRow(
             ),
             interactionSource = interactionSource,
             cursorBrush = SolidColor(theme.primary),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .then(
+                    if (contentDescription != null) {
+                        Modifier.semantics { this.contentDescription = contentDescription }
+                    } else {
+                        Modifier
+                    },
+                ),
             decorationBox = { inner ->
                 Box(contentAlignment = Alignment.CenterStart) {
                     if (value.isEmpty()) {

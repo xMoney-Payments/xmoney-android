@@ -27,16 +27,16 @@ paymentsheet ──► paymentelement ──► payments-core
 
 ## Installation
 
-Latest release: **`0.0.1`** ([Maven Central](https://central.sonatype.com/search?q=g:com.xmoney))
+Latest release: **`0.0.3`** ([Maven Central](https://central.sonatype.com/search?q=g:com.xmoney))
 
 ```kotlin
 dependencies {
     // Drop-in sheet (includes Element + Google Pay at runtime)
-    implementation("com.xmoney:paymentsheet:0.0.1")
+    implementation("com.xmoney:paymentsheet:0.0.3")
 
     // Or pick surfaces:
-    // implementation("com.xmoney:paymentelement:0.0.1")
-    // implementation("com.xmoney:googlepay:0.0.1")   // required for wallet in Embedded
+    // implementation("com.xmoney:paymentelement:0.0.3")
+    // implementation("com.xmoney:googlepay:0.0.3")   // required for wallet in Embedded
 }
 ```
 
@@ -126,13 +126,13 @@ val sheet = PaymentSheet(configuration)
 sheet.present(activity, intent, onEvent = { /* Ready / Processing */ }, onResult = { /* */ })
 ```
 
-While idle, the sheet can be dragged closed. Drag, back, and scrim lock while a charge is in flight. `dismiss()` waits for an in-flight charge; idle close still cancels.
+While idle, the sheet can be dragged closed. Drag, back, and scrim lock while a charge is in flight. `dismiss()` waits for an in-flight charge; idle close still cancels. A second `present()` while idle replaces the open sheet (the previous present completes with `Canceled`); while a charge is in flight the second `present()` is a no-op. Do not treat that `Canceled` as “leave checkout” if you immediately presented again.
 
 Copy-paste sample: [`PaymentSheetSampleActivity.kt`](example/src/main/java/com/xmoney/example/samples/PaymentSheetSampleActivity.kt) · Activity API: [`PaymentSheetActivitySample.kt`](example/src/main/java/com/xmoney/example/samples/PaymentSheetActivitySample.kt)
 
 ## Payment Element
 
-Same form as the sheet, without the bottom-sheet chrome. Mount it in your layout. Keep merchant loading until `EmbeddedEvent.Ready` — bind runs only while `PaymentElement` is composed, so keep it mounted (collapsed until ready):
+Same form as the sheet, without the bottom-sheet chrome. Mount it in your layout. Embedded does not add outer content padding or a page fill — the host background shows through; supply your own page spacing. Keep merchant loading until `EmbeddedEvent.Ready` — bind runs only while `PaymentElement` is composed, so keep it mounted (collapsed until ready):
 
 ```kotlin
 var ready by remember { mutableStateOf(false) }
@@ -146,6 +146,7 @@ if (!ready) { /* merchant loader */ }
 PaymentElement(
     controller = embedded,
     intent = intent,
+    modifier = Modifier.padding(horizontal = 20.dp),
     onEvent = { event ->
         if (event is EmbeddedEvent.Ready) ready = true
     },
@@ -178,7 +179,7 @@ LaunchedEffect(style) { embedded.updateStyle(style) }
 LaunchedEffect(wallet) { embedded.updateWalletAppearance(wallet) }
 ```
 
-Payment Sheet snapshots config at `present()` — pass appearance on `PaymentConfig` and present again if the sheet is not showing.
+Payment Sheet snapshots config at `present()` — pass appearance on `PaymentConfig` and present again to replace an idle sheet.
 
 ### Merchant-owned Pay button
 
@@ -247,7 +248,12 @@ if (flags.isAvailable && flags.isReady) {
         onResult = { /* */ },
     )
 }
+
+googlePay.updateOrder(nextIntent)
+googlePay.dismiss()
 ```
+
+`updateOrder` rebinds a new signed `PaymentIntent` on the open host without dismissing it. The wallet button is disabled until `Ready`. A newer `updateOrder` cancels the in-flight one. Throws if no host is open. While a charge is in flight the call returns without `Ready`. A second `present()` while this instance’s host is open is a no-op — `updateOrder()`, or `dismiss()` then `present()`.
 
 Pre-auth dismiss delivers `PaymentResult.Canceled` and does **not** consume. Present or tap again with the same intent.
 
@@ -284,6 +290,7 @@ PaymentConfig(
         appearance = AppearanceConfig(
             colorsLight = AppearanceColors(/* hex strings */),
             colorsDark = AppearanceColors(/* hex strings */),
+            borderRadius = 12f,          // card fields + methods container
             primaryButton = PrimaryButtonConfig(borderRadius = 12f),
         ),
     ),
@@ -301,7 +308,7 @@ PaymentConfig(
 
 Pay uses current field validity, not an empty errors map. Cardholder name is always collected.
 
-**Appearance** — pass `colorsLight` / `colorsDark` so the form matches your chrome. Pay button radius comes from `appearance.primaryButton.borderRadius` (default a pill, `9999` dp). Pass `12` for a squircle. On a mounted Element, call `updateAppearance` / `updateStyle` / `updateWalletAppearance`. See [`exampleAppearance()`](example/src/main/java/com/xmoney/example/SampleHelpers.kt) for a copy-paste palette.
+**Appearance** — pass `colorsLight` / `colorsDark` so the form matches your chrome. Card fields (condensed box and spaced inputs) use `appearance.borderRadius` (default 16 dp), `appearance.borderWidth`, and `colors.componentBorder`. Pay button radius comes from `appearance.primaryButton.borderRadius` (default a pill, `9999` dp). Pass `12` for a squircle. On a mounted Element, call `updateAppearance` / `updateStyle` / `updateWalletAppearance`. See [`exampleAppearance()`](example/src/main/java/com/xmoney/example/SampleHelpers.kt) for a copy-paste palette.
 
 ## Card holder verification
 
@@ -328,8 +335,8 @@ Use only these merchant-facing types:
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Config / models | `PaymentConfig` and nested options, `PaymentIntent` / `OrderCredentials` / `OrderPayload` / `OrderChecksum`, `PaymentResult`, `PaymentError`, `Transaction` |
 | Payment Sheet   | `PaymentSheet`, `rememberPaymentSheet`, `PaymentSheetEvent`                                                                                                 |
-| Payment Element | `PaymentElement`, `rememberEmbeddedPayment`, `EmbeddedPaymentController` (`bind`, `confirm`, `updateAppearance`, `updateStyle`, `updateLocale`, `updateWalletAppearance`), `EmbeddedEvent` |
-| Google Pay      | `GooglePay`, `GooglePayAvailability`, `rememberGooglePay`, `GooglePayButton`, `GooglePayController` (`bind`, `updateAppearance`), `GooglePayEvent` |
+| Payment Element | `PaymentElement`, `rememberEmbeddedPayment`, `EmbeddedPaymentController` (`updateOrder`, `confirm`, `updateAppearance`, `updateStyle`, `updateLocale`, `updateWalletAppearance`), `EmbeddedEvent` |
+| Google Pay      | `GooglePay` (`availability`, `present`, `updateOrder`, `dismiss`), `GooglePayAvailability`, `rememberGooglePay`, `GooglePayButton`, `GooglePayController` (`updateOrder`, `updateAppearance`), `GooglePayEvent` |
 
 Everything else (`HttpClient`, services, 3DS host, `PaymentForm`, theme helpers) is library-internal.
 

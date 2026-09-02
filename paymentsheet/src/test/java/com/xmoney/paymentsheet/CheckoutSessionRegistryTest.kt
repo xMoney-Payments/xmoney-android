@@ -4,9 +4,11 @@ import com.xmoney.paymentsheet.internal.CheckoutCloseTarget
 import com.xmoney.paymentsheet.internal.CheckoutSessionRegistry
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CheckoutSessionRegistryTest {
@@ -40,13 +42,15 @@ class CheckoutSessionRegistryTest {
         CheckoutSessionRegistry.bindCloseTarget("r", target)
         CheckoutSessionRegistry.finishHost("r")
         assertEquals(1, target.calls)
+        assertTrue(CheckoutSessionRegistry.get("r")!!.closing)
         CheckoutSessionRegistry.remove("r")
     }
 
     @Test
-    fun finishHostWithMissingCloseTargetIsNoOp() {
+    fun finishHostWithoutCloseTargetMarksClosing() {
         CheckoutSessionRegistry.register("r", CheckoutSessionRegistry.Session())
         CheckoutSessionRegistry.finishHost("r")
+        assertTrue(CheckoutSessionRegistry.get("r")!!.closing)
         CheckoutSessionRegistry.remove("r")
     }
 
@@ -57,6 +61,47 @@ class CheckoutSessionRegistryTest {
         CheckoutSessionRegistry.bindCloseTarget("r", target)
         CheckoutSessionRegistry.finishHost("r")
         assertEquals(0, target.calls)
+        assertFalse(CheckoutSessionRegistry.get("r")!!.closing)
+        CheckoutSessionRegistry.remove("r")
+    }
+
+    @Test
+    fun replaceIdleHostWithNoSessionAllowsPresent() {
+        assertTrue(CheckoutSessionRegistry.replaceIdleHost(null))
+        assertTrue(CheckoutSessionRegistry.replaceIdleHost(""))
+        assertTrue(CheckoutSessionRegistry.replaceIdleHost("missing"))
+    }
+
+    @Test
+    fun replaceIdleHostClosesIdleHost() {
+        val target = RecordingCloseTarget()
+        CheckoutSessionRegistry.register("r", CheckoutSessionRegistry.Session())
+        CheckoutSessionRegistry.bindCloseTarget("r", target)
+        assertTrue(CheckoutSessionRegistry.replaceIdleHost("r"))
+        assertEquals(1, target.calls)
+        assertTrue(CheckoutSessionRegistry.get("r")!!.closing)
+        CheckoutSessionRegistry.remove("r")
+    }
+
+    @Test
+    fun replaceIdleHostRefusesWhileProcessing() {
+        val target = RecordingCloseTarget(processing = true)
+        CheckoutSessionRegistry.register("r", CheckoutSessionRegistry.Session())
+        CheckoutSessionRegistry.bindCloseTarget("r", target)
+        assertFalse(CheckoutSessionRegistry.replaceIdleHost("r"))
+        assertEquals(0, target.calls)
+        assertFalse(CheckoutSessionRegistry.get("r")!!.closing)
+        CheckoutSessionRegistry.remove("r")
+    }
+
+    @Test
+    fun supersededBindClosesImmediately() {
+        val target = RecordingCloseTarget()
+        CheckoutSessionRegistry.register("r", CheckoutSessionRegistry.Session())
+        assertTrue(CheckoutSessionRegistry.replaceIdleHost("r"))
+        assertEquals(0, target.calls)
+        CheckoutSessionRegistry.bindCloseTarget("r", target)
+        assertEquals(1, target.calls)
         CheckoutSessionRegistry.remove("r")
     }
 
@@ -64,9 +109,10 @@ class CheckoutSessionRegistryTest {
         private val processing: Boolean = false,
     ) : CheckoutCloseTarget {
         var calls = 0
-        override fun requestClose() {
-            if (processing) return
+        override fun requestClose(): Boolean {
+            if (processing) return false
             calls += 1
+            return true
         }
     }
 }
