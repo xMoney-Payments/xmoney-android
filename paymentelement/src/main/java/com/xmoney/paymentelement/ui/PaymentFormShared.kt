@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -119,6 +120,7 @@ internal fun SheetText(
     color: Color = theme.primaryText,
     fontSize: Float = 16f,
     fontWeight: FontWeight = FontWeight.Normal,
+    fontFamily: FontFamily = theme.fontFamily,
     textAlign: TextAlign? = null,
     letterSpacing: TextUnit = TextUnit.Unspecified,
     lineHeight: Float? = null,
@@ -131,7 +133,7 @@ internal fun SheetText(
         color = color,
         fontSize = theme.scaledSp(fontSize),
         fontWeight = fontWeight,
-        fontFamily = theme.fontFamily,
+        fontFamily = fontFamily,
         textAlign = textAlign,
         letterSpacing = letterSpacing,
         lineHeight = lineHeight?.let { theme.scaledSp(it) } ?: TextUnit.Unspecified,
@@ -216,7 +218,14 @@ internal fun SubmitButton(
                 label = Strings.text("button.processing", locale),
             )
         } else {
-            SheetText(title, theme = theme, color = theme.primaryButtonText, fontWeight = FontWeight.Bold, fontSize = 16f)
+            SheetText(
+                title,
+                theme = theme,
+                color = theme.primaryButtonText,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16f,
+                fontFamily = theme.primaryButtonFontFamily,
+            )
         }
     }
 }

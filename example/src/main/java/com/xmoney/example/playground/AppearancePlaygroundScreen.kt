@@ -229,14 +229,14 @@ fun AppearancePlaygroundScreen(
 
             PlaygroundExpandableGroup(
                 title = "Accent",
-                caption = "Selection, links, checkbox; sheet error text",
+                caption = "Selection, links, focused fields, checkbox; error chrome",
                 expanded = accentExpanded,
                 onExpandedChange = { accentExpanded = it },
             ) {
                 TokenColor(
                     title = "Primary",
                     apiName = "primary",
-                    hint = "Selection, links, cursor, checkbox; default Pay fill",
+                    hint = "Selection, links, cursor, focused field outline, checkbox; default Pay fill",
                     value = palette.primary,
                     fallback = fallback.primary,
                     allowEmpty = allowEmpty,
@@ -245,7 +245,7 @@ fun AppearancePlaygroundScreen(
                 TokenColor(
                     title = "Error",
                     apiName = "error",
-                    hint = "Sheet error text (field errors use a fixed red)",
+                    hint = "Field error outline and text; sheet error text",
                     value = palette.error,
                     fallback = fallback.error,
                     allowEmpty = allowEmpty,
@@ -308,14 +308,14 @@ fun AppearancePlaygroundScreen(
 
             PlaygroundExpandableGroup(
                 title = "Borders",
-                caption = "Resolved tokens; field chrome still uses a fixed ink border",
+                caption = "Field outlines and condensed inner hairlines",
                 expanded = bordersExpanded,
                 onExpandedChange = { bordersExpanded = it },
             ) {
                 TokenColor(
                     title = "Component border",
                     apiName = "componentBorder",
-                    hint = "Resolved token (fields use a fixed ink border)",
+                    hint = "Spaced field outlines and the condensed card box",
                     value = palette.componentBorder,
                     fallback = fallback.componentBorder,
                     allowEmpty = allowEmpty,
@@ -324,7 +324,7 @@ fun AppearancePlaygroundScreen(
                 TokenColor(
                     title = "Component divider",
                     apiName = "componentDivider",
-                    hint = "“or” divider",
+                    hint = "Condensed inner hairlines",
                     value = palette.componentDivider,
                     fallback = fallback.componentDivider,
                     allowEmpty = allowEmpty,
@@ -393,7 +393,7 @@ fun AppearancePlaygroundScreen(
                 )
                 PlaygroundDropdown(
                     label = "Button font",
-                    caption = "API field; Pay label currently uses the form font.",
+                    caption = "appearance.primaryButton.font.family — falls back to the form font.",
                     options = playgroundFontFamilyOptions,
                     selected = playgroundFontFamilyOptions.option(draft.primaryButtonFontFamily),
                     onSelected = {
@@ -433,7 +433,7 @@ fun AppearancePlaygroundScreen(
 
             PlaygroundExpandableGroup(
                 title = "Shapes",
-                caption = "Resolved into theme; fields still use fixed 16 dp / 1 dp",
+                caption = "Spaced fields, condensed card box, and payment-methods container",
                 expanded = shapesExpanded,
                 onExpandedChange = { shapesExpanded = it },
             ) {
@@ -442,7 +442,7 @@ fun AppearancePlaygroundScreen(
                     value = draft.borderRadius,
                     valueRange = 0f..28f,
                     valueLabel = "${draft.borderRadius.toInt()} dp",
-                    caption = "appearance.borderRadius — not applied to form fields today.",
+                    caption = "appearance.borderRadius — default 16 dp on fields, 20 dp on the methods container.",
                     onValueChange = {
                         draft.borderRadius = it
                         draft.markCustomized()
@@ -453,7 +453,7 @@ fun AppearancePlaygroundScreen(
                     value = draft.borderWidth,
                     valueRange = 0f..3f,
                     valueLabel = String.format("%.1f dp", draft.borderWidth),
-                    caption = "appearance.borderWidth — field borders still use a fixed 1 dp.",
+                    caption = "appearance.borderWidth — field outlines. Invalid fields use at least 1.5 dp.",
                     onValueChange = {
                         draft.borderWidth = it
                         draft.markCustomized()

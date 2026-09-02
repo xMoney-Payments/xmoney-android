@@ -9,7 +9,8 @@ import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 
 internal fun interface CheckoutCloseTarget {
-    fun requestClose()
+    /** `true` if close started; `false` if refused (processing). */
+    fun requestClose(): Boolean
 }
 
 internal object CheckoutSessionRegistry {
@@ -20,6 +21,7 @@ internal object CheckoutSessionRegistry {
         val config: ResolvedPaymentConfig? = null,
         var host: WeakReference<FragmentActivity>? = null,
         var closeTarget: WeakReference<CheckoutCloseTarget>? = null,
+        var closing: Boolean = false,
     )
 
     private val sessions = ConcurrentHashMap<String, Session>()
@@ -39,12 +41,32 @@ internal object CheckoutSessionRegistry {
     }
 
     fun bindCloseTarget(requestId: String, target: CheckoutCloseTarget) {
-        sessions[requestId]?.closeTarget = WeakReference(target)
+        val session = sessions[requestId] ?: return
+        session.closeTarget = WeakReference(target)
+        if (session.closing) {
+            target.requestClose()
+        }
     }
 
     fun finishHost(requestId: String?) {
-        if (requestId.isNullOrBlank()) return
-        val session = sessions[requestId] ?: return
-        session.closeTarget?.get()?.requestClose()
+        replaceIdleHost(requestId)
+    }
+
+    /**
+     * Closes the previous idle host, or marks it to close when it binds.
+     * Returns `false` if that host is processing (caller must not present).
+     */
+    fun replaceIdleHost(previousId: String?): Boolean {
+        if (previousId.isNullOrBlank()) return true
+        val session = sessions[previousId] ?: return true
+        if (session.closing) return true
+        val target = session.closeTarget?.get()
+        if (target == null) {
+            session.closing = true
+            return true
+        }
+        val accepted = target.requestClose()
+        if (accepted) session.closing = true
+        return accepted
     }
 }

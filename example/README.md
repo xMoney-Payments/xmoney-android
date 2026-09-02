@@ -32,7 +32,7 @@ Smoke-test published artifacts:
 | Example app | Hearth Café | Café menu → cart → Embedded Element |
 | Example app | Pulse Studio | Memberships → cart → Embedded Element |
 | Advanced | Payment Sheet (Activity API) | `PaymentSheet(config).present(activity, …)` |
-| Advanced | Google Pay (Activity API) | `GooglePay(config).present(activity, intent)` |
+| Advanced | Google Pay (Activity API) | `GooglePay(config).present()` / `updateOrder()` |
 | Advanced | Merchant Pay button | Embedded form, your CTA via `confirm()` |
 | Advanced | Update order | `updateOrder()` a new `PaymentIntent` on a mounted Element |
 | Advanced | Card holder verification | Pre-pay name check |
@@ -56,6 +56,7 @@ Integrations and name-check include a **Test cards** sheet — tap to copy Visa/
 - Payment Sheet / Google Pay Activity: keep the merchant Pay button loading until `Ready`. Samples use `PaymentSheetEvent.Processing` to tell pre-pay cancel apart from post-submit cancel.
 - After a consumed result, samples hide the payment UI and show **New payment**.
 - To change the amount on a mounted Element / Google Pay button, `updateOrder` with a new `PaymentIntent`. Do **not** set the intent to `null` or hide the form. Hearth and Pulse qty steppers pass a new intent into `PaymentElement`, which calls `updateOrder`. Pay stays locked (`isInteractionEnabled`) with its current title — `Processing` is an in-flight charge only. The form stays on screen.
+- Activity Google Pay: while the host overlay is open, `GooglePay.updateOrder(nextIntent)` rebinds without dismissing. Throws if no host is open. A second `present()` is a no-op until `dismiss()`.
 - Call `updateAppearance` / `updateStyle` / `updateWalletAppearance` (Element) or `updateAppearance` (Google Pay) when the example sun/moon theme changes. Recreating `PaymentConfig` does not restyle a live controller.
-- [`exampleAppearance()`](src/main/java/com/xmoney/example/SampleHelpers.kt) is the appearance copy-paste — restyle Sheet / Element / Google Pay to match your chrome.
+- [`exampleAppearance()`](src/main/java/com/xmoney/example/SampleHelpers.kt) is the appearance copy-paste — restyle Sheet / Element / Google Pay to match your chrome. `borderRadius` is the card field and payment-methods container radius.
 - Cart amounts are **minor units** (`Long` cents). The demo backend converts to a decimal only at the HTTP boundary.

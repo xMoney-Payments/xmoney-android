@@ -27,6 +27,7 @@ data class CheckoutTheme(
     val borderWidth: Dp,
     val fontScale: Float,
     val fontFamily: FontFamily = PaymentFontFamily.family,
+    val primaryButtonFontFamily: FontFamily = PaymentFontFamily.family,
     val primaryButtonBackground: Color,
     val primaryButtonText: Color,
     val primaryButtonBorder: Color,
@@ -58,11 +59,18 @@ data class CheckoutTheme(
     val containerBorderWidth: Dp
         get() = if (containerBorder.alpha == 0f) 0.dp else 1.dp
 
+    fun fieldStrokeWidth(hasError: Boolean): Dp =
+        if (hasError) maxOf(borderWidth, 1.5.dp) else borderWidth
+
     fun scaledSp(size: Float): TextUnit = (size * fontScale).sp
 
     companion object {
         val BrandPrimary = Color(0xFF7C4DFF)
         const val DefaultPrimaryButtonRadius = 9999f
+        const val DefaultFormFieldRadius = 16f
+        const val DefaultPaymentContainerRadius = 20f
+        private val DefaultErrorBorder = Color(0xFFEF4444)
+        private val DefaultErrorText = Color(0xFFDC2626)
         private val LightInk = Color(0xFF16141A)
         private val DarkInk = Color(0xFFF7F6F9)
         private val DarkChrome = Color(0xFFFFFFFF)
@@ -117,6 +125,9 @@ data class CheckoutTheme(
                 borderWidth = (appearance.borderWidth ?: 1f).dp,
                 fontScale = appearance.fontScale ?: 1f,
                 fontFamily = resolveFontFamily(appearance.fontFamily),
+                primaryButtonFontFamily = resolveFontFamily(
+                    appearance.primaryButton?.fontFamily ?: appearance.fontFamily,
+                ),
                 primaryButtonBackground = parseColor(pbMode?.background ?: pbShared?.background)
                     ?: primary,
                 primaryButtonText = parseColor(pbMode?.text ?: pbShared?.text) ?: Color.White,
@@ -128,18 +139,18 @@ data class CheckoutTheme(
                 accentIconBackground = primary.copy(alpha = if (isDark) 0x3D / 255f else 0x1F / 255f),
                 containerBorder = optionalColor({ it.containerBorder }, inkAlpha(0x17)),
                 neutralChip = inkAlpha(0x0D),
-                fieldBorder = inkAlpha(0x1A),
-                fieldDivider = inkAlpha(0x14),
+                fieldBorder = color({ it.componentBorder }, inkAlpha(0x1A)),
+                fieldDivider = color({ it.componentDivider }, inkAlpha(0x14)),
                 mutedIcon = if (isDark) icon else inkAlpha(0x52),
                 unselectedRing = if (isDark) chromeAlpha(0x33) else inkAlpha(0x29),
-                errorBorder = Color(0xFFEF4444),
-                errorText = Color(0xFFDC2626),
+                errorBorder = color({ it.error }, DefaultErrorBorder),
+                errorText = color({ it.error }, DefaultErrorText),
                 footerBorder = chromeAlpha(if (isDark) 0x14 else 0x0F),
                 sheetHandle = chromeAlpha(if (isDark) 0x29 else 0x1F),
                 orDivider = chromeAlpha(0x1A),
                 visaMarkTint = if (isDark) Color.White else null,
-                paymentContainerRadius = 20.dp,
-                formFieldRadius = 16.dp,
+                paymentContainerRadius = (appearance.borderRadius ?: DefaultPaymentContainerRadius).dp,
+                formFieldRadius = (appearance.borderRadius ?: DefaultFormFieldRadius).dp,
                 formFieldHeight = 54.dp,
             )
         }

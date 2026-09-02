@@ -509,7 +509,7 @@ fun DemoCheckoutScreen(
 
             PlaygroundSection(
                 title = "Appearance",
-                caption = "SDK visual tokens. Customize opens the full AppearanceConfig editor.",
+                caption = "SDK visual tokens. Customize field radius, borders, and colors.",
             ) {
                 ClassicsGallery(
                     selectedPresetId = appearanceState.selectedPresetId,
