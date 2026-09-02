@@ -14,7 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Idle `PaymentSheet.present()` dismisses the previous host (`Canceled`) then presents; a second present no-ops while a charge is in flight.
 - `GooglePay.present()` no-ops while this instance has an open host. Use `updateOrder()` or `dismiss()` then `present()`.
-- Payment Element no longer applies outer content insets; merchants and Payment Sheet own page spacing.
+- Payment Element no longer applies outer content insets or a page fill; merchants and Payment Sheet own page spacing and surface color.
 - `appearance.borderRadius` / `borderWidth` now apply to card fields and the methods container (defaults 16 / 20); field chrome uses `componentBorder` / `error`.
 
 ### Fixed

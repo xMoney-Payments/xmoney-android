@@ -132,7 +132,7 @@ Copy-paste sample: [`PaymentSheetSampleActivity.kt`](example/src/main/java/com/x
 
 ## Payment Element
 
-Same form as the sheet, without the bottom-sheet chrome. Mount it in your layout. Embedded does not add outer content padding — supply your own page spacing. Keep merchant loading until `EmbeddedEvent.Ready` — bind runs only while `PaymentElement` is composed, so keep it mounted (collapsed until ready):
+Same form as the sheet, without the bottom-sheet chrome. Mount it in your layout. Embedded does not add outer content padding or a page fill — the host background shows through; supply your own page spacing. Keep merchant loading until `EmbeddedEvent.Ready` — bind runs only while `PaymentElement` is composed, so keep it mounted (collapsed until ready):
 
 ```kotlin
 var ready by remember { mutableStateOf(false) }
@@ -146,6 +146,7 @@ if (!ready) { /* merchant loader */ }
 PaymentElement(
     controller = embedded,
     intent = intent,
+    modifier = Modifier.padding(horizontal = 20.dp),
     onEvent = { event ->
         if (event is EmbeddedEvent.Ready) ready = true
     },

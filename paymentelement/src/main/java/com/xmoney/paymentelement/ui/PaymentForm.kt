@@ -167,7 +167,7 @@ fun PaymentForm(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(theme.background),
+            .then(if (embedded) Modifier else Modifier.background(theme.background)),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         Column(

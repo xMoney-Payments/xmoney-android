@@ -511,7 +511,8 @@ private fun PreviewSection(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(shape)
-                        .border(1.dp, MaterialTheme.colorScheme.outline, shape),
+                        .border(1.dp, MaterialTheme.colorScheme.outline, shape)
+                        .padding(16.dp),
                 ) {
                     MerchantReadyGate(ready = ready, message = "Preparing preview…") {
                         PaymentElement(
