@@ -27,16 +27,16 @@ paymentsheet ──► paymentelement ──► payments-core
 
 ## Installation
 
-Latest release: **`0.0.3`** ([Maven Central](https://central.sonatype.com/search?q=g:com.xmoney))
+Latest release: **`1.0.0`** ([Maven Central](https://central.sonatype.com/search?q=g:com.xmoney))
 
 ```kotlin
 dependencies {
     // Drop-in sheet (includes Element + Google Pay at runtime)
-    implementation("com.xmoney:paymentsheet:0.0.3")
+    implementation("com.xmoney:paymentsheet:1.0.0")
 
     // Or pick surfaces:
-    // implementation("com.xmoney:paymentelement:0.0.3")
-    // implementation("com.xmoney:googlepay:0.0.3")   // required for wallet in Embedded
+    // implementation("com.xmoney:paymentelement:1.0.0")
+    // implementation("com.xmoney:googlepay:1.0.0")   // required for wallet in Embedded
 }
 ```
 
@@ -102,7 +102,7 @@ SDK owns the full checkout UI, including the Pay button (`SubmitButtonConfig.vis
 ```kotlin
 val sheet = rememberPaymentSheet(
     configuration = PaymentConfig(
-        publicKey = "test_pk_…",
+        publicKey = "pk_test…",
         paymentMethods = PaymentMethodsConfig(
             googlePay = GooglePayConfig(enabled = true),
         ),
@@ -331,11 +331,11 @@ Return `true` to continue pay, `false` to block. Sample: [`CardHolderVerificatio
 
 Use only these merchant-facing types:
 
-| Surface         | Types                                                                                                                                                       |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Config / models | `PaymentConfig` and nested options, `PaymentIntent` / `OrderCredentials` / `OrderPayload` / `OrderChecksum`, `PaymentResult`, `PaymentError`, `Transaction` |
-| Payment Sheet   | `PaymentSheet`, `rememberPaymentSheet`, `PaymentSheetEvent`                                                                                                 |
-| Payment Element | `PaymentElement`, `rememberEmbeddedPayment`, `EmbeddedPaymentController` (`updateOrder`, `confirm`, `updateAppearance`, `updateStyle`, `updateLocale`, `updateWalletAppearance`), `EmbeddedEvent` |
+| Surface         | Types                                                                                                                                                                                                           |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Config / models | `PaymentConfig` and nested options, `PaymentIntent` / `OrderCredentials` / `OrderPayload` / `OrderChecksum`, `PaymentResult`, `PaymentError`, `Transaction`                                                     |
+| Payment Sheet   | `PaymentSheet`, `rememberPaymentSheet`, `PaymentSheetEvent`                                                                                                                                                     |
+| Payment Element | `PaymentElement`, `rememberEmbeddedPayment`, `EmbeddedPaymentController` (`updateOrder`, `confirm`, `updateAppearance`, `updateStyle`, `updateLocale`, `updateWalletAppearance`), `EmbeddedEvent`               |
 | Google Pay      | `GooglePay` (`availability`, `present`, `updateOrder`, `dismiss`), `GooglePayAvailability`, `rememberGooglePay`, `GooglePayButton`, `GooglePayController` (`updateOrder`, `updateAppearance`), `GooglePayEvent` |
 
 Everything else (`HttpClient`, services, 3DS host, `PaymentForm`, theme helpers) is library-internal.
@@ -367,5 +367,5 @@ Contract tests read `test-vectors/test-vectors.json`.
 ## Support
 
 - Releases: [CHANGELOG.md](CHANGELOG.md)
-- Security: [SECURITY.md](SECURITY.md) — report vulnerabilities to **support@xmoney.com**, not a public issue
+- Security: [SECURITY.md](SECURITY.md) — report vulnerabilities to **it-team@xmoney.com**, not a public issue
 - License: [MIT](LICENSE)

@@ -149,7 +149,7 @@ class CardHolderVerificationTest {
     @Test
     fun resolvedConfig_preservesVerificationName() {
         val original = ResolvedPaymentConfig(
-            publicKey = "test_pk",
+            publicKey = "pk_test_…",
             orderPayload = "p",
             orderChecksum = "c",
             card = CardConfig(
@@ -173,7 +173,7 @@ class CardHolderVerificationTest {
     @Test
     fun cardConfig_omitsVerificationWhenNull() {
         val config = ResolvedPaymentConfig(
-            publicKey = "test_pk",
+            publicKey = "pk_test_…",
             orderPayload = "p",
             orderChecksum = "c",
         )

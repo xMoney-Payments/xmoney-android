@@ -10,7 +10,7 @@
 
 Do **not** open a public GitHub issue for security vulnerabilities.
 
-Email **support@xmoney.com** with:
+Email **it-team@xmoney.com** with:
 
 - a clear description of the issue
 - steps to reproduce
@@ -26,7 +26,7 @@ Issues in merchant apps, backends, or non-SDK xMoney products are out of scope h
 
 ## Hard rules for integrators
 
-- Put only the publishable `publicKey` (`test_…` / `live_…`) in the Android app.
+- Put only the publishable `publicKey` (`pk_test_…` / `pk_live_…`) in the Android app.
 - Keep secret / private API keys on your server. Create orders server-side.
 - Never commit live keys, order payloads with secrets, or card data to source control.
 - Use sandbox keys during development.
