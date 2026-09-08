@@ -184,6 +184,7 @@ class GooglePayController internal constructor(
         val wallet = authorizer ?: return
         isProcessing = true
         syncInteractionEnabled()
+        onEvent(GooglePayEvent.Processing(true))
         activity.lifecycleScope.launch {
             val result = session.startWallet(wallet)
             isProcessing = session.isProcessing

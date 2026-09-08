@@ -118,6 +118,75 @@ class ThemeResolutionTest {
     }
 
     @Test
+    fun omittedBorderRadiusKeepsBrandedFieldAndContainerDefaults() {
+        val theme = resolveAppearance(emptyMap(), isDark = false)
+        assertEquals(CheckoutTheme.DefaultFormFieldRadius, theme.formFieldRadius.value, 0.001f)
+        assertEquals(CheckoutTheme.DefaultPaymentContainerRadius, theme.paymentContainerRadius.value, 0.001f)
+        assertEquals(1f, theme.borderWidth.value, 0.001f)
+        assertEquals(1f, theme.fieldStrokeWidth(false).value, 0.001f)
+        assertEquals(1.5f, theme.fieldStrokeWidth(true).value, 0.001f)
+    }
+
+    @Test
+    fun appearanceShapesReachFieldsAndContainer() {
+        val theme = resolveAppearance(
+            mapOf("shapes" to mapOf("borderRadius" to 4, "borderWidth" to 2.5)),
+            isDark = false,
+        )
+        assertEquals(4f, theme.formFieldRadius.value, 0.001f)
+        assertEquals(4f, theme.paymentContainerRadius.value, 0.001f)
+        assertEquals(2.5f, theme.borderWidth.value, 0.001f)
+        assertEquals(2.5f, theme.fieldStrokeWidth(false).value, 0.001f)
+        assertEquals(2.5f, theme.fieldStrokeWidth(true).value, 0.001f)
+    }
+
+    @Test
+    fun zeroBorderWidthStillShowsErrorRing() {
+        val theme = resolveAppearance(
+            mapOf("shapes" to mapOf("borderWidth" to 0)),
+            isDark = false,
+        )
+        assertEquals(0f, theme.fieldStrokeWidth(false).value, 0.001f)
+        assertEquals(1.5f, theme.fieldStrokeWidth(true).value, 0.001f)
+    }
+
+    @Test
+    fun componentBorderOverridesFieldBorder() {
+        val theme = resolveAppearance(
+            mapOf("colors" to mapOf("componentBorder" to "#AABBCC")),
+            isDark = false,
+        )
+        assertEquals(requireColor("#AABBCC"), theme.fieldBorder)
+    }
+
+    @Test
+    fun componentDividerOverridesFieldDivider() {
+        val theme = resolveAppearance(
+            mapOf("colors" to mapOf("componentDivider" to "#112233")),
+            isDark = false,
+        )
+        assertEquals(requireColor("#112233"), theme.fieldDivider)
+    }
+
+    @Test
+    fun errorColorOverridesFieldErrorChrome() {
+        val theme = resolveAppearance(
+            mapOf("colors" to mapOf("error" to "#00AA55")),
+            isDark = false,
+        )
+        val error = requireColor("#00AA55")
+        assertEquals(error, theme.errorBorder)
+        assertEquals(error, theme.errorText)
+    }
+
+    @Test
+    fun omittedErrorKeepsBrandedFieldChrome() {
+        val theme = resolveAppearance(emptyMap(), isDark = false)
+        assertEquals(Color(0xFFEF4444), theme.errorBorder)
+        assertEquals(Color(0xFFDC2626), theme.errorText)
+    }
+
+    @Test
     fun brandPrimaryIsXMoneyPurple() {
         assertEquals(Color(0xFF7C4DFF), CheckoutTheme.BrandPrimary)
     }
@@ -180,6 +249,7 @@ class ThemeResolutionTest {
     fun fontFamilyDefaultsToRoobertWhenOmitted() {
         val theme = resolveAppearance(emptyMap(), isDark = false)
         assertEquals(PaymentFontFamily.family, theme.fontFamily)
+        assertEquals(PaymentFontFamily.family, theme.primaryButtonFontFamily)
     }
 
     @Test

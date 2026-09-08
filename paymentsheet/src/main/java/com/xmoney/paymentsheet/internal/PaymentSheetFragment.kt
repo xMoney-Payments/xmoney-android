@@ -268,9 +268,10 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
         viewModel.onEvent(PaymentSheetEvent.Processing(processing))
     }
 
-    override fun requestClose() {
-        if (isProcessing) return
+    override fun requestClose(): Boolean {
+        if (isProcessing) return false
         finish(EngineResult(EngineResult.Status.CANCELED, null, null, null))
+        return true
     }
 
     private fun finish(result: EngineResult) {

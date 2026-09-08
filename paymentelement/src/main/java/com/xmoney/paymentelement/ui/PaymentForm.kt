@@ -47,6 +47,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +59,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
@@ -101,9 +103,9 @@ fun PaymentForm(
     val theme = remember(config, isDark) { CheckoutTheme.resolve(config, isDark) }
     val hasSavedCards = state.savedCards.isNotEmpty()
     val embedded = header == null
-    val horizontalPadding = if (embedded) 16.dp else SheetContentHorizontalPadding
-    val topPadding = if (embedded) 12.dp else SheetContentTopPadding
-    val bottomPadding = if (embedded) 8.dp else SheetContentBottomPadding
+    val horizontalPadding = if (embedded) 0.dp else SheetContentHorizontalPadding
+    val topPadding = if (embedded) 0.dp else SheetContentTopPadding
+    val bottomPadding = if (embedded) 0.dp else SheetContentBottomPadding
     val interactionEnabled = !isProcessing && !isUpdatingOrder && !isOrderConsumed
 
     var savedListExpanded by remember(hasSavedCards) { mutableStateOf(hasSavedCards) }
@@ -165,7 +167,7 @@ fun PaymentForm(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(theme.background),
+            .then(if (embedded) Modifier else Modifier.background(theme.background)),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         Column(
@@ -194,20 +196,25 @@ fun PaymentForm(
                 val methods = state.googlePayAllowedPaymentMethods
                 val buttonFactory = DigitalWalletFactory.buttonFactory
                 if (state.googlePayAvailable && !methods.isNullOrBlank() && buttonFactory != null) {
+                    val walletArgs = WalletButtonArgs(
+                        allowedPaymentMethods = methods,
+                        appearance = config.paymentMethods.googlePay.appearance,
+                        enabled = interactionEnabled,
+                        isDarkBackground = isDark,
+                        onClick = onGooglePay,
+                    )
                     AndroidView(
                         factory = { context ->
-                            buttonFactory.create(
-                                context,
-                                WalletButtonArgs(
-                                    allowedPaymentMethods = methods,
-                                    appearance = config.paymentMethods.googlePay.appearance,
-                                    enabled = interactionEnabled,
-                                    isDarkBackground = isDark,
-                                    onClick = onGooglePay,
-                                ),
-                            )
+                            buttonFactory.create(context, walletArgs)
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        update = { view ->
+                            @Suppress("UNCHECKED_CAST")
+                            (view.tag as? MutableState<WalletButtonArgs>)?.value = walletArgs
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .clipToBounds(),
                     )
                     OrDivider(theme, config.options.locale)
                 }
@@ -339,7 +346,7 @@ private fun PaymentFormFooter(
             .padding(horizontal = horizontalPadding)
             .padding(
                 top = if (compact) 8.dp else SheetFooterTopPadding,
-                bottom = if (compact) 16.dp else SheetFooterBottomPadding,
+                bottom = if (compact) 0.dp else SheetFooterBottomPadding,
             ),
         verticalArrangement = Arrangement.spacedBy(SheetFooterContentSpacing),
     ) {

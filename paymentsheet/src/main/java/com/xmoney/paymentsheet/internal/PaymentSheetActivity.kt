@@ -15,6 +15,7 @@ class PaymentSheetActivity : FragmentActivity(), PaymentSheetViewModelOwner {
     override lateinit var paymentSheetViewModel: PaymentSheetViewModel
 
     private var requestId: String = ""
+    private var didFinish = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -25,29 +26,31 @@ class PaymentSheetActivity : FragmentActivity(), PaymentSheetViewModelOwner {
         val config = session?.config
             ?: parcelable?.config
             ?: run {
-                finishWithResult(EngineResult(EngineResult.Status.CANCELED, null, null, null))
+                deliverAndFinish(EngineResult(EngineResult.Status.CANCELED, null, null, null))
                 return
             }
         if (requestId.isBlank()) {
             requestId = parcelable?.requestId.orEmpty()
         }
         if (requestId.isBlank()) {
-            finishWithResult(EngineResult(EngineResult.Status.CANCELED, null, null, null))
+            deliverAndFinish(EngineResult(EngineResult.Status.CANCELED, null, null, null))
             return
         }
 
         CheckoutSessionRegistry.bindHost(requestId, this)
         CheckoutSessionRegistry.bindCloseTarget(requestId, object : CheckoutCloseTarget {
-            override fun requestClose() {
+            override fun requestClose(): Boolean {
                 val fragment = supportFragmentManager.findFragmentByTag(PaymentSheetFragment.TAG)
                     as? PaymentSheetFragment
-                if (fragment != null) {
+                return if (fragment != null) {
                     fragment.requestClose()
                 } else {
-                    finishWithResult(EngineResult(EngineResult.Status.CANCELED, null, null, null))
+                    deliverAndFinish(EngineResult(EngineResult.Status.CANCELED, null, null, null))
+                    true
                 }
             }
         })
+        if (didFinish) return
 
         val factory = PaymentSheetViewModel.Factory(applicationContext, config, requestId)
         paymentSheetViewModel = androidx.lifecycle.ViewModelProvider(this, factory)[PaymentSheetViewModel::class.java]
@@ -55,10 +58,7 @@ class PaymentSheetActivity : FragmentActivity(), PaymentSheetViewModelOwner {
             PaymentSheetEventBridge.emit(requestId, event)
         }
         paymentSheetViewModel.onComplete = { result ->
-            val registered = CheckoutSessionRegistry.get(requestId)
-            registered?.onResult?.invoke(OrderConsumption.merchantResult(result))
-            CheckoutSessionRegistry.remove(requestId)
-            finishWithResult(result)
+            deliverAndFinish(result)
         }
 
         if (savedInstanceState == null) {
@@ -66,7 +66,14 @@ class PaymentSheetActivity : FragmentActivity(), PaymentSheetViewModelOwner {
         }
     }
 
-    private fun finishWithResult(result: EngineResult) {
+    private fun deliverAndFinish(result: EngineResult) {
+        if (didFinish) return
+        didFinish = true
+        val registered = CheckoutSessionRegistry.get(requestId)
+        registered?.onResult?.invoke(OrderConsumption.merchantResult(result))
+        if (requestId.isNotBlank()) {
+            CheckoutSessionRegistry.remove(requestId)
+        }
         setResult(RESULT_OK, Intent().putExtra(EXTRA_RESULT, ParcelableResult.from(result)))
         finish()
     }

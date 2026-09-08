@@ -31,9 +31,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.xmoney.payments.config.ResolvedPaymentConfig
+import com.xmoney.payments.config.Strings
 import com.xmoney.payments.engine.SheetState
 import com.xmoney.payments.model.CardInput
 import com.xmoney.payments.model.SavedCard
@@ -75,7 +81,12 @@ internal fun PaymentSheetContent(
             .verticalScroll(scrollState),
         header = {
             SheetHandle(theme)
-            SheetHeader(theme = theme, enabled = !isProcessing, onCancel = onCancel)
+            SheetHeader(
+                theme = theme,
+                locale = config.options.locale,
+                enabled = !isProcessing,
+                onCancel = onCancel,
+            )
         },
     )
 }
@@ -101,9 +112,11 @@ private fun SheetHandle(theme: CheckoutTheme) {
 @Composable
 private fun SheetHeader(
     theme: CheckoutTheme,
+    locale: String,
     enabled: Boolean,
     onCancel: () -> Unit,
 ) {
+    val closeLabel = Strings.text("sheet.cancel", locale)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -115,7 +128,11 @@ private fun SheetHeader(
                 .size(36.dp)
                 .clip(CircleShape)
                 .background(theme.neutralChip)
-                .clickable(enabled = enabled) { onCancel() },
+                .clickable(enabled = enabled) { onCancel() }
+                .semantics {
+                    contentDescription = closeLabel
+                    role = Role.Button
+                },
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -124,6 +141,7 @@ private fun SheetHeader(
                 fontSize = theme.scaledSp(14f),
                 fontWeight = FontWeight.Normal,
                 fontFamily = theme.fontFamily,
+                modifier = Modifier.clearAndSetSemantics { },
             )
         }
         Spacer(Modifier.weight(1f))

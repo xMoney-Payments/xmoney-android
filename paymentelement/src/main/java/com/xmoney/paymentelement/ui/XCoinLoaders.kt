@@ -135,7 +135,7 @@ fun XCoinButtonLoadingContent(
             color = theme.primaryButtonText,
             fontSize = theme.scaledSp(16f),
             fontWeight = FontWeight.Bold,
-            fontFamily = theme.fontFamily,
+            fontFamily = theme.primaryButtonFontFamily,
         )
     }
 }

@@ -54,7 +54,7 @@ fun SampleScaffold(
                 .padding(padding)
                 .navigationBarsPadding()
                 .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             content = content,
         )

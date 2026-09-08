@@ -1,9 +1,16 @@
 package com.xmoney.example.ui
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -43,12 +51,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -369,6 +380,7 @@ fun MerchantReadyGate(
     ready: Boolean,
     message: String,
     modifier: Modifier = Modifier,
+    placeholder: @Composable () -> Unit = { ExampleLoader(message = message) },
     content: @Composable () -> Unit,
 ) {
     var hasBound by remember { mutableStateOf(ready) }
@@ -376,13 +388,200 @@ fun MerchantReadyGate(
         if (ready) hasBound = true
     }
     Box(modifier = modifier.fillMaxWidth()) {
-        Box(modifier = if (hasBound) Modifier.fillMaxWidth() else Modifier.size(0.dp)) {
+        Box(
+            modifier = if (hasBound) {
+                Modifier.fillMaxWidth()
+            } else {
+                Modifier
+                    .fillMaxWidth()
+                    .height(0.dp)
+                    .clipToBounds()
+            },
+        ) {
             content()
         }
         if (!hasBound) {
-            ExampleLoader(message = message)
+            placeholder()
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {},
+                    ),
+            )
         }
     }
+}
+
+@Composable
+fun ExampleCheckoutSkeleton(
+    modifier: Modifier = Modifier,
+    showOrder: Boolean = true,
+    showForm: Boolean = false,
+    showPayButton: Boolean = false,
+) {
+    val pulse = rememberInfiniteTransition(label = "checkoutSkeleton")
+    val highlight by pulse.animateFloat(
+        initialValue = 0.08f,
+        targetValue = 0.16f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "checkoutSkeletonPulse",
+    )
+    val boneColor = MaterialTheme.colorScheme.onSurface.copy(alpha = highlight)
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) { contentDescription = "Loading checkout" },
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        if (showOrder) {
+            ExampleCard {
+                SkeletonBone(color = boneColor, height = 12.dp, modifier = Modifier.width(56.dp))
+                repeat(3) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SkeletonBone(
+                            color = boneColor,
+                            height = 16.dp,
+                            modifier = Modifier.weight(1f).padding(end = 24.dp),
+                        )
+                        SkeletonBone(color = boneColor, height = 16.dp, modifier = Modifier.width(64.dp))
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SkeletonBone(color = boneColor, height = 14.dp, modifier = Modifier.width(72.dp))
+                    SkeletonBone(color = boneColor, height = 14.dp, modifier = Modifier.width(48.dp))
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SkeletonBone(color = boneColor, height = 18.dp, modifier = Modifier.width(48.dp))
+                    SkeletonBone(color = boneColor, height = 18.dp, modifier = Modifier.width(72.dp))
+                }
+            }
+        }
+        if (showForm) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                SkeletonBone(
+                    color = boneColor,
+                    height = 56.dp,
+                    radius = ExampleRadii.inner,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(1.dp)
+                            .background(MaterialTheme.colorScheme.outline),
+                    )
+                    SkeletonBone(color = boneColor, height = 10.dp, modifier = Modifier.width(24.dp))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(1.dp)
+                            .background(MaterialTheme.colorScheme.outline),
+                    )
+                }
+                val fieldShape = RoundedCornerShape(ExampleRadii.card)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(fieldShape)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, fieldShape),
+                ) {
+                    SkeletonBone(
+                        color = boneColor,
+                        height = 52.dp,
+                        radius = 0.dp,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                    Row(modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                        SkeletonBone(
+                            color = boneColor,
+                            height = 52.dp,
+                            radius = 0.dp,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(52.dp)
+                                .background(MaterialTheme.colorScheme.outline),
+                        )
+                        SkeletonBone(
+                            color = boneColor,
+                            height = 52.dp,
+                            radius = 0.dp,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                    SkeletonBone(
+                        color = boneColor,
+                        height = 52.dp,
+                        radius = 0.dp,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                SkeletonBone(
+                    color = boneColor,
+                    height = 52.dp,
+                    radius = ExampleRadii.pill,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        if (showPayButton) {
+            SkeletonBone(
+                color = boneColor,
+                height = 52.dp,
+                radius = ExampleRadii.pill,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SkeletonBone(
+    color: Color,
+    modifier: Modifier = Modifier,
+    height: Dp = 14.dp,
+    radius: Dp = 8.dp,
+) {
+    Box(
+        modifier = modifier
+            .height(height)
+            .clip(RoundedCornerShape(radius))
+            .background(color),
+    )
 }
 
 @Composable

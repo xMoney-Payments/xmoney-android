@@ -1,5 +1,7 @@
 package com.xmoney.googlepay.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material.Button
@@ -11,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.google.pay.button.ButtonTheme
@@ -19,6 +22,8 @@ import com.google.pay.button.PayButton
 import com.xmoney.payments.config.WalletAppearance
 import com.xmoney.payments.config.WalletButtonColor
 import com.xmoney.payments.config.WalletButtonType
+
+internal val GooglePayButtonHeight = 56.dp
 
 @androidx.annotation.RestrictTo(androidx.annotation.RestrictTo.Scope.LIBRARY_GROUP)
 @Composable
@@ -35,30 +40,37 @@ fun GooglePayButton(
     val buttonTheme = resolveButtonTheme(appearance.color, isDarkBackground)
     val buttonType = resolveButtonType(appearance.type)
 
-    if (!useFallback) {
-        PayButton(
-            onClick = onClick,
-            allowedPaymentMethods = allowedPaymentMethods,
-            modifier = modifier.fillMaxWidth().height(56.dp),
-            theme = buttonTheme,
-            type = buttonType,
-            radius = radius,
-            enabled = enabled,
-            onError = { useFallback = true },
-        )
-    } else {
-        val gpColor = if (buttonTheme == ButtonTheme.Light) Color.White else Color.Black
-        Button(
-            onClick = onClick,
-            enabled = enabled,
-            modifier = modifier.fillMaxWidth().height(56.dp),
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(radius),
-            colors = ButtonDefaults.buttonColors(backgroundColor = gpColor),
-        ) {
-            Text(
-                "Pay with Google Pay",
-                color = if (gpColor == Color.White) Color.Black else Color.White,
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(GooglePayButtonHeight)
+            .clipToBounds(),
+    ) {
+        if (!useFallback) {
+            PayButton(
+                onClick = onClick,
+                allowedPaymentMethods = allowedPaymentMethods,
+                modifier = Modifier.fillMaxSize(),
+                theme = buttonTheme,
+                type = buttonType,
+                radius = radius,
+                enabled = enabled,
+                onError = { useFallback = true },
             )
+        } else {
+            val gpColor = if (buttonTheme == ButtonTheme.Light) Color.White else Color.Black
+            Button(
+                onClick = onClick,
+                enabled = enabled,
+                modifier = Modifier.fillMaxSize(),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(radius),
+                colors = ButtonDefaults.buttonColors(backgroundColor = gpColor),
+            ) {
+                Text(
+                    "Pay with Google Pay",
+                    color = if (gpColor == Color.White) Color.Black else Color.White,
+                )
+            }
         }
     }
 }

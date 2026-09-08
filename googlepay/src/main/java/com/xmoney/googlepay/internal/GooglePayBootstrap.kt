@@ -1,6 +1,8 @@
 package com.xmoney.googlepay.internal
 
+import android.util.TypedValue
 import android.view.ViewGroup
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import com.xmoney.googlepay.ui.GooglePayButton
@@ -23,19 +25,29 @@ internal object GooglePayBootstrap {
             GooglePayWalletController.decorate(engine, activity, state)
         }
         DigitalWalletFactory.buttonFactory = WalletButtonFactory { context, args ->
+            val heightPx = TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP,
+                56f,
+                context.resources.displayMetrics,
+            ).toInt()
+            val argsState = mutableStateOf(args)
             ComposeView(context).apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    heightPx,
                 )
+                clipChildren = true
+                clipToPadding = true
+                tag = argsState
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
                 setContent {
+                    val current = argsState.value
                     GooglePayButton(
-                        appearance = args.appearance,
-                        allowedPaymentMethods = args.allowedPaymentMethods,
-                        enabled = args.enabled,
-                        onClick = args.onClick,
-                        isDarkBackground = args.isDarkBackground,
+                        appearance = current.appearance,
+                        allowedPaymentMethods = current.allowedPaymentMethods,
+                        enabled = current.enabled,
+                        onClick = current.onClick,
+                        isDarkBackground = current.isDarkBackground,
                     )
                 }
             }

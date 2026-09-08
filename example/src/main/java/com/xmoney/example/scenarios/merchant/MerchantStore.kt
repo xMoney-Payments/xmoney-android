@@ -63,7 +63,7 @@ import com.xmoney.example.ui.ExampleAddChip
 import com.xmoney.example.ui.ExampleButton
 import com.xmoney.example.ui.ExampleButtonVariant
 import com.xmoney.example.ui.ExampleCard
-import com.xmoney.example.ui.ExampleLoader
+import com.xmoney.example.ui.ExampleCheckoutSkeleton
 import com.xmoney.example.ui.ExampleProductPhoto
 import com.xmoney.example.ui.ExampleResultPanel
 import com.xmoney.example.ui.ExampleStatusChip
@@ -631,6 +631,8 @@ private fun SheetCheckoutScreen(
     var loading by remember { mutableStateOf(false) }
     var heldIntent by remember { mutableStateOf<PaymentIntent?>(null) }
     var didProcess by remember { mutableStateOf(false) }
+    var retryKey by remember { mutableStateOf(0) }
+    var revealed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val paymentSheet = rememberPaymentSheet(
         configuration = defaultPaymentConfig(appearance = brand.appearance),
@@ -643,6 +645,22 @@ private fun SheetCheckoutScreen(
         },
     )
 
+    LaunchedEffect(retryKey) {
+        if (heldIntent != null) return@LaunchedEffect
+        error = null
+        try {
+            heldIntent = DemoCheckoutBackend.createPaymentIntent(
+                amountMinor = total,
+                description = description,
+            )
+            revealed = true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            error = e.message ?: "Could not create order"
+        }
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
@@ -653,36 +671,45 @@ private fun SheetCheckoutScreen(
                     .padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                error?.let { ExampleStatusChip(it, ExampleStatusKind.Error) }
-                ExampleButton(
-                    label = "Pay ${formatMoney(total, currency)}",
-                    loading = loading,
-                    onClick = {
-                        scope.launch {
-                            loading = true
-                            error = null
-                            try {
-                                val intent = heldIntent ?: DemoCheckoutBackend.createPaymentIntent(
-                                    amountMinor = total,
-                                    description = description,
-                                )
-                                heldIntent = intent
-                                didProcess = false
-                                paymentSheet.present(intent) { event ->
-                                    when (event) {
-                                        PaymentSheetEvent.Ready -> loading = false
-                                        is PaymentSheetEvent.Processing -> {
-                                            if (event.isProcessing) didProcess = true
+                when {
+                    revealed -> {
+                        error?.let { ExampleStatusChip(it, ExampleStatusKind.Error) }
+                        ExampleButton(
+                            label = "Pay ${formatMoney(total, currency)}",
+                            loading = loading,
+                            onClick = {
+                                val intent = heldIntent ?: return@ExampleButton
+                                scope.launch {
+                                    loading = true
+                                    error = null
+                                    try {
+                                        didProcess = false
+                                        paymentSheet.present(intent) { event ->
+                                            when (event) {
+                                                PaymentSheetEvent.Ready -> loading = false
+                                                is PaymentSheetEvent.Processing -> {
+                                                    if (event.isProcessing) didProcess = true
+                                                }
+                                            }
                                         }
+                                    } catch (e: Exception) {
+                                        error = e.message ?: "Could not open checkout"
+                                        loading = false
                                     }
                                 }
-                            } catch (e: Exception) {
-                                error = e.message ?: "Could not create order"
-                                loading = false
-                            }
-                        }
-                    },
-                )
+                            },
+                        )
+                    }
+                    error != null -> {
+                        ExampleStatusChip(error!!, ExampleStatusKind.Error)
+                        ExampleButton(
+                            label = "Try again",
+                            variant = ExampleButtonVariant.Secondary,
+                            onClick = { retryKey += 1 },
+                        )
+                    }
+                    else -> ExampleCheckoutSkeleton(showOrder = false, showPayButton = true)
+                }
             }
         },
     ) { padding ->
@@ -700,7 +727,10 @@ private fun SheetCheckoutScreen(
                 onBack = onBack,
                 showThemeToggle = false,
             )
-            OrderSummaryCard(lines = lines, currency = currency)
+            when {
+                revealed -> OrderSummaryCard(lines = lines, currency = currency)
+                error == null -> ExampleCheckoutSkeleton(showOrder = true)
+            }
         }
     }
 }
@@ -718,7 +748,6 @@ private fun EmbeddedCheckoutScreen(
     val description = "${brand.name} · ${lines.itemCount} ${if (lines.itemCount == 1) "item" else "items"}"
     var intent by remember { mutableStateOf<PaymentIntent?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    var loading by remember { mutableStateOf(true) }
     var ready by remember { mutableStateOf(false) }
     var retryKey by remember { mutableStateOf(0) }
     var pendingResult by remember { mutableStateOf<PaymentResult?>(null) }
@@ -744,8 +773,6 @@ private fun EmbeddedCheckoutScreen(
     LaunchedEffect(embedded, total, description, retryKey) {
         if (lines.isEmpty()) return@LaunchedEffect
         if (intent != null) delay(300)
-        val initial = intent == null
-        if (initial) loading = true
         error = null
         try {
             // PaymentElement calls updateOrder when [intent] changes. Keep it
@@ -758,8 +785,6 @@ private fun EmbeddedCheckoutScreen(
             throw e
         } catch (e: Exception) {
             error = e.message ?: "Could not create order"
-        } finally {
-            if (initial) loading = false
         }
     }
 
@@ -769,7 +794,7 @@ private fun EmbeddedCheckoutScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .navigationBarsPadding(),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
@@ -780,23 +805,30 @@ private fun EmbeddedCheckoutScreen(
                     showThemeToggle = false,
                 )
             }
-            item { OrderSummaryCard(lines = lines, currency = currency, onQty = onQty) }
-            item {
-                when {
-                    loading && intent == null -> ExampleLoader(message = "Preparing checkout…")
-                    intent != null -> {
-                        MerchantReadyGate(ready = ready, message = "Preparing checkout…") {
-                            PaymentElement(
-                                controller = embedded,
-                                intent = intent!!,
-                                modifier = Modifier.fillMaxWidth(),
-                                onEvent = { event ->
-                                    if (event is EmbeddedEvent.Ready) ready = true
-                                },
-                            )
-                        }
+            if (ready) {
+                item { OrderSummaryCard(lines = lines, currency = currency, onQty = onQty) }
+            } else if (error == null) {
+                item { ExampleCheckoutSkeleton(showOrder = true) }
+            }
+            if (intent != null) {
+                item {
+                    MerchantReadyGate(
+                        ready = ready,
+                        message = "Preparing checkout…",
+                        placeholder = { ExampleCheckoutSkeleton(showOrder = false, showForm = true) },
+                    ) {
+                        PaymentElement(
+                            controller = embedded,
+                            intent = intent!!,
+                            modifier = Modifier.fillMaxWidth(),
+                            onEvent = { event ->
+                                if (event is EmbeddedEvent.Ready) ready = true
+                            },
+                        )
                     }
                 }
+            } else if (error == null) {
+                item { ExampleCheckoutSkeleton(showOrder = false, showForm = true) }
             }
             error?.let {
                 item {

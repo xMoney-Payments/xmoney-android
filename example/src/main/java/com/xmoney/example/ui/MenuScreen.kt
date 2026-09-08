@@ -110,7 +110,7 @@ fun MenuScreen() {
         ),
         MenuItem(
             title = "Google Pay (Activity API)",
-            subtitle = "GooglePay(config).present(activity, intent)",
+            subtitle = "GooglePay(config).present() / updateOrder()",
             klass = GooglePayActivitySample::class.java,
             section = MenuSection.Advanced,
         ),

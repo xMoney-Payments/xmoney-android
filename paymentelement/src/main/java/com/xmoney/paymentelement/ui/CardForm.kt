@@ -157,18 +157,27 @@ internal fun CardForm(
     }
 
     val hasVisibleError = errorDisplayOrder.any { shouldShowError(it) }
-    val borderColor = if (hasVisibleError) theme.errorBorder else theme.fieldBorder
-    val borderWidth = if (hasVisibleError) 1.5.dp else 1.dp
+    val anyFocused = errorDisplayOrder.any { focused[it] == true }
+    val borderColor = when {
+        hasVisibleError -> theme.errorBorder
+        anyFocused -> theme.primary
+        else -> theme.fieldBorder
+    }
+    val borderWidth = theme.fieldStrokeWidth(hasVisibleError)
     val firstVisibleError = errorDisplayOrder.firstOrNull { shouldShowError(it) }
     val holderIsLast = showHolderName && !holderFirst
     val spacedInputs = config.card.inputs.isSpaced
     val locale = config.options.locale
 
     fun fieldBorderColor(field: CardField): Color =
-        if (shouldShowError(field)) theme.errorBorder else theme.fieldBorder
+        when {
+            shouldShowError(field) -> theme.errorBorder
+            focused[field] == true -> theme.primary
+            else -> theme.fieldBorder
+        }
 
     fun fieldBorderWidth(field: CardField): Dp =
-        if (shouldShowError(field)) 1.5.dp else 1.dp
+        theme.fieldStrokeWidth(shouldShowError(field))
 
     fun fieldErrorMessage(field: CardField): String? {
         if (!shouldShowError(field)) return null
@@ -251,6 +260,7 @@ internal fun CardForm(
                         theme = theme,
                         value = holder,
                         placeholder = Strings.text("placeholder.cardholderName", locale),
+                        contentDescription = Strings.text("elements.cardholderName", locale),
                         keyboardType = KeyboardType.Text,
                         imeAction = ImeAction.Next,
                         fieldHeight = theme.formFieldHeight,
@@ -265,6 +275,7 @@ internal fun CardForm(
                     theme = theme,
                     value = number,
                     placeholder = Strings.text("placeholder.cardNumber", locale),
+                    contentDescription = Strings.text("elements.cardNumber", locale),
                     keyboardType = KeyboardType.Number,
                     imeAction = ImeAction.Next,
                     fieldHeight = theme.formFieldHeight,
@@ -292,6 +303,7 @@ internal fun CardForm(
                         theme = theme,
                         value = expiry,
                         placeholder = Strings.text("placeholder.expDate", locale),
+                        contentDescription = Strings.text("elements.expDate", locale),
                         keyboardType = KeyboardType.Number,
                         imeAction = ImeAction.Next,
                         fieldHeight = theme.formFieldHeight,
@@ -312,6 +324,7 @@ internal fun CardForm(
                         theme = theme,
                         value = cvv,
                         placeholder = Strings.text("placeholder.cvv", locale),
+                        contentDescription = Strings.text("elements.cvv", locale),
                         keyboardType = KeyboardType.Number,
                         imeAction = if (holderIsLast) ImeAction.Next else ImeAction.Done,
                         fieldHeight = theme.formFieldHeight,
@@ -338,6 +351,7 @@ internal fun CardForm(
                         theme = theme,
                         value = holder,
                         placeholder = Strings.text("placeholder.cardholderName", locale),
+                        contentDescription = Strings.text("elements.cardholderName", locale),
                         keyboardType = KeyboardType.Text,
                         imeAction = ImeAction.Done,
                         fieldHeight = theme.formFieldHeight,

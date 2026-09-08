@@ -295,6 +295,8 @@ class ThreeDSDialog : Fragment() {
                 setColor(Color.parseColor("#F2F2F2"))
             }
             layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
+            contentDescription = Strings.text("sheet.cancel", locale)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
             setOnClickListener { finish(false) }
         }
 

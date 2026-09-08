@@ -26,6 +26,10 @@ class PaymentSheet(
     /**
      * Present the payment sheet for [intent]. [onEvent] receives interim UI
      * events; [onResult] receives the terminal outcome.
+     *
+     * A second [present] while this instance's sheet is idle dismisses the
+     * previous host ([PaymentResult.Canceled] on that present's callbacks)
+     * then starts a new one. While a charge is in flight the call is a no-op.
      */
     fun present(
         activity: FragmentActivity,
@@ -34,6 +38,7 @@ class PaymentSheet(
         onResult: (PaymentResult) -> Unit,
     ) {
         GooglePay.register()
+        if (!CheckoutSessionRegistry.replaceIdleHost(lastRequestId)) return
         val paymentConfig = configuration.resolve(intent)
         val requestId = UUID.randomUUID().toString()
         lastRequestId = requestId

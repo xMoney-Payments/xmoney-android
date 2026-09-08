@@ -224,7 +224,7 @@ class DemoAppearanceEditorState(
     var primaryButtonFontFamily by mutableStateOf(
         initial.appearance.primaryButton?.fontFamily.orEmpty(),
     )
-    var borderRadius by mutableFloatStateOf(initial.appearance.borderRadius ?: 8f)
+    var borderRadius by mutableFloatStateOf(initial.appearance.borderRadius ?: 16f)
     var borderWidth by mutableFloatStateOf(initial.appearance.borderWidth ?: 1f)
     var fontScale by mutableFloatStateOf(initial.appearance.fontScale ?: 1f)
     var primaryButtonBorderRadius by mutableFloatStateOf(
@@ -274,7 +274,7 @@ class DemoAppearanceEditorState(
         dark.clear()
         fontFamily = preset.appearance.fontFamily.orEmpty()
         primaryButtonFontFamily = preset.appearance.primaryButton?.fontFamily.orEmpty()
-        borderRadius = preset.appearance.borderRadius ?: 8f
+        borderRadius = preset.appearance.borderRadius ?: 16f
         borderWidth = preset.appearance.borderWidth ?: 1f
         fontScale = preset.appearance.fontScale ?: 1f
         primaryButtonBorderRadius = preset.appearance.primaryButton?.borderRadius ?: 9999f

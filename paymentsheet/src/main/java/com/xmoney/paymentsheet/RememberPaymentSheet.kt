@@ -18,10 +18,17 @@ class PaymentSheetLauncher internal constructor(
 ) {
     private var lastRequestId: String? = null
 
+    /**
+     * Present the payment sheet for [intent]. A second [present] while this
+     * instance's sheet is idle dismisses the previous host ([PaymentResult.Canceled]
+     * on the shared [rememberPaymentSheet] result callback) then starts a new
+     * one. While a charge is in flight the call is a no-op.
+     */
     fun present(
         intent: PaymentIntent,
         onEvent: (PaymentSheetEvent) -> Unit = {},
     ) {
+        if (!CheckoutSessionRegistry.replaceIdleHost(lastRequestId)) return
         val requestId = UUID.randomUUID().toString()
         lastRequestId = requestId
         val config = configuration.resolve(intent)
