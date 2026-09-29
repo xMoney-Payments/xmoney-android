@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -68,6 +69,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import com.xmoney.example.theme.ExampleColors
 import com.xmoney.example.theme.ExampleRadii
 import com.xmoney.example.theme.ExampleThemeController
@@ -372,8 +375,10 @@ fun ExampleKeyValueRow(
 
 /**
  * Merchant loading chrome for the **initial** bind. Always composes [content]
- * so `PaymentElement` / `GooglePayButton` can emit `Ready`. After the first
- * Ready, the surface stays visible — `updateOrder` must not hide it.
+ * so `PaymentElement` / `GooglePayButton` can emit `Ready`. The child is laid
+ * out at its intrinsic size while hidden, so the wallet button can draw before
+ * the gate opens. After the first Ready, the surface stays visible —
+ * `updateOrder` must not hide it.
  */
 @Composable
 fun MerchantReadyGate(
@@ -384,24 +389,36 @@ fun MerchantReadyGate(
     content: @Composable () -> Unit,
 ) {
     var hasBound by remember { mutableStateOf(ready) }
+    var placeholderHeight by remember { mutableStateOf(160.dp) }
+    val density = LocalDensity.current
     SideEffect {
         if (ready) hasBound = true
     }
-    Box(modifier = modifier.fillMaxWidth()) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .then(if (hasBound) Modifier else Modifier.height(placeholderHeight).clipToBounds()),
+    ) {
         Box(
-            modifier = if (hasBound) {
-                Modifier.fillMaxWidth()
-            } else {
-                Modifier
-                    .fillMaxWidth()
-                    .height(0.dp)
-                    .clipToBounds()
-            },
+            Modifier
+                .fillMaxWidth()
+                .wrapContentHeight(align = Alignment.Top, unbounded = true),
         ) {
             content()
         }
         if (!hasBound) {
-            placeholder()
+            Box(Modifier.matchParentSize().background(MaterialTheme.colorScheme.background))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight(align = Alignment.Top, unbounded = true)
+                    .onSizeChanged { size ->
+                        val height = with(density) { size.height.toDp() }
+                        if (height > 1.dp && height != placeholderHeight) placeholderHeight = height
+                    },
+            ) {
+                placeholder()
+            }
             Box(
                 modifier = Modifier
                     .matchParentSize()

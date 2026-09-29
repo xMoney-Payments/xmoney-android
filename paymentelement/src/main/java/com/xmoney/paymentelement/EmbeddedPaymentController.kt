@@ -136,7 +136,9 @@ class EmbeddedPaymentController(
      *
      * Pay, [confirm], and Google Pay are no-ops until this returns
      * ([isInteractionEnabled]). The Pay button keeps its current title — this
-     * does not emit [EmbeddedEvent.Processing]. A newer [updateOrder] cancels
+     * does not emit [EmbeddedEvent.Processing] or [EmbeddedEvent.Ready].
+     * [PaymentElement] emits [EmbeddedEvent.Ready] after the surface draws.
+     * A newer [updateOrder] cancels
      * the in-flight one ([CancellationException]); the new intent is installed
      * only after success.
      */
@@ -147,7 +149,6 @@ class EmbeddedPaymentController(
         this.onEvent = onEvent
         if (boundIntent == order && sheetState != null && !isOrderConsumed) {
             paymentConfig = liveConfiguration.resolve(order)
-            onEvent(EmbeddedEvent.Ready)
             return
         }
         val generation = ++bindGeneration
@@ -165,7 +166,6 @@ class EmbeddedPaymentController(
             isOrderConsumed = session.isOrderConsumed
             isProcessing = session.isProcessing
             applyUpdatingOrder(false)
-            onEvent(EmbeddedEvent.Ready)
             val pending = pendingResolution
             pendingResolution = null
             if (pending != null) {

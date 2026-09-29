@@ -142,10 +142,9 @@ private fun UpdateOrderSampleScreen(activity: FragmentActivity) {
             val next = DemoCheckoutBackend.createPaymentIntent(amountMinor = amountMinor)
             // Native equivalent of iOS element.updateOrder(intent:).
             // Pay / confirm / Google Pay are no-ops until updateOrder returns.
+            // Ready comes from PaymentElement after the form has drawn.
             // Keep the Element mounted — do not clear intent or flip Ready.
-            embedded.updateOrder(next) { event ->
-                if (event is EmbeddedEvent.Ready) ready = true
-            }
+            embedded.updateOrder(next)
             hostIntent = next
         } catch (e: CancellationException) {
             throw e
@@ -158,7 +157,7 @@ private fun UpdateOrderSampleScreen(activity: FragmentActivity) {
 
     SampleScaffold(
         title = "Update order",
-        subtitle = "updateOrder() a new PaymentIntent — Pay locked until Ready.",
+        subtitle = "updateOrder() a new PaymentIntent — Pay locked until it returns.",
         activity = activity,
         scrollable = false,
         showTestCards = true,

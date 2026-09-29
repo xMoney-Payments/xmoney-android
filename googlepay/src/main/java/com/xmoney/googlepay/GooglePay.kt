@@ -136,6 +136,11 @@ class GooglePay(
     }
 }
 
+/**
+ * [Ready] from [GooglePayButton] is emitted after the button has pre-drawn, or
+ * as soon as Google Pay is known to be unavailable. [GooglePay.present] and
+ * [GooglePay.updateOrder] emit [Ready] when the order is bound on the open host.
+ */
 sealed class GooglePayEvent {
     data object Ready : GooglePayEvent()
     data class Processing(val isProcessing: Boolean) : GooglePayEvent()

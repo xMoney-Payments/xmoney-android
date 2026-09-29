@@ -50,6 +50,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -58,6 +59,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -98,6 +100,8 @@ fun PaymentForm(
     isOrderConsumed: Boolean = false,
     isUpdatingOrder: Boolean = false,
     onBindSubmit: ((() -> Unit) -> Unit)? = null,
+    surfaceEpoch: Int = 0,
+    onSurfaceDrawn: () -> Unit = {},
 ) {
     val isDark = UIHelpers.isDarkMode(config, isSystemInDarkTheme())
     val theme = remember(config, isDark) { CheckoutTheme.resolve(config, isDark) }
@@ -123,6 +127,21 @@ fun PaymentForm(
     var showCardErrors by remember { mutableStateOf(false) }
     val deleteScope = rememberCoroutineScope()
     val savedCardIds = state.savedCards.map { it.id }
+    val walletMethods = state.googlePayAllowedPaymentMethods
+    val walletFactory = DigitalWalletFactory.buttonFactory
+    val walletShown = state.googlePayAvailable && !walletMethods.isNullOrBlank() && walletFactory != null
+    var formReady by remember { mutableStateOf(false) }
+    var walletEpoch by remember { mutableIntStateOf(-1) }
+    var walletArmEpoch by remember { mutableIntStateOf(0) }
+    val walletReady = surfaceEpoch > 0 && walletEpoch == surfaceEpoch
+
+    ReportSurfaceDraw(
+        epoch = surfaceEpoch,
+        formReady = formReady,
+        walletShown = walletShown,
+        walletReady = walletReady,
+        onDrawn = onSurfaceDrawn,
+    )
 
     LaunchedEffect(savedCardIds) {
         if (selectedSavedId != null && selectedSavedId !in savedCardIds) {
@@ -167,6 +186,9 @@ fun PaymentForm(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .onGloballyPositioned { coords ->
+                if (coords.size.width > 1 && coords.size.height > 1) formReady = true
+            }
             .then(if (embedded) Modifier else Modifier.background(theme.background)),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
@@ -193,11 +215,9 @@ fun PaymentForm(
                             "Add the googlepay artifact so Google Pay installs on load.",
                     )
                 }
-                val methods = state.googlePayAllowedPaymentMethods
-                val buttonFactory = DigitalWalletFactory.buttonFactory
-                if (state.googlePayAvailable && !methods.isNullOrBlank() && buttonFactory != null) {
+                if (!walletMethods.isNullOrBlank() && walletFactory != null && walletShown) {
                     val walletArgs = WalletButtonArgs(
-                        allowedPaymentMethods = methods,
+                        allowedPaymentMethods = walletMethods,
                         appearance = config.paymentMethods.googlePay.appearance,
                         enabled = interactionEnabled,
                         isDarkBackground = isDark,
@@ -205,11 +225,15 @@ fun PaymentForm(
                     )
                     AndroidView(
                         factory = { context ->
-                            buttonFactory.create(context, walletArgs)
+                            walletFactory.create(context, walletArgs)
                         },
                         update = { view ->
                             @Suppress("UNCHECKED_CAST")
                             (view.tag as? MutableState<WalletButtonArgs>)?.value = walletArgs
+                            if (surfaceEpoch > 0 && walletArmEpoch != surfaceEpoch) {
+                                walletArmEpoch = surfaceEpoch
+                                view.armSizedPreDraw { walletEpoch = surfaceEpoch }
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
