@@ -4,6 +4,17 @@ All notable changes to the xMoney Android SDK are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- 3DS can hand the shopper to their bank app and keep waiting while the payment is confirmed.
+
+### Changed
+
+- 3DS completion follows the transaction. The return page no longer closes the challenge.
+- `browserLanguage` sent with a card payment is capped at 8 characters.
+
 ## [1.0.0] - 2026-09-08
 
 First stable release. API unchanged since 0.0.3.
