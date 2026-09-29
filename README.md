@@ -73,7 +73,7 @@ when (result) {
 
 `Failed` messages are SDK-authored. Do not display raw server bodies.
 
-Interim events (`Ready`, `Processing`) do not replace `onResult`. Use `Ready` to keep merchant loading visible until the surface is bound. `Processing` is an in-flight charge only — `updateOrder` does not emit it.
+Interim events (`Ready`, `Processing`) do not replace `onResult`. Use `Ready` to keep merchant loading visible until the checkout surface has drawn. `Processing` is an in-flight charge only — `updateOrder` does not emit it.
 
 ## Order lifecycle
 
@@ -126,13 +126,15 @@ val sheet = PaymentSheet(configuration)
 sheet.present(activity, intent, onEvent = { /* Ready / Processing */ }, onResult = { /* */ })
 ```
 
+The sheet keeps its loading coin up until the form and, when offered, the Google Pay button have pre-drawn, then emits `PaymentSheetEvent.Ready`.
+
 While idle, the sheet can be dragged closed. Drag, back, and scrim lock while a charge is in flight. `dismiss()` waits for an in-flight charge; idle close still cancels. A second `present()` while idle replaces the open sheet (the previous present completes with `Canceled`); while a charge is in flight the second `present()` is a no-op. Do not treat that `Canceled` as “leave checkout” if you immediately presented again.
 
 Copy-paste sample: [`PaymentSheetSampleActivity.kt`](example/src/main/java/com/xmoney/example/samples/PaymentSheetSampleActivity.kt) · Activity API: [`PaymentSheetActivitySample.kt`](example/src/main/java/com/xmoney/example/samples/PaymentSheetActivitySample.kt)
 
 ## Payment Element
 
-Same form as the sheet, without the bottom-sheet chrome. Mount it in your layout. Embedded does not add outer content padding or a page fill — the host background shows through; supply your own page spacing. Keep merchant loading until `EmbeddedEvent.Ready` — bind runs only while `PaymentElement` is composed, so keep it mounted (collapsed until ready):
+Same form as the sheet, without the bottom-sheet chrome. Mount it in your layout. Embedded does not add outer content padding or a page fill — the host background shows through; supply your own page spacing. Keep merchant loading until `EmbeddedEvent.Ready`. Bind runs only while `PaymentElement` is composed, so leave it mounted at its real height and cover it — a zero-height slot cannot draw the Google Pay button. `Ready` fires after the card form and, when offered, the wallet button have pre-drawn. The element’s own coin stays up until that first `Ready` and swallows taps; a later `updateOrder` emits `Ready` again without bringing the coin back:
 
 ```kotlin
 var ready by remember { mutableStateOf(false) }
@@ -165,7 +167,7 @@ embedded.updateOrder(
 )
 ```
 
-Compose `PaymentElement` / `GooglePayButton` call `updateOrder` when `intent` changes. Keep the surface mounted; do not set the intent to `null` or swap the form for a loader. Pay stays locked (`isInteractionEnabled`) until `Ready`. Gate a merchant-owned Pay button with `embedded.isInteractionEnabled`.
+Compose `PaymentElement` / `GooglePayButton` call `updateOrder` when `intent` changes. Keep the surface mounted; do not set the intent to `null` or swap the form for a loader. Pay stays locked (`isInteractionEnabled`) until `updateOrder` returns. `Ready` follows after the surface has drawn. Gate a merchant-owned Pay button with `embedded.isInteractionEnabled`. Direct `EmbeddedPaymentController.updateOrder()` does not emit `Ready`.
 
 Copy-paste sample: [`UpdateOrderSampleActivity.kt`](example/src/main/java/com/xmoney/example/samples/UpdateOrderSampleActivity.kt)
 
@@ -211,6 +213,8 @@ Copy-paste sample: [`EmbeddedPaymentSampleActivity.kt`](example/src/main/java/co
 ## Google Pay
 
 **Compose**
+
+Keep `GooglePayButton` composed at its real size under your loader. `GooglePayEvent.Ready` fires after the button has pre-drawn, or as soon as Google Pay is known to be unavailable.
 
 ```kotlin
 val googlePay = rememberGooglePay(configuration, onResult = { /* */ })

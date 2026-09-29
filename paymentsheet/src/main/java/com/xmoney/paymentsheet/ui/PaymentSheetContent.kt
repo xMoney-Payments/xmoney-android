@@ -57,6 +57,8 @@ internal fun PaymentSheetContent(
     onDeleteSaved: suspend (SavedCard) -> Unit,
     onGooglePay: () -> Unit,
     onCancel: () -> Unit,
+    surfaceEpoch: Int = 0,
+    onSurfaceDrawn: () -> Unit = {},
 ) {
     val isDark = UIHelpers.isDarkMode(config, isSystemInDarkTheme())
     val theme = remember(config, isDark) { CheckoutTheme.resolve(config, isDark) }
@@ -72,6 +74,8 @@ internal fun PaymentSheetContent(
         onSelectSaved = onSelectSaved,
         onDeleteSaved = onDeleteSaved,
         onGooglePay = onGooglePay,
+        surfaceEpoch = surfaceEpoch,
+        onSurfaceDrawn = onSurfaceDrawn,
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(max = maxSheetHeight)

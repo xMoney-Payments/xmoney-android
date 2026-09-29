@@ -4,6 +4,20 @@ All notable changes to the xMoney Android SDK are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- `Ready` on Payment Element, Payment Sheet, and the Compose Google Pay button is emitted after the card form has been laid out and, when Google Pay is offered, the wallet button has pre-drawn. It no longer fires when order bind returns.
+- Payment Element and Payment Sheet keep a loading coin over the form until that first draw. The cover swallows taps. A later `updateOrder` emits `Ready` again and does not bring the coin back.
+- The loading coin stays at its initial height. The surface resizes once, when the form and Google Pay button have drawn.
+- Compose `GooglePayEvent.Ready` fires after the button has pre-drawn, or as soon as Google Pay is known to be unavailable. Activity `GooglePay.present()` / `updateOrder()` still emit `Ready` when the order is bound on the open host.
+- `EmbeddedPaymentController.updateOrder()` no longer emits `Ready`. `PaymentElement` does, after the surface draws.
+
+### Fixed
+
+- A merchant loader that collapsed the checkout to zero height could open before the Google Pay button had a real size. The example gate now lays the child out at its intrinsic size while covered, so the button can draw before `Ready`.
+
 ## [1.0.0] - 2026-09-08
 
 First stable release. API unchanged since 0.0.3.

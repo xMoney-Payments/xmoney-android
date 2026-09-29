@@ -52,7 +52,7 @@ Integrations and name-check include a **Test cards** sheet — tap to copy Visa/
 - Integrations samples **inline** `PaymentConfig` (`publicKey`, Google Pay, saved cards, optional `options.appearance`). Do not copy `defaultPaymentConfig()` — that helper is for the stores and playground.
 - After `COMPLETE`, `FAILED`, or post-submit `CANCELED`, the order checksum is **consumed**. Create a new intent before paying again.
 - Closing Payment Sheet **before** pay does not consume; present the same intent (**Continue**).
-- Embedded / Google Pay: keep merchant loading until `EmbeddedEvent.Ready` / `GooglePayEvent.Ready`. Branch on `isOrderConsumed` after that. Pre-auth Google Pay dismiss delivers `canceled` and does not consume — present or tap again with the same intent.
+- Embedded / Google Pay: keep merchant loading until `EmbeddedEvent.Ready` / `GooglePayEvent.Ready`, with the surface laid out underneath (do not give it zero height). Branch on `isOrderConsumed` after that. Pre-auth Google Pay dismiss delivers `canceled` and does not consume — present or tap again with the same intent.
 - Payment Sheet / Google Pay Activity: keep the merchant Pay button loading until `Ready`. Samples use `PaymentSheetEvent.Processing` to tell pre-pay cancel apart from post-submit cancel.
 - After a consumed result, samples hide the payment UI and show **New payment**.
 - To change the amount on a mounted Element / Google Pay button, `updateOrder` with a new `PaymentIntent`. Do **not** set the intent to `null` or hide the form. Hearth and Pulse qty steppers pass a new intent into `PaymentElement`, which calls `updateOrder`. Pay stays locked (`isInteractionEnabled`) with its current title — `Processing` is an in-flight charge only. The form stays on screen.

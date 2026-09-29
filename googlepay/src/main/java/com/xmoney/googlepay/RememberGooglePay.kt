@@ -10,12 +10,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.OneShotPreDrawListener
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.xmoney.googlepay.internal.GooglePayAvailability
@@ -31,8 +36,10 @@ import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.payments.model.PaymentResult
 import com.xmoney.payments.threeds.ThreeDSHostController
+import kotlin.coroutines.resume
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * Compose-facing controller for embedding Google Pay in a merchant screen.
@@ -120,7 +127,6 @@ class GooglePayController internal constructor(
         this.onEvent = onEvent
         GooglePay.register()
         if (boundIntent == intent && availability != null && !isOrderConsumed) {
-            onEvent(GooglePayEvent.Ready)
             return
         }
         val generation = ++bindGeneration
@@ -142,7 +148,6 @@ class GooglePayController internal constructor(
             isOrderConsumed = session.isOrderConsumed
             isProcessing = session.isProcessing
             applyUpdatingOrder(false)
-            this.onEvent(GooglePayEvent.Ready)
             val pending = pendingResolution
             pendingResolution = null
             if (pending != null) {
@@ -241,6 +246,8 @@ fun rememberGooglePay(
 /**
  * Standalone Google Pay button. When [intent] changes, calls
  * [GooglePayController.updateOrder]. The button stays disabled until that returns.
+ * [GooglePayEvent.Ready] is emitted after the button has pre-drawn, or as soon as
+ * Google Pay is known to be unavailable.
  */
 @Composable
 fun GooglePayButton(
@@ -250,18 +257,52 @@ fun GooglePayButton(
     onEvent: (GooglePayEvent) -> Unit = {},
 ) {
     val currentOnEvent by rememberUpdatedState(onEvent)
+    var surfaceEpoch by remember { mutableIntStateOf(0) }
     LaunchedEffect(controller, intent) {
-        controller.updateOrder(intent) { currentOnEvent(it) }
+        controller.updateOrder(intent) { event ->
+            if (event !is GooglePayEvent.Ready) currentOnEvent(event)
+        }
+        surfaceEpoch++
     }
 
     val methods = controller.availability?.allowedPaymentMethodsJson
+    var buttonLaidOut by remember { mutableStateOf(false) }
     if (!methods.isNullOrBlank()) {
         GooglePayButtonWidget(
             appearance = controller.appearance,
             allowedPaymentMethods = methods,
             enabled = controller.isInteractionEnabled && controller.availability?.ready != false,
             onClick = { controller.startPayment() },
-            modifier = modifier,
+            modifier = modifier.onGloballyPositioned { coords ->
+                if (coords.size.width > 1 && coords.size.height > 1) buttonLaidOut = true
+            },
         )
+        ReportButtonDraw(surfaceEpoch, buttonLaidOut) { currentOnEvent(GooglePayEvent.Ready) }
+    } else if (surfaceEpoch > 0) {
+        LaunchedEffect(surfaceEpoch) { currentOnEvent(GooglePayEvent.Ready) }
     }
 }
+
+@Composable
+private fun ReportButtonDraw(epoch: Int, laidOut: Boolean, onDrawn: () -> Unit) {
+    val view = LocalView.current
+    val laidOutState = rememberUpdatedState(laidOut)
+    val onDrawnState = rememberUpdatedState(onDrawn)
+    LaunchedEffect(epoch) {
+        if (epoch <= 0) return@LaunchedEffect
+        var frames = 0
+        while (frames < MaxButtonFrames && !laidOutState.value) {
+            withFrameNanos { }
+            frames++
+        }
+        suspendCancellableCoroutine { continuation ->
+            val listener = OneShotPreDrawListener.add(view) {
+                if (continuation.isActive) continuation.resume(Unit)
+            }
+            continuation.invokeOnCancellation { listener.removeListener() }
+        }
+        onDrawnState.value()
+    }
+}
+
+private const val MaxButtonFrames = 30
