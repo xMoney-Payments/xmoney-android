@@ -3,19 +3,26 @@ package com.xmoney.payments.threeds
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.os.Message
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AccelerateDecelerateInterpolator
-import android.webkit.CookieManager
+import android.webkit.JsPromptResult
+import android.webkit.JsResult
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -29,7 +36,7 @@ import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.Fragment
 import com.xmoney.payments.R
 import com.xmoney.payments.config.Strings
-import com.xmoney.payments.util.DeviceMetadata
+import com.xmoney.payments.engine.ThreeDSChallengeEnd
 @androidx.annotation.RestrictTo(androidx.annotation.RestrictTo.Scope.LIBRARY_GROUP)
 
 class ThreeDSDialog : Fragment() {
@@ -39,6 +46,7 @@ class ThreeDSDialog : Fragment() {
     private var rootView: FrameLayout? = null
     private val popupWebViews = mutableListOf<WebView>()
     private var loadingOverlay: View? = null
+    private var bankHandoffVisible = false
     private var dotAnimators: AnimatorSet? = null
     private val hiddenDialogs = mutableListOf<DialogFragment>()
 
@@ -91,14 +99,17 @@ class ThreeDSDialog : Fragment() {
             ).also { it.topMargin = dp(HEADER_HEIGHT_DP) }
             setBackgroundColor(Color.WHITE)
             applySecureWebSettings(settings)
-            settings.userAgentString = DeviceMetadata.userAgent(context)
-            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+            applyChallengeUserAgent(settings, context)
+            acceptChallengeCookies(this)
             webViewClient = createWebViewClient()
             webChromeClient = createWebChromeClient()
-            if (ThreeDSUrlAllowlist.isHttpsChallenge(challengeUrl)) {
-                ThreeDSFormBody.load(this, challengeUrl, formMethod, formParams)
-            } else {
-                finish(false)
+            val restored = savedInstanceState != null && restoreState(savedInstanceState) != null
+            if (!restored) {
+                if (ThreeDSUrlAllowlist.isHttpsChallenge(challengeUrl)) {
+                    ThreeDSFormBody.load(this, challengeUrl, formMethod, formParams)
+                } else {
+                    finish(ThreeDSChallengeEnd.RejectedRedirect)
+                }
             }
         }
         webView = challengeWebView
@@ -133,13 +144,18 @@ class ThreeDSDialog : Fragment() {
         return root
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        webView?.saveState(outState)
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
             object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
-                    finish(false)
+                    finish(cancelEnd())
                 }
             },
         )
@@ -264,7 +280,7 @@ class ThreeDSDialog : Fragment() {
     }
 
     fun dismissProgrammatically() {
-        finish(true)
+        finish(ThreeDSChallengeEnd.ClosedByPoll)
     }
 
     fun dismissAllowingStateLoss() {
@@ -297,7 +313,7 @@ class ThreeDSDialog : Fragment() {
             layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
             contentDescription = Strings.text("sheet.cancel", locale)
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
-            setOnClickListener { finish(false) }
+            setOnClickListener { finish(cancelEnd()) }
         }
 
         val title = TextView(context).apply {
@@ -322,19 +338,49 @@ class ThreeDSDialog : Fragment() {
 
     private fun createWebViewClient(): WebViewClient = object : WebViewClient() {
         override fun onPageFinished(view: WebView?, url: String?) {
+            flushChallengeCookies()
             hideLoadingOverlay()
             notifyShown()
         }
 
         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
             val target = request?.url?.toString() ?: return false
-            return handleNavigation(target)
+            return handleNavigation(target, request.isForMainFrame)
         }
 
         @Suppress("DEPRECATION")
         override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
             if (url == null) return false
-            return handleNavigation(url)
+            return handleNavigation(url, isForMainFrame = true)
+        }
+
+        override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+            if (request == null) return
+            val redirect = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && request.isRedirect
+            val fail = ThreeDSNavigation.failsChallenge(
+                isForMainFrame = request.isForMainFrame,
+                errorCode = error?.errorCode ?: WebViewClient.ERROR_UNKNOWN,
+                description = error?.description,
+                requestMissingOrCancelled = false,
+                isRedirect = redirect,
+            )
+            if (fail) finish(ThreeDSChallengeEnd.LoadFailed)
+        }
+
+        override fun onReceivedHttpError(
+            view: WebView?,
+            request: WebResourceRequest?,
+            errorResponse: WebResourceResponse?,
+        ) {
+            if (request?.isForMainFrame != true) return
+            val status = errorResponse?.statusCode ?: return
+            if (status >= 400) finish(ThreeDSChallengeEnd.LoadFailed)
+        }
+
+        override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+            if (view != null) discardCrashedWebView(view)
+            finish(ThreeDSChallengeEnd.RendererGone)
+            return true
         }
     }
 
@@ -354,7 +400,8 @@ class ThreeDSDialog : Fragment() {
                     FrameLayout.LayoutParams.MATCH_PARENT,
                 ).also { it.topMargin = dp(HEADER_HEIGHT_DP) }
                 applySecureWebSettings(settings)
-                settings.userAgentString = DeviceMetadata.userAgent(requireContext())
+                applyChallengeUserAgent(settings, requireContext())
+                acceptChallengeCookies(this)
                 setBackgroundColor(Color.WHITE)
                 webViewClient = createWebViewClient()
                 webChromeClient = chromeClient
@@ -366,6 +413,27 @@ class ThreeDSDialog : Fragment() {
             return true
         }
 
+        override fun onJsAlert(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
+            presentJsDialog(message, prompt = false, defaultValue = null, result = result, promptResult = null)
+            return true
+        }
+
+        override fun onJsConfirm(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
+            presentJsDialog(message, prompt = false, defaultValue = null, result = result, promptResult = null, cancellable = true)
+            return true
+        }
+
+        override fun onJsPrompt(
+            view: WebView?,
+            url: String?,
+            message: String?,
+            defaultValue: String?,
+            result: JsPromptResult?,
+        ): Boolean {
+            presentJsDialog(message, prompt = true, defaultValue = defaultValue, result = null, promptResult = result, cancellable = true)
+            return true
+        }
+
         override fun onCloseWindow(window: WebView?) {
             val popup = window ?: return
             popupWebViews.remove(popup)
@@ -374,18 +442,161 @@ class ThreeDSDialog : Fragment() {
         }
     }
 
-    private fun handleNavigation(url: String): Boolean {
-        if (isSamePage(url, challengeUrl)) {
-            return false
+    private fun handleNavigation(url: String, isForMainFrame: Boolean): Boolean {
+        val hop = ThreeDSNavigation.hop(
+            url = url,
+            isForMainFrame = isForMainFrame,
+            canOpenExternally = isForMainFrame && canOpenExternal(url),
+        )
+        return when (hop) {
+            ThreeDSHop.Proceed -> false
+            ThreeDSHop.OpenExternal -> {
+                if (openExternal(url)) showBankHandoff()
+                true
+            }
+            ThreeDSHop.Reject -> {
+                finish(ThreeDSChallengeEnd.RejectedRedirect)
+                true
+            }
+            ThreeDSHop.Block -> true
         }
-        if (!ThreeDSUrlAllowlist.isAllowed(url)) {
-            return true
+    }
+
+    private fun discardCrashedWebView(view: WebView) {
+        if (view == webView) webView = null
+        popupWebViews.remove(view)
+        runCatching {
+            (view.parent as? ViewGroup)?.removeView(view)
+            view.destroy()
         }
-        if (listener?.shouldInterceptThreeDSUrl(url) == true) {
-            finish(true)
-            return true
+    }
+
+    private fun canOpenExternal(url: String): Boolean {
+        val intent = ThreeDSNavigation.externalIntent(url) ?: return false
+        val packageManager = context?.packageManager ?: return false
+        val resolved = intent.resolveActivity(packageManager) ?: return false
+        return !ThreeDSNavigation.isDefaultHttpsBrowser(packageManager, resolved.packageName)
+    }
+
+    private fun openExternal(url: String): Boolean {
+        val intent = ThreeDSNavigation.externalIntent(url) ?: return false
+        return runCatching {
+            startActivity(intent)
+            true
+        }.getOrDefault(false)
+    }
+
+    private fun showBankHandoff() {
+        if (bankHandoffVisible || resolved) return
+        val root = rootView ?: return
+        bankHandoffVisible = true
+        dotAnimators?.cancel()
+        dotAnimators = null
+        for (index in 0 until root.childCount) {
+            root.getChildAt(index).visibility = View.GONE
         }
-        return false
+        root.addView(
+            buildBankHandoff(requireContext()),
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+    }
+
+    private fun buildBankHandoff(context: android.content.Context): View {
+        val title = TextView(context).apply {
+            text = Strings.text("threeds.bankHandoff.title", locale)
+            textSize = 22f
+            setTextColor(Color.parseColor("#16141A"))
+            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+        }
+        val message = TextView(context).apply {
+            text = Strings.text("threeds.bankHandoff.message", locale)
+            textSize = 16f
+            setTextColor(Color.parseColor("#6B6B6B"))
+            gravity = Gravity.CENTER
+            val params = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+            params.topMargin = dp(12)
+            layoutParams = params
+        }
+        val cancel = TextView(context).apply {
+            text = Strings.text("sheet.cancel", locale)
+            textSize = 16f
+            setTextColor(Color.parseColor("#16141A"))
+            gravity = Gravity.CENTER
+            val params = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+            params.topMargin = dp(24)
+            params.gravity = Gravity.CENTER_HORIZONTAL
+            layoutParams = params
+            setOnClickListener { finish(ThreeDSChallengeEnd.BankAppCanceled) }
+        }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(Color.WHITE)
+            setPadding(dp(32), dp(32), dp(32), dp(32))
+            addView(title)
+            addView(message)
+            addView(cancel)
+        }
+    }
+
+    private fun cancelEnd(): ThreeDSChallengeEnd =
+        if (bankHandoffVisible) ThreeDSChallengeEnd.BankAppCanceled else ThreeDSChallengeEnd.UserCanceled
+
+    private fun presentJsDialog(
+        message: String?,
+        prompt: Boolean,
+        defaultValue: String?,
+        result: JsResult?,
+        promptResult: JsPromptResult?,
+        cancellable: Boolean = false,
+    ) {
+        val act = activity
+        if (act == null || act.isFinishing) {
+            result?.cancel()
+            promptResult?.cancel()
+            return
+        }
+        var settled = false
+        fun settle(block: () -> Unit) {
+            if (settled) return
+            settled = true
+            block()
+        }
+        val input = if (prompt) EditText(act).apply { setText(defaultValue.orEmpty()) } else null
+        val builder = AlertDialog.Builder(act)
+            .setMessage(message)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                settle {
+                    if (promptResult != null) promptResult.confirm(input?.text?.toString().orEmpty())
+                    else result?.confirm()
+                }
+            }
+            .setOnCancelListener {
+                settle {
+                    result?.cancel()
+                    promptResult?.cancel()
+                }
+            }
+        if (input != null) builder.setView(input)
+        if (cancellable) {
+            builder.setNegativeButton(android.R.string.cancel) { _, _ ->
+                settle {
+                    result?.cancel()
+                    promptResult?.cancel()
+                }
+            }
+        }
+        builder.show()
     }
 
     private fun notifyShown() {
@@ -415,10 +626,10 @@ class ThreeDSDialog : Fragment() {
         hiddenDialogs.clear()
     }
 
-    private fun finish(success: Boolean) {
+    private fun finish(end: ThreeDSChallengeEnd) {
         if (resolved) return
         resolved = true
-        listener?.onThreeDSFinished(success)
+        listener?.onThreeDSFinished(end)
         removeSelf()
     }
 
@@ -433,12 +644,6 @@ class ThreeDSDialog : Fragment() {
 
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt()
-
-    private fun isSamePage(left: String, right: String): Boolean {
-        fun normalize(value: String): String =
-            value.substringBefore('#').substringBefore('?').trimEnd('/')
-        return normalize(left).equals(normalize(right), ignoreCase = true)
-    }
 
     companion object {
         const val TAG = "xmoney_threeds"
@@ -467,7 +672,6 @@ class ThreeDSDialog : Fragment() {
 
 @androidx.annotation.RestrictTo(androidx.annotation.RestrictTo.Scope.LIBRARY_GROUP)
 interface ThreeDSListener {
-    fun shouldInterceptThreeDSUrl(url: String): Boolean
-    fun onThreeDSFinished(success: Boolean)
+    fun onThreeDSFinished(end: ThreeDSChallengeEnd)
     fun onThreeDSShown() {}
 }

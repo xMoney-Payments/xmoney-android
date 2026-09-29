@@ -6,6 +6,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.xmoney.payments.engine.ThreeDSChallengeEnd
 import com.xmoney.payments.engine.ThreeDSPresenter
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -16,8 +17,7 @@ class ThreeDSHostController(
     private val localeProvider: () -> String,
 ) : ThreeDSPresenter, ThreeDSListener {
     private var activeDialog: ThreeDSDialog? = null
-    private var activeReturnUrlMatcher: ((String) -> Boolean)? = null
-    private var threeDSContinuation: ((Boolean) -> Unit)? = null
+    private var threeDSContinuation: ((ThreeDSChallengeEnd) -> Unit)? = null
     private var onShownCallback: (() -> Unit)? = null
     private var lifecycleObserver: LifecycleEventObserver? = null
     private var showCommitted = false
@@ -30,18 +30,16 @@ class ThreeDSHostController(
 
     override suspend fun presentThreeDS(
         url: String,
-        returnUrlMatcher: (String) -> Boolean,
         formMethod: String,
         params: Map<String, String>,
         onShown: () -> Unit,
-    ): Boolean =
+    ): ThreeDSChallengeEnd =
         suspendCancellableCoroutine { cont ->
             showCommitted = false
             retryCount = 0
-            activeReturnUrlMatcher = returnUrlMatcher
             onShownCallback = onShown
-            threeDSContinuation = { success ->
-                if (cont.isActive) cont.resume(success)
+            threeDSContinuation = { end ->
+                if (cont.isActive) cont.resume(end)
             }
             val dialog = ThreeDSDialog.newInstance(url, localeProvider(), formMethod, params).also {
                 it.hostListener = this
@@ -52,12 +50,12 @@ class ThreeDSHostController(
                 runCatching { dialog.dismissAllowingStateLoss() }
             }
             if (activity.isFinishing || activity.isDestroyed) {
-                complete(false)
+                complete(ThreeDSChallengeEnd.UserCanceled)
                 return@suspendCancellableCoroutine
             }
             val observer = LifecycleEventObserver { _, event ->
                 if (event == Lifecycle.Event.ON_RESUME) attemptShow(dialog)
-                if (event == Lifecycle.Event.ON_DESTROY) complete(false)
+                if (event == Lifecycle.Event.ON_DESTROY) complete(ThreeDSChallengeEnd.UserCanceled)
             }
             lifecycleObserver = observer
             activity.lifecycle.addObserver(observer)
@@ -69,17 +67,14 @@ class ThreeDSHostController(
         activeDialog = null
     }
 
-    override fun shouldInterceptThreeDSUrl(url: String): Boolean =
-        activeReturnUrlMatcher?.invoke(url) == true
-
     override fun onThreeDSShown() {
         val callback = onShownCallback
         onShownCallback = null
         callback?.invoke()
     }
 
-    override fun onThreeDSFinished(success: Boolean) {
-        complete(success)
+    override fun onThreeDSFinished(end: ThreeDSChallengeEnd) {
+        complete(end)
     }
 
     private fun attemptShow(dialog: ThreeDSDialog) {
@@ -88,7 +83,7 @@ class ThreeDSHostController(
             return
         }
         if (activity.isFinishing || activity.isDestroyed) {
-            complete(false)
+            complete(ThreeDSChallengeEnd.UserCanceled)
             return
         }
         if (!activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
@@ -133,17 +128,16 @@ class ThreeDSHostController(
         mainHandler.removeCallbacks(runnable)
     }
 
-    private fun complete(success: Boolean) {
+    private fun complete(end: ThreeDSChallengeEnd) {
         val continuation = threeDSContinuation ?: return
         threeDSContinuation = null
         teardown()
-        continuation(success)
+        continuation(end)
     }
 
     private fun teardown() {
         cancelRetries()
         removeLifecycleObserver()
-        activeReturnUrlMatcher = null
         activeDialog = null
         onShownCallback = null
     }

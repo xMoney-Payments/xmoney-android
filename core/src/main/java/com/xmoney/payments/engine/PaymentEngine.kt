@@ -18,6 +18,7 @@ import com.xmoney.payments.service.ConfigService
 import com.xmoney.payments.service.DigitalWalletsService
 import com.xmoney.payments.service.PaymentService
 import com.xmoney.payments.service.TransactionService
+import com.xmoney.payments.util.DeviceMetadata
 
 import android.content.Context
 import androidx.annotation.RestrictTo
@@ -30,11 +31,10 @@ import kotlinx.coroutines.selects.select
 interface ThreeDSPresenter {
     suspend fun presentThreeDS(
         url: String,
-        returnUrlMatcher: (String) -> Boolean,
         formMethod: String = "GET",
         params: Map<String, String> = emptyMap(),
         onShown: () -> Unit = {},
-    ): Boolean
+    ): ThreeDSChallengeEnd
     fun dismissThreeDS()
 }
 
@@ -59,6 +59,11 @@ class PaymentEngine(
         ?: throw PaymentError.InvalidKey()
 
     private val appContext = context.applicationContext
+
+    init {
+        DeviceMetadata.prepare(appContext)
+    }
+
     private val account = AccountService(http, env)
     private val configService = ConfigService(http, env)
     private val cards = CardsService(http, env)
@@ -69,8 +74,6 @@ class PaymentEngine(
     private var sessionToken: String = ""
     private var nameCheckValidationEnabled: Boolean = false
     private var cachedOrderInfo: OrderPayloadInfo? = null
-    private var cachedBackUrl: java.net.URI? = null
-    private var backUrlResolved: Boolean = false
     private val cachedWalletParams = mutableMapOf<String, WalletParams>()
 
     var onCardHolderVerification: ((CardHolderVerificationResult) -> Boolean)? =
@@ -170,27 +173,15 @@ class PaymentEngine(
         return when (val submission = parsed.submission) {
             is PaymentSubmissionResult.Needs3DS -> {
                 val transactionId = requireTransactionIdForThreeDS(parsed.transactionId)
-                val backUrl = backUrl()
-                val matcher: (String) -> Boolean = { returnUrl ->
-                    backUrl != null && OrderPayloadDecoder.matchesReturnURL(returnUrl, backUrl)
-                }
                 handleThreeDSWithBackgroundRefresh(
                     submission,
                     transactionId,
                     presenter,
-                    matcher,
                 )
             }
             is PaymentSubmissionResult.Redirect -> resolveByPolling(parsed.transactionId)
             is PaymentSubmissionResult.Transaction -> resolveByPolling(submission.id)
         }
-    }
-
-    private fun backUrl(): java.net.URI? {
-        if (backUrlResolved) return cachedBackUrl
-        backUrlResolved = true
-        cachedBackUrl = OrderPayloadDecoder.backUrl(config.orderPayload)
-        return cachedBackUrl
     }
 
     private suspend fun resolveByPolling(transactionId: String?): EngineResult {
@@ -203,13 +194,11 @@ class PaymentEngine(
         challenge: PaymentSubmissionResult.Needs3DS,
         transactionId: String,
         presenter: ThreeDSPresenter,
-        returnUrlMatcher: (String) -> Boolean,
     ): EngineResult = coroutineScope {
         val shown = CompletableDeferred<Unit>()
         val threeDSDeferred = async {
             presenter.presentThreeDS(
                 challenge.url,
-                returnUrlMatcher,
                 challenge.formMethod,
                 challenge.params,
                 onShown = { shown.complete(Unit) },
@@ -226,16 +215,27 @@ class PaymentEngine(
                     threeDSDeferred.cancel()
                     result
                 }
-                threeDSDeferred.onAwait { completed ->
-                    if (!completed) {
-                        reconcileCanceledThreeDS(
+                threeDSDeferred.onAwait { end ->
+                    when (val followUp = threeDSChallengeFollowUp(end)) {
+                        ThreeDSChallengeFollowUp.WaitForPoll -> pollDeferred.await()
+                        is ThreeDSChallengeFollowUp.ReconcileCancel -> reconcileCanceledThreeDS(
                             fetchTransaction = {
                                 transactions.getTransaction(transactionId, sessionToken)
                             },
                             pollDeferred = pollDeferred,
+                            graceMs = followUp.graceMs,
                         )
-                    } else {
-                        pollDeferred.await()
+                        is ThreeDSChallengeFollowUp.ThrowUnlessComplete -> {
+                            val tx = runCatching {
+                                transactions.getTransaction(transactionId, sessionToken)
+                            }.getOrNull()
+                            pollDeferred.cancel()
+                            if (tx != null && isTransactionComplete(tx)) {
+                                resultFromTransaction(tx)
+                            } else {
+                                throw PaymentError.ThreeDS(followUp.message)
+                            }
+                        }
                     }
                 }
             }
