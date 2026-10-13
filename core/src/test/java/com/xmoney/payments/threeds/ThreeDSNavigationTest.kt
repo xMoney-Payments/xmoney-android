@@ -1,9 +1,7 @@
 package com.xmoney.payments.threeds
 
 import android.content.Intent
-import android.webkit.WebViewClient
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -16,121 +14,90 @@ import org.robolectric.annotation.Config
 class ThreeDSNavigationTest {
     @Test
     fun httpsHopsStayInTheWebView() {
-        assertEquals(ThreeDSHop.Proceed, ThreeDSNavigation.hop("https://acs.example/challenge", true, false))
-        assertEquals(
-            ThreeDSHop.Proceed,
-            ThreeDSNavigation.hop("https://merchant.example/return?status=ok", true, true),
-        )
-        assertEquals(ThreeDSHop.Proceed, ThreeDSNavigation.hop("https://acs.example/method", false, false))
-        assertEquals(ThreeDSHop.Proceed, ThreeDSNavigation.hop("about:blank", true, false))
+        assertEquals(ThreeDSHop.Proceed, ThreeDSNavigation.hop("https://acs.example/challenge", true))
+        assertEquals(ThreeDSHop.Proceed, ThreeDSNavigation.hop("https://merchant.example/return?status=ok", true))
+        assertEquals(ThreeDSHop.Proceed, ThreeDSNavigation.hop("https://acs.example/method", false))
+        assertEquals(ThreeDSHop.Proceed, ThreeDSNavigation.hop("about:blank", true))
     }
 
     @Test
-    fun nonHttpsMainFrameOpensOnlyWhenAnActivityResolves() {
-        assertEquals(
-            ThreeDSHop.OpenExternal,
-            ThreeDSNavigation.hop("intent://pay#Intent;scheme=bank;end", true, true),
-        )
-        assertEquals(ThreeDSHop.Block, ThreeDSNavigation.hop("bankapp://pay", true, false))
-        assertEquals(ThreeDSHop.Block, ThreeDSNavigation.hop("bankapp://pay", false, true))
+    fun mainFrameAppLinksOpenExternally() {
+        assertEquals(ThreeDSHop.OpenExternal, ThreeDSNavigation.hop("bankapp://pay", true))
+        assertEquals(ThreeDSHop.OpenExternal, ThreeDSNavigation.hop("intent://pay#Intent;scheme=bank;end", true))
+        assertEquals(ThreeDSHop.Block, ThreeDSNavigation.hop("bankapp://pay", false))
+    }
+
+    @Test
+    fun intentWithOnlyAnHttpsFallbackOpensExternally() {
+        val url = "intent://pay#Intent;scheme=https;S.browser_fallback_url=https%3A%2F%2Facs.bank%2Fweb;end"
+        assertEquals(ThreeDSHop.OpenExternal, ThreeDSNavigation.hop(url, true))
     }
 
     @Test
     fun insecureHopsStayInTheChallenge() {
-        assertEquals(ThreeDSHop.Block, ThreeDSNavigation.hop("http://acs.bank/challenge", true, true))
-        assertEquals(ThreeDSHop.Block, ThreeDSNavigation.hop("javascript:alert(1)", true, true))
-        assertEquals(ThreeDSHop.Block, ThreeDSNavigation.hop("data:text/html,hi", true, false))
-        assertEquals(ThreeDSHop.Block, ThreeDSNavigation.hop("file:///tmp/x", true, false))
-        assertEquals(ThreeDSHop.Block, ThreeDSNavigation.hop("http://acs.bank/challenge", false, true))
+        assertEquals(ThreeDSHop.Block, ThreeDSNavigation.hop("http://acs.bank/challenge", true))
+        assertEquals(ThreeDSHop.Block, ThreeDSNavigation.hop("javascript:alert(1)", true))
+        assertEquals(ThreeDSHop.Block, ThreeDSNavigation.hop("data:text/html,hi", true))
+        assertEquals(ThreeDSHop.Block, ThreeDSNavigation.hop("file:///tmp/x", true))
+        assertEquals(ThreeDSHop.Block, ThreeDSNavigation.hop("http://acs.bank/challenge", false))
+        assertEquals(ThreeDSHop.Block, ThreeDSNavigation.hop("market://details?id=com.bank.app", true))
     }
 
     @Test
-    fun abortedNavigationsDoNotFailTheChallenge() {
-        assertFalse(
-            ThreeDSNavigation.failsChallenge(
-                isForMainFrame = true,
-                errorCode = WebViewClient.ERROR_UNKNOWN,
-                description = "net::ERR_ABORTED",
-                requestMissingOrCancelled = false,
+    fun browserFallbackMustBeHttps() {
+        assertEquals(
+            "https://acs.bank/web",
+            ThreeDSNavigation.browserFallbackUrl(
+                "intent://pay#Intent;scheme=bank;S.browser_fallback_url=https%3A%2F%2Facs.bank%2Fweb;end",
             ),
         )
-        assertFalse(
-            ThreeDSNavigation.failsChallenge(
-                isForMainFrame = true,
-                errorCode = WebViewClient.ERROR_UNKNOWN,
-                description = null,
-                requestMissingOrCancelled = true,
+        assertNull(
+            ThreeDSNavigation.browserFallbackUrl(
+                "intent://pay#Intent;scheme=bank;S.browser_fallback_url=http%3A%2F%2Facs.bank%2Fweb;end",
             ),
         )
-        assertFalse(
-            ThreeDSNavigation.failsChallenge(
-                isForMainFrame = true,
-                errorCode = WebViewClient.ERROR_CONNECT,
-                description = null,
-                requestMissingOrCancelled = true,
+        assertNull(
+            ThreeDSNavigation.browserFallbackUrl(
+                "intent://pay#Intent;scheme=bank;S.browser_fallback_url=javascript%3Aalert(1);end",
             ),
         )
-        assertFalse(
-            ThreeDSNavigation.failsChallenge(
-                isForMainFrame = true,
-                errorCode = WebViewClient.ERROR_UNKNOWN,
-                description = null,
-                requestMissingOrCancelled = false,
-            ),
-        )
-        assertFalse(
-            ThreeDSNavigation.failsChallenge(
-                isForMainFrame = true,
-                errorCode = WebViewClient.ERROR_UNSUPPORTED_SCHEME,
-                description = "net::ERR_UNKNOWN_URL_SCHEME",
-                requestMissingOrCancelled = false,
-            ),
-        )
-        assertFalse(
-            ThreeDSNavigation.failsChallenge(
-                isForMainFrame = false,
-                errorCode = WebViewClient.ERROR_HOST_LOOKUP,
-                description = "net::ERR_NAME_NOT_RESOLVED",
-                requestMissingOrCancelled = false,
-            ),
-        )
-        assertFalse(
-            ThreeDSNavigation.failsChallenge(
-                isForMainFrame = true,
-                errorCode = WebViewClient.ERROR_HOST_LOOKUP,
-                description = "net::ERR_NAME_NOT_RESOLVED",
-                requestMissingOrCancelled = false,
-                isRedirect = true,
-            ),
+        assertNull(ThreeDSNavigation.browserFallbackUrl("bankapp://pay?browser_fallback_url=https://x"))
+    }
+
+    @Test
+    fun externalIntentSkipsBrowsersOnAndroid11() {
+        val modern = ThreeDSNavigation.externalIntent("bankapp://pay", sdkInt = 30)!!
+        assertTrue(modern.flags and Intent.FLAG_ACTIVITY_REQUIRE_NON_BROWSER != 0)
+        val legacy = ThreeDSNavigation.externalIntent("bankapp://pay", sdkInt = 29)!!
+        assertEquals(0, legacy.flags and Intent.FLAG_ACTIVITY_REQUIRE_NON_BROWSER)
+    }
+
+    @Test
+    fun httpsIntentNamingABankAppOpensOnAndroid11() {
+        val url = "intent://bank.example/pay#Intent;scheme=https;package=com.bank.app;end"
+        val intent = ThreeDSNavigation.externalIntent(url, sdkInt = 30)!!
+        assertEquals("com.bank.app", intent.`package`)
+        assertTrue(intent.flags and Intent.FLAG_ACTIVITY_REQUIRE_NON_BROWSER != 0)
+        assertNull(ThreeDSNavigation.externalIntent(url, sdkInt = 29))
+        assertNull(
+            ThreeDSNavigation.externalIntent("intent://bank.example/pay#Intent;scheme=https;end", sdkInt = 30),
         )
     }
 
     @Test
-    fun realMainFrameErrorsFailTheChallenge() {
-        assertTrue(
-            ThreeDSNavigation.failsChallenge(
-                isForMainFrame = true,
-                errorCode = WebViewClient.ERROR_HOST_LOOKUP,
-                description = "net::ERR_NAME_NOT_RESOLVED",
-                requestMissingOrCancelled = false,
-            ),
-        )
-        assertTrue(
-            ThreeDSNavigation.failsChallenge(
-                isForMainFrame = true,
-                errorCode = WebViewClient.ERROR_TIMEOUT,
-                description = null,
-                requestMissingOrCancelled = false,
-            ),
-        )
-        assertTrue(
-            ThreeDSNavigation.failsChallenge(
-                isForMainFrame = true,
-                errorCode = WebViewClient.ERROR_CONNECT,
-                description = "net::ERR_CONNECTION_REFUSED",
-                requestMissingOrCancelled = false,
-            ),
-        )
+    fun appLinkIntentRefusesBrowsers() {
+        val intent = ThreeDSNavigation.appLinkIntent("https://bank.example/approve", sdkInt = 30)!!
+        assertEquals(Intent.ACTION_VIEW, intent.action)
+        assertTrue(intent.hasCategory(Intent.CATEGORY_BROWSABLE))
+        assertTrue(intent.flags and Intent.FLAG_ACTIVITY_REQUIRE_NON_BROWSER != 0)
+        assertNull(ThreeDSNavigation.appLinkIntent("https://bank.example/approve", sdkInt = 29))
+        assertNull(ThreeDSNavigation.appLinkIntent("http://bank.example/approve", sdkInt = 30))
+    }
+
+    @Test
+    fun externalIntentRejectsMarket() {
+        assertNull(ThreeDSNavigation.externalIntent("market://details?id=com.bank.app"))
+        assertNull(ThreeDSNavigation.externalIntent("intent://details?id=x#Intent;scheme=market;end"))
     }
 
     @Test

@@ -40,20 +40,19 @@ class ThreeDSChallengeFollowUpTest {
     }
 
     @Test
-    fun rendererGoneChecksCompletionBeforeFailing() {
+    fun rendererGoneWaitsThirtySecondsForThePoll() {
         assertEquals(
-            ThreeDSChallengeFollowUp.ThrowUnlessComplete(THREE_DS_RENDERER_GONE_MESSAGE),
+            ThreeDSChallengeFollowUp.WaitThenFail(30_000L, THREE_DS_UNAVAILABLE_MESSAGE),
             threeDSChallengeFollowUp(ThreeDSChallengeEnd.RendererGone),
         )
-        assertEquals("Authentication could not be displayed", THREE_DS_RENDERER_GONE_MESSAGE)
     }
 
     @Test
-    fun loadFailedChecksCompletionBeforeFailing() {
+    fun hostUnavailableChecksCompletionBeforeFailing() {
         assertEquals(
-            ThreeDSChallengeFollowUp.ThrowUnlessComplete(THREE_DS_LOAD_FAILED_MESSAGE),
-            threeDSChallengeFollowUp(ThreeDSChallengeEnd.LoadFailed),
+            ThreeDSChallengeFollowUp.ThrowUnlessComplete(THREE_DS_UNAVAILABLE_MESSAGE),
+            threeDSChallengeFollowUp(ThreeDSChallengeEnd.HostUnavailable),
         )
-        assertEquals("Authentication could not be loaded", THREE_DS_LOAD_FAILED_MESSAGE)
+        assertEquals("Unable to present the authentication challenge", THREE_DS_UNAVAILABLE_MESSAGE)
     }
 }

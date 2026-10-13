@@ -155,6 +155,10 @@ PaymentElement(
 
 After `Complete` / `Failed` / post-submit `Canceled`, hide the element (or pass a new intent). Pre-pay cancel does not consume — keep it mounted.
 
+**Recreated activity** — the element runs in your activity. If that activity is recreated while a payment is in flight (rotation, a locale or theme change), the next bind of the same order reports that payment's result through `onResult`, without `Ready`, instead of taking a second payment. This works within the same process. If Android kills the process (for example while the shopper is in their bank app), the payment result is lost on the device; your backend's transaction status or webhook is the source of truth.
+
+Payment Sheet and the Google Pay host handle rotation themselves. If the process is killed during authentication, Payment Sheet reports the result when the shopper returns; it reaches you through the activity result (`PaymentSheetContract`), because the in-memory callback is gone with the old process.
+
 ### Update the order
 
 [EmbeddedPaymentController.updateOrder] rebinds a new signed `PaymentIntent` on the mounted Element. Pay, `confirm()`, and Google Pay are no-ops until it returns (`isInteractionEnabled` is false). A newer `updateOrder` cancels the in-flight one. The Pay button keeps its current title; it does not show “Processing...”.
@@ -309,6 +313,8 @@ PaymentConfig(
 Pay uses current field validity, not an empty errors map. Cardholder name is always collected.
 
 **Appearance** — pass `colorsLight` / `colorsDark` so the form matches your chrome. Card fields (condensed box and spaced inputs) use `appearance.borderRadius` (default 16 dp), `appearance.borderWidth`, and `colors.componentBorder`. Pay button radius comes from `appearance.primaryButton.borderRadius` (default a pill, `9999` dp). Pass `12` for a squircle. On a mounted Element, call `updateAppearance` / `updateStyle` / `updateWalletAppearance`. See [`exampleAppearance()`](example/src/main/java/com/xmoney/example/SampleHelpers.kt) for a copy-paste palette.
+
+**Cookies** — the 3DS challenge needs WebView cookies. The SDK turns on third-party cookies for its own challenge WebView only and does not call `CookieManager.setAcceptCookie`. If your app turns cookies off app-wide, turn them back on before a payment, or the bank page may fail.
 
 ## Card holder verification
 

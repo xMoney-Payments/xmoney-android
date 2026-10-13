@@ -15,18 +15,26 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class ThreeDSWebSettingsTest {
     @Test
-    fun acceptChallengeCookiesEnablesFirstAndThirdParty() {
+    fun acceptChallengeCookiesLeavesTheAppWideSettingAlone() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         val webView = WebView(activity)
         val cookies = CookieManager.getInstance()
         cookies.setAcceptCookie(false)
         try {
             acceptChallengeCookies(webView)
-            assertTrue(cookies.acceptCookie())
+            assertFalse(cookies.acceptCookie())
             flushChallengeCookies()
         } finally {
             cookies.setAcceptCookie(true)
         }
+    }
+
+    @Test
+    fun mediaStillNeedsAUserGesture() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val webView = WebView(activity)
+        applySecureWebSettings(webView.settings)
+        assertTrue(webView.settings.mediaPlaybackRequiresUserGesture)
     }
 
     @Test

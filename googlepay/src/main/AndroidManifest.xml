@@ -12,6 +12,7 @@
       android:exported="false"
       android:excludeFromRecents="true"
       android:finishOnTaskLaunch="true"
+      android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode"
       android:theme="@android:style/Theme.Material.Light.NoActionBar" />
     <meta-data
       android:name="com.google.android.gms.wallet.api.enabled"

@@ -11,7 +11,9 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,6 +25,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
@@ -32,7 +36,9 @@ import com.xmoney.googlepay.GooglePay
 import com.xmoney.paymentelement.theme.CheckoutTheme
 import com.xmoney.paymentelement.ui.UIHelpers
 import com.xmoney.paymentelement.ui.XCoinFlipLoader
+import com.xmoney.payments.config.Strings
 import com.xmoney.payments.engine.DigitalWalletAuthorizing
+import com.xmoney.payments.engine.PendingPayment
 import com.xmoney.payments.engine.SheetState
 import com.xmoney.payments.model.CardInput
 import com.xmoney.payments.model.PaymentError
@@ -50,6 +56,8 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
         data object Loading : UiState()
         data class Loaded(val state: SheetState) : UiState()
         data class Failed(val message: String) : UiState()
+        /** The payment was submitted before the screen was destroyed. Wait for its result. */
+        data object Recovering : UiState()
     }
 
     private val viewModel: PaymentSheetViewModel
@@ -169,6 +177,32 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
                 }
             }
 
+            is UiState.Recovering -> {
+                val isDark = UIHelpers.isDarkMode(vm.config, isSystemInDarkTheme())
+                val theme = vm.theme(isDark)
+                val locale = vm.config.options.locale
+                SheetSurface(theme) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        XCoinFlipLoader(color = CheckoutTheme.BrandPrimary)
+                        Text(
+                            Strings.text("threeds.bankHandoff.title", locale),
+                            color = theme.primaryText,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                        )
+                        Text(
+                            Strings.text("threeds.bankHandoff.message", locale),
+                            color = theme.secondaryText,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            }
+
             is UiState.Loaded -> PaymentSheetContent(
                 config = vm.config,
                 state = current.state,
@@ -183,6 +217,10 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
     }
 
     private fun loadState() {
+        viewModel.pendingToRecover?.let { pending ->
+            recoverPayment(pending)
+            return
+        }
         lifecycleScope.launch {
             try {
                 val state = session.bind(viewModel.intent, requireActivity())
@@ -207,6 +245,15 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
             } catch (e: Exception) {
                 finish(EngineResult.failed("LOAD_ERROR", e.message ?: PaymentError.GENERIC_LOAD))
             }
+        }
+    }
+
+    /** Shows the result instead of the form, so the shopper cannot pay the same order twice. */
+    private fun recoverPayment(pending: PendingPayment) {
+        uiState = UiState.Recovering
+        setProcessingState(true)
+        lifecycleScope.launch {
+            finish(session.recover(pending))
         }
     }
 

@@ -117,4 +117,40 @@ class ThreeDSReconcileTest {
         )
         assertEquals(EngineResult.Status.FAILED, result.status)
     }
+
+    @Test
+    fun waitForPollOrFail_pollWinsWithinGrace() = runBlocking {
+        val complete = EngineResult(EngineResult.Status.COMPLETE, Transaction(id = null, status = "complete"), null, null)
+        val poll = async {
+            delay(30L)
+            complete
+        }
+        val result = waitForPollOrFail(
+            fetchTransaction = { Transaction(id = null, status = "3d-pending") },
+            pollDeferred = poll,
+            graceMs = 2_000L,
+            message = THREE_DS_UNAVAILABLE_MESSAGE,
+        )
+        assertSame(complete, result)
+    }
+
+    @Test
+    fun waitForPollOrFail_graceTimeoutThrowsThreeDS() = runBlocking {
+        val poll = async {
+            delay(10_000L)
+            EngineResult(EngineResult.Status.COMPLETE, Transaction(id = null, status = null), null, null)
+        }
+        try {
+            waitForPollOrFail(
+                fetchTransaction = { Transaction(id = null, status = "pending") },
+                pollDeferred = poll,
+                graceMs = 50L,
+                message = THREE_DS_UNAVAILABLE_MESSAGE,
+            )
+            fail("expected ThreeDS error")
+        } catch (e: PaymentError.ThreeDS) {
+            assertEquals(THREE_DS_UNAVAILABLE_MESSAGE, e.message)
+        }
+        assertTrue(poll.isCancelled)
+    }
 }

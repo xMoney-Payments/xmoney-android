@@ -21,7 +21,6 @@ internal fun applySecureWebSettings(settings: WebSettings) {
     @Suppress("DEPRECATION")
     settings.allowUniversalAccessFromFileURLs = false
     settings.setGeolocationEnabled(false)
-    settings.mediaPlaybackRequiresUserGesture = false
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
     }
@@ -37,11 +36,12 @@ internal fun applyChallengeUserAgent(settings: WebSettings, context: Context) {
     settings.userAgentString = challengeUserAgent(raw)
 }
 
-/** ACS method iframes set cross-site cookies. WebView blocks those unless each instance opts in. */
+/**
+ * ACS method iframes set cross-site cookies. WebView blocks those unless each instance opts in.
+ * The app-wide `setAcceptCookie` belongs to the host app and is left alone.
+ */
 internal fun acceptChallengeCookies(webView: WebView) {
-    val cookies = CookieManager.getInstance()
-    cookies.setAcceptCookie(true)
-    cookies.setAcceptThirdPartyCookies(webView, true)
+    CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
 }
 
 /** Cookie writes are async. Flush before the next navigation or teardown so the ACS session is stored. */

@@ -1,13 +1,16 @@
 package com.xmoney.payments.network
 
 import com.xmoney.payments.model.PaymentError
+import com.xmoney.payments.util.DeviceMetadata
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
+import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -71,6 +74,54 @@ class HttpHygieneTest {
             fail("expected PaymentError.Network")
         } catch (e: PaymentError.Network) {
             assertTrue(e.message.isNotEmpty())
+        }
+    }
+
+    @Test
+    fun browserHeadersOnlyGoOnTheMultipartPayment() = runBlocking {
+        val seen = mutableListOf<Request>()
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                seen += chain.request()
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .body("{}".toResponseBody(null))
+                    .build()
+            }
+            .build()
+        val http = HttpClient(client)
+        http.getJson("https://api-next.xmoney.com/api/v1/transactions/1", "token")
+        http.postMultipart("https://secure.xmoney.com/pay", mapOf("a" to "b"))
+
+        assertNull(seen[0].header("User-Agent"))
+        assertNull(seen[0].header("Accept-Language"))
+        assertEquals(DeviceMetadata.browserUserAgent(), seen[1].header("User-Agent"))
+        assertTrue(!seen[1].header("Accept-Language").isNullOrEmpty())
+        assertNull(seen[1].header("X-XMoney-SDK"))
+    }
+
+    @Test
+    fun getJsonExposesTheStatusWhenAsked() = runBlocking {
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(503)
+                    .message("Unavailable")
+                    .body("".toResponseBody(null))
+                    .build()
+            }
+            .build()
+        try {
+            HttpClient(client).getJson("https://api-next.xmoney.com/x", "token", exposingStatus = true)
+            fail("expected HttpStatusException")
+        } catch (e: HttpStatusException) {
+            assertEquals(503, e.statusCode)
+            assertTrue(e.error is PaymentError.Network)
         }
     }
 }

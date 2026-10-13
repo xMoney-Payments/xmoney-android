@@ -22,6 +22,7 @@ import com.xmoney.payments.util.DeviceMetadata
 
 import android.content.Context
 import androidx.annotation.RestrictTo
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -166,22 +167,59 @@ class PaymentEngine(
 
     suspend fun deleteSavedCard(cardId: String) = cards.deleteCard(cardId, sessionToken)
 
+    /**
+     * Pending while the server has a transaction and the result is unknown. A cancellation, from a
+     * destroyed screen for example, leaves it set so the host can [resume].
+     */
+    var onPending: ((PendingPayment?) -> Unit)? = null
+
     private suspend fun submit(fields: Map<String, String>, presenter: ThreeDSPresenter): EngineResult {
         val response = payment.confirmPayment(fields)
         val parsed = payment.parse(response)
 
-        return when (val submission = parsed.submission) {
-            is PaymentSubmissionResult.Needs3DS -> {
-                val transactionId = requireTransactionIdForThreeDS(parsed.transactionId)
-                handleThreeDSWithBackgroundRefresh(
-                    submission,
-                    transactionId,
-                    presenter,
-                )
-            }
-            is PaymentSubmissionResult.Redirect -> resolveByPolling(parsed.transactionId)
-            is PaymentSubmissionResult.Transaction -> resolveByPolling(submission.id)
+        val submission = parsed.submission
+        val pendingId = when (submission) {
+            is PaymentSubmissionResult.Transaction -> submission.id
+            else -> parsed.transactionId
         }
+        pendingId?.let { onPending?.invoke(PendingPayment(it, sessionToken)) }
+        return settlePending {
+            when (submission) {
+                is PaymentSubmissionResult.Needs3DS -> {
+                    val transactionId = requireTransactionIdForThreeDS(parsed.transactionId)
+                    handleThreeDSWithBackgroundRefresh(
+                        submission,
+                        transactionId,
+                        presenter,
+                    )
+                }
+                is PaymentSubmissionResult.Redirect -> resolveByPolling(parsed.transactionId)
+                is PaymentSubmissionResult.Transaction -> resolveByPolling(submission.id)
+            }
+        }
+    }
+
+    /** Polls a payment whose screen was destroyed. The challenge page is gone, so the wait is short. */
+    suspend fun resume(pending: PendingPayment): EngineResult = settlePending {
+        val tx = transactions.poll(
+            pending.transactionId,
+            pending.sessionToken,
+            timeoutMs = RECOVERY_POLL_TIMEOUT_MS,
+        )
+        resultFromTransaction(tx)
+    }
+
+    private suspend fun settlePending(block: suspend () -> EngineResult): EngineResult {
+        val result = try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            onPending?.invoke(null)
+            throw e
+        }
+        onPending?.invoke(null)
+        return result
     }
 
     private suspend fun resolveByPolling(transactionId: String?): EngineResult {
@@ -236,6 +274,14 @@ class PaymentEngine(
                                 throw PaymentError.ThreeDS(followUp.message)
                             }
                         }
+                        is ThreeDSChallengeFollowUp.WaitThenFail -> waitForPollOrFail(
+                            fetchTransaction = {
+                                transactions.getTransaction(transactionId, sessionToken)
+                            },
+                            pollDeferred = pollDeferred,
+                            graceMs = followUp.graceMs,
+                            message = followUp.message,
+                        )
                     }
                 }
             }

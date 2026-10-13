@@ -19,9 +19,14 @@ class HttpClient(
 ) {
     private val jsonMedia = "application/json; charset=utf-8".toMediaType()
 
-    suspend fun getJson(url: String, bearer: String? = null): Map<String, Any?> =
+    /** With [exposingStatus], a non-2xx response throws [HttpStatusException] instead of [PaymentError.Network]. */
+    suspend fun getJson(
+        url: String,
+        bearer: String? = null,
+        exposingStatus: Boolean = false,
+    ): Map<String, Any?> =
         withContext(Dispatchers.IO) {
-            executeSync(baseRequest(url, bearer).get().build())
+            executeSync(baseRequest(url, bearer).get().build(), exposingStatus)
         }
 
     suspend fun postJson(url: String, body: Map<String, Any?>, bearer: String? = null): Map<String, Any?> =
@@ -69,24 +74,26 @@ class HttpClient(
 
     private fun baseRequest(url: String, bearer: String?): Request.Builder {
         val builder = Request.Builder().url(url)
-            .apply { withDefaultHeaders() }
             .header("Content-Type", "application/json")
         if (bearer != null) builder.header("Authorization", "Bearer $bearer")
         return builder
     }
 
+    /** The secure API copies these into the 3DS browser data, so only the payment request sends them. */
     private fun Request.Builder.withDefaultHeaders() {
         for ((name, value) in DeviceMetadata.httpHeaders()) {
             header(name, value)
         }
     }
 
-    private fun executeSync(request: Request): Map<String, Any?> {
+    private fun executeSync(request: Request, exposingStatus: Boolean = false): Map<String, Any?> {
         client.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
             val json = runCatching { jsonToMap(JSONObject(text)) }.getOrDefault(emptyMap())
             if (!response.isSuccessful) {
-                throw PaymentError.Network()
+                val error = PaymentError.Network()
+                if (exposingStatus) throw HttpStatusException(response.code, error)
+                throw error
             }
             return json
         }
@@ -142,3 +149,5 @@ class HttpClient(
         }
     }
 }
+
+internal class HttpStatusException(val statusCode: Int, val error: PaymentError) : Exception(error.message)

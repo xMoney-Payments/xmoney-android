@@ -50,12 +50,12 @@ class ThreeDSHostController(
                 runCatching { dialog.dismissAllowingStateLoss() }
             }
             if (activity.isFinishing || activity.isDestroyed) {
-                complete(ThreeDSChallengeEnd.UserCanceled)
+                complete(ThreeDSChallengeEnd.HostUnavailable)
                 return@suspendCancellableCoroutine
             }
             val observer = LifecycleEventObserver { _, event ->
                 if (event == Lifecycle.Event.ON_RESUME) attemptShow(dialog)
-                if (event == Lifecycle.Event.ON_DESTROY) complete(ThreeDSChallengeEnd.UserCanceled)
+                if (event == Lifecycle.Event.ON_DESTROY) complete(ThreeDSChallengeEnd.HostUnavailable)
             }
             lifecycleObserver = observer
             activity.lifecycle.addObserver(observer)
@@ -83,7 +83,7 @@ class ThreeDSHostController(
             return
         }
         if (activity.isFinishing || activity.isDestroyed) {
-            complete(ThreeDSChallengeEnd.UserCanceled)
+            complete(ThreeDSChallengeEnd.HostUnavailable)
             return
         }
         if (!activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
@@ -108,10 +108,10 @@ class ThreeDSHostController(
         }.getOrDefault(false)
     }
 
+    /** The lifecycle observer stays until [complete], so a destroyed activity still ends the challenge. */
     private fun markShown() {
         showCommitted = true
         cancelRetries()
-        removeLifecycleObserver()
     }
 
     private fun scheduleRetry(dialog: ThreeDSDialog) {
