@@ -1,12 +1,17 @@
 package com.xmoney.payments.threeds
 
+import android.content.ComponentName
 import android.content.Intent
+import android.content.IntentFilter
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
@@ -92,6 +97,36 @@ class ThreeDSNavigationTest {
         assertTrue(intent.flags and Intent.FLAG_ACTIVITY_REQUIRE_NON_BROWSER != 0)
         assertNull(ThreeDSNavigation.appLinkIntent("https://bank.example/approve", sdkInt = 29))
         assertNull(ThreeDSNavigation.appLinkIntent("http://bank.example/approve", sdkInt = 30))
+    }
+
+    @Test
+    fun cardNetworkLinksStayInTheChallenge() {
+        assertNull(ThreeDSNavigation.appLinkIntent("https://www.visa.com/help", sdkInt = 30))
+        assertNull(ThreeDSNavigation.appLinkIntent("https://mastercard.com/securecode", sdkInt = 30))
+        assertNull(ThreeDSNavigation.appLinkIntent("https://WWW.MasterCard.com./x", sdkInt = 30))
+        assertTrue(ThreeDSNavigation.appLinkIntent("https://bank.example/approve", sdkInt = 30) != null)
+        assertTrue(ThreeDSNavigation.appLinkIntent("https://notvisa.com/approve", sdkInt = 30) != null)
+    }
+
+    @Test
+    fun ownAppClaimIsDetected() {
+        val context = RuntimeEnvironment.getApplication()
+        val component = ComponentName(context.packageName, "com.merchant.ReturnActivity")
+        val shadow = shadowOf(context.packageManager)
+        shadow.addActivityIfNotPresent(component)
+        shadow.addIntentFilterForActivity(
+            component,
+            IntentFilter(Intent.ACTION_VIEW).apply {
+                addCategory(Intent.CATEGORY_DEFAULT)
+                addCategory(Intent.CATEGORY_BROWSABLE)
+                addDataScheme("https")
+                addDataAuthority("merchant.example", null)
+            },
+        )
+        val own = ThreeDSNavigation.appLinkIntent("https://merchant.example/return", sdkInt = 30)!!
+        val other = ThreeDSNavigation.appLinkIntent("https://bank.example/approve", sdkInt = 30)!!
+        assertTrue(ThreeDSNavigation.claimedByOwnApp(context.packageManager, context.packageName, own))
+        assertFalse(ThreeDSNavigation.claimedByOwnApp(context.packageManager, context.packageName, other))
     }
 
     @Test

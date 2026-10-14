@@ -529,6 +529,8 @@ class ThreeDSDialog : Fragment() {
     private fun openAppLink(url: String): Boolean {
         if (resolved) return false
         val intent = ThreeDSNavigation.appLinkIntent(url) ?: return false
+        val ctx = context ?: return false
+        if (ThreeDSNavigation.claimedByOwnApp(ctx.packageManager, ctx.packageName, intent)) return false
         if (!launchExternal(intent)) return false
         showBankHandoff()
         return true

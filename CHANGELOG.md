@@ -28,7 +28,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A payment in progress is no longer lost when the screen rotates or the app is closed in the background during authentication.
 - A screen closed during authentication no longer reports a canceled payment.
 - The keyboard no longer covers the bank's code field.
-- Bank links that open the bank app over https now open the app on Android 11 and later.
+- Bank links that open the bank app over https now open the app on Android 11 and later, except links to the merchant's own app and to card-network sites.
+- Changing the language or font size during authentication no longer interrupts the challenge.
 - Screenshots are blocked while the authentication page is shown.
 
 ## [1.0.0] - 2026-09-08

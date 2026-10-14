@@ -7,7 +7,7 @@
       android:exported="false"
       android:excludeFromRecents="true"
       android:finishOnTaskLaunch="true"
-      android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode"
+      android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|locale|layoutDirection|fontScale|density"
       android:windowSoftInputMode="adjustResize"
       android:theme="@android:style/Theme.Translucent.NoTitleBar" />
   </application>

@@ -25,7 +25,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
@@ -189,13 +188,7 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
                     ) {
                         XCoinFlipLoader(color = CheckoutTheme.BrandPrimary)
                         Text(
-                            Strings.text("threeds.bankHandoff.title", locale),
-                            color = theme.primaryText,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Center,
-                        )
-                        Text(
-                            Strings.text("threeds.bankHandoff.message", locale),
+                            Strings.text("sheet.processingPayment", locale),
                             color = theme.secondaryText,
                             textAlign = TextAlign.Center,
                         )

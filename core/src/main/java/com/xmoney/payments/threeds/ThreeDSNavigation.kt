@@ -43,6 +43,15 @@ internal object ThreeDSNavigation {
 
     private const val BROWSER_FALLBACK_EXTRA = "browser_fallback_url"
 
+    private val cardNetworkDomains = setOf(
+        "visa.com",
+        "mastercard.com",
+        "americanexpress.com",
+        "discover.com",
+        "jcb.co.jp",
+        "unionpayintl.com",
+    )
+
     /** Insecure hops in the middle of the flow are blocked, not failed, so a stray link cannot end the challenge. */
     fun hop(url: String, isForMainFrame: Boolean): ThreeDSHop {
         if (ThreeDSUrlAllowlist.isAllowed(url)) return ThreeDSHop.Proceed
@@ -75,13 +84,27 @@ internal object ThreeDSNavigation {
         return intent
     }
 
-    /** An https link the bank app claims. Only from API 30, where the system can refuse browsers. */
+    /**
+     * An https link the bank app claims. Only from API 30, where the system can refuse browsers.
+     * Card-network help pages stay in the challenge even if a network app claims them.
+     */
     fun appLinkIntent(url: String, sdkInt: Int = Build.VERSION.SDK_INT): Intent? {
         if (sdkInt < Build.VERSION_CODES.R) return null
         if (!ThreeDSUrlAllowlist.isHttpsChallenge(url)) return null
-        return Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        val uri = Uri.parse(url)
+        if (isCardNetworkHost(uri.host)) return null
+        return Intent(Intent.ACTION_VIEW, uri)
             .addCategory(Intent.CATEGORY_BROWSABLE)
             .addFlags(Intent.FLAG_ACTIVITY_REQUIRE_NON_BROWSER)
+    }
+
+    /** The merchant's app may claim its return URL. Opening it would stack a second copy over the payment. */
+    fun claimedByOwnApp(packageManager: PackageManager, ownPackage: String, intent: Intent): Boolean =
+        Intent(intent).setPackage(ownPackage).resolveActivity(packageManager) != null
+
+    private fun isCardNetworkHost(host: String?): Boolean {
+        val normalized = host?.lowercase()?.trimEnd('.') ?: return false
+        return cardNetworkDomains.any { normalized == it || normalized.endsWith(".$it") }
     }
 
     /** The https page Chrome opens when no app handles an `intent:` link. */
