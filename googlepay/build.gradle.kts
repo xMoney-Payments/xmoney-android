@@ -61,7 +61,7 @@ dependencies {
     testImplementation(libs.okhttp)
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
-    debugImplementation(libs.compose.ui.test.manifest)
+    testImplementation(libs.compose.ui.test.manifest)
 }
 
 apply(from = rootProject.file("gradle/maven-publishing.gradle"))
