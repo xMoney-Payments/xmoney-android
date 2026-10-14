@@ -13,6 +13,7 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import com.xmoney.payments.config.PaymentConfig
 import com.xmoney.payments.config.ResolvedPaymentConfig
 import com.xmoney.payments.engine.PaymentSession
+import com.xmoney.payments.engine.PendingPayment
 import com.xmoney.payments.model.OrderChecksum
 import com.xmoney.payments.model.OrderPayload
 import com.xmoney.payments.model.PaymentIntent
@@ -31,6 +32,14 @@ class PaymentSheetViewModel(
     private var cachedTheme: CheckoutTheme? = null
     private var lastThemeDark: Boolean? = null
 
+    init {
+        session.onPendingChanged = { savedStateHandle[KEY_PENDING] = it }
+    }
+
+    /** A payment left without a result by a destroyed screen or a killed process. */
+    val pendingToRecover: PendingPayment?
+        get() = session.pendingPayment ?: savedStateHandle[KEY_PENDING]
+
     val intent: PaymentIntent = PaymentIntent(
         OrderPayload(config.orderPayload),
         OrderChecksum(config.orderChecksum),
@@ -47,6 +56,10 @@ class PaymentSheetViewModel(
         if (completed) return
         completed = true
         onComplete(result)
+    }
+
+    companion object {
+        internal const val KEY_PENDING = "xmoney_pending_payment"
     }
 
     class Factory(

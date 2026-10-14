@@ -19,6 +19,7 @@ import com.xmoney.payments.engine.DigitalWalletFactory
 import com.xmoney.payments.engine.EngineResult
 import com.xmoney.payments.engine.OrderConsumption
 import com.xmoney.payments.engine.PaymentSession
+import com.xmoney.payments.engine.PendingPaymentStore
 import com.xmoney.payments.engine.SheetState
 import com.xmoney.payments.model.CardInput
 import com.xmoney.payments.model.PaymentError
@@ -69,6 +70,12 @@ class EmbeddedPaymentController(
     private var onEvent: (EmbeddedEvent) -> Unit = {}
     private var boundIntent: PaymentIntent? = null
     private var submitHandler: (() -> Unit)? = null
+
+    init {
+        session.onPendingChanged = { pending ->
+            boundIntent?.let { PendingPaymentStore.put(PaymentSession.orderKey(it), pending) }
+        }
+    }
 
     /**
      * Submit the currently selected method (new card or saved card).
@@ -165,6 +172,11 @@ class EmbeddedPaymentController(
             isOrderConsumed = session.isOrderConsumed
             isProcessing = session.isProcessing
             applyUpdatingOrder(false)
+            val unsettled = PendingPaymentStore.get(PaymentSession.orderKey(order))
+            if (unsettled != null) {
+                runSubmission { session.recover(unsettled) }
+                return
+            }
             onEvent(EmbeddedEvent.Ready)
             val pending = pendingResolution
             pendingResolution = null

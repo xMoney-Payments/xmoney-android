@@ -18,9 +18,11 @@ import com.xmoney.payments.service.ConfigService
 import com.xmoney.payments.service.DigitalWalletsService
 import com.xmoney.payments.service.PaymentService
 import com.xmoney.payments.service.TransactionService
+import com.xmoney.payments.util.DeviceMetadata
 
 import android.content.Context
 import androidx.annotation.RestrictTo
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -30,11 +32,10 @@ import kotlinx.coroutines.selects.select
 interface ThreeDSPresenter {
     suspend fun presentThreeDS(
         url: String,
-        returnUrlMatcher: (String) -> Boolean,
         formMethod: String = "GET",
         params: Map<String, String> = emptyMap(),
         onShown: () -> Unit = {},
-    ): Boolean
+    ): ThreeDSChallengeEnd
     fun dismissThreeDS()
 }
 
@@ -59,6 +60,11 @@ class PaymentEngine(
         ?: throw PaymentError.InvalidKey()
 
     private val appContext = context.applicationContext
+
+    init {
+        DeviceMetadata.prepare(appContext)
+    }
+
     private val account = AccountService(http, env)
     private val configService = ConfigService(http, env)
     private val cards = CardsService(http, env)
@@ -69,8 +75,6 @@ class PaymentEngine(
     private var sessionToken: String = ""
     private var nameCheckValidationEnabled: Boolean = false
     private var cachedOrderInfo: OrderPayloadInfo? = null
-    private var cachedBackUrl: java.net.URI? = null
-    private var backUrlResolved: Boolean = false
     private val cachedWalletParams = mutableMapOf<String, WalletParams>()
 
     var onCardHolderVerification: ((CardHolderVerificationResult) -> Boolean)? =
@@ -163,34 +167,59 @@ class PaymentEngine(
 
     suspend fun deleteSavedCard(cardId: String) = cards.deleteCard(cardId, sessionToken)
 
+    /**
+     * Pending while the server has a transaction and the result is unknown. A cancellation, from a
+     * destroyed screen for example, leaves it set so the host can [resume].
+     */
+    var onPending: ((PendingPayment?) -> Unit)? = null
+
     private suspend fun submit(fields: Map<String, String>, presenter: ThreeDSPresenter): EngineResult {
         val response = payment.confirmPayment(fields)
         val parsed = payment.parse(response)
 
-        return when (val submission = parsed.submission) {
-            is PaymentSubmissionResult.Needs3DS -> {
-                val transactionId = requireTransactionIdForThreeDS(parsed.transactionId)
-                val backUrl = backUrl()
-                val matcher: (String) -> Boolean = { returnUrl ->
-                    backUrl != null && OrderPayloadDecoder.matchesReturnURL(returnUrl, backUrl)
+        val submission = parsed.submission
+        val pendingId = when (submission) {
+            is PaymentSubmissionResult.Transaction -> submission.id
+            else -> parsed.transactionId
+        }
+        pendingId?.let { onPending?.invoke(PendingPayment(it, sessionToken)) }
+        return settlePending {
+            when (submission) {
+                is PaymentSubmissionResult.Needs3DS -> {
+                    val transactionId = requireTransactionIdForThreeDS(parsed.transactionId)
+                    handleThreeDSWithBackgroundRefresh(
+                        submission,
+                        transactionId,
+                        presenter,
+                    )
                 }
-                handleThreeDSWithBackgroundRefresh(
-                    submission,
-                    transactionId,
-                    presenter,
-                    matcher,
-                )
+                is PaymentSubmissionResult.Redirect -> resolveByPolling(parsed.transactionId)
+                is PaymentSubmissionResult.Transaction -> resolveByPolling(submission.id)
             }
-            is PaymentSubmissionResult.Redirect -> resolveByPolling(parsed.transactionId)
-            is PaymentSubmissionResult.Transaction -> resolveByPolling(submission.id)
         }
     }
 
-    private fun backUrl(): java.net.URI? {
-        if (backUrlResolved) return cachedBackUrl
-        backUrlResolved = true
-        cachedBackUrl = OrderPayloadDecoder.backUrl(config.orderPayload)
-        return cachedBackUrl
+    /** Polls a payment whose screen was destroyed. The challenge page is gone, so the wait is short. */
+    suspend fun resume(pending: PendingPayment): EngineResult = settlePending {
+        val tx = transactions.poll(
+            pending.transactionId,
+            pending.sessionToken,
+            timeoutMs = RECOVERY_POLL_TIMEOUT_MS,
+        )
+        resultFromTransaction(tx)
+    }
+
+    private suspend fun settlePending(block: suspend () -> EngineResult): EngineResult {
+        val result = try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            onPending?.invoke(null)
+            throw e
+        }
+        onPending?.invoke(null)
+        return result
     }
 
     private suspend fun resolveByPolling(transactionId: String?): EngineResult {
@@ -203,13 +232,11 @@ class PaymentEngine(
         challenge: PaymentSubmissionResult.Needs3DS,
         transactionId: String,
         presenter: ThreeDSPresenter,
-        returnUrlMatcher: (String) -> Boolean,
     ): EngineResult = coroutineScope {
         val shown = CompletableDeferred<Unit>()
         val threeDSDeferred = async {
             presenter.presentThreeDS(
                 challenge.url,
-                returnUrlMatcher,
                 challenge.formMethod,
                 challenge.params,
                 onShown = { shown.complete(Unit) },
@@ -226,16 +253,35 @@ class PaymentEngine(
                     threeDSDeferred.cancel()
                     result
                 }
-                threeDSDeferred.onAwait { completed ->
-                    if (!completed) {
-                        reconcileCanceledThreeDS(
+                threeDSDeferred.onAwait { end ->
+                    when (val followUp = threeDSChallengeFollowUp(end)) {
+                        ThreeDSChallengeFollowUp.WaitForPoll -> pollDeferred.await()
+                        is ThreeDSChallengeFollowUp.ReconcileCancel -> reconcileCanceledThreeDS(
                             fetchTransaction = {
                                 transactions.getTransaction(transactionId, sessionToken)
                             },
                             pollDeferred = pollDeferred,
+                            graceMs = followUp.graceMs,
                         )
-                    } else {
-                        pollDeferred.await()
+                        is ThreeDSChallengeFollowUp.ThrowUnlessComplete -> {
+                            val tx = runCatching {
+                                transactions.getTransaction(transactionId, sessionToken)
+                            }.getOrNull()
+                            pollDeferred.cancel()
+                            if (tx != null && isTransactionComplete(tx)) {
+                                resultFromTransaction(tx)
+                            } else {
+                                throw PaymentError.ThreeDS(followUp.message)
+                            }
+                        }
+                        is ThreeDSChallengeFollowUp.WaitThenFail -> waitForPollOrFail(
+                            fetchTransaction = {
+                                transactions.getTransaction(transactionId, sessionToken)
+                            },
+                            pollDeferred = pollDeferred,
+                            graceMs = followUp.graceMs,
+                            message = followUp.message,
+                        )
                     }
                 }
             }

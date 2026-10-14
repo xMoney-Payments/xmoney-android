@@ -224,7 +224,6 @@ class ApiResponseModelsTest {
         assertEquals("merchant@test.com", input.invoiceEmail)
         assertTrue(input.saveCard)
         assertEquals("141973", input.cardId)
-        assertEquals("https://merchant.example/return", input.backUrl)
         assertEquals("{\"foo\":1}", input.customData)
 
         val customer = input.customer!!
