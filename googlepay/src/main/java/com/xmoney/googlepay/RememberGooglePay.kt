@@ -17,10 +17,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
-import androidx.core.view.OneShotPreDrawListener
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.xmoney.googlepay.internal.GooglePayAvailability
@@ -36,10 +33,8 @@ import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.payments.model.PaymentResult
 import com.xmoney.payments.threeds.ThreeDSHostController
-import kotlin.coroutines.resume
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * Compose-facing controller for embedding Google Pay in a merchant screen.
@@ -124,9 +119,10 @@ class GooglePayController internal constructor(
      */
     suspend fun updateOrder(
         intent: PaymentIntent,
-        onEvent: (GooglePayEvent) -> Unit = {},
+        onEvent: ((GooglePayEvent) -> Unit)? = null,
     ) {
-        this.onEvent = onEvent
+        if (isProcessing) throw PaymentError.Payment("Payment in progress")
+        onEvent?.let { this.onEvent = it }
         GooglePay.register()
         if (isBound(intent)) return
         val generation = ++bindGeneration
@@ -144,10 +140,11 @@ class GooglePayController internal constructor(
      * `onResult` is not called. A newer [updateOrder] cancels this one.
      */
     suspend fun updateOrder(
-        onEvent: (GooglePayEvent) -> Unit = {},
+        onEvent: ((GooglePayEvent) -> Unit)? = null,
         createOrder: suspend () -> PaymentIntent,
     ) {
-        this.onEvent = onEvent
+        if (isProcessing) throw PaymentError.Payment("Payment in progress")
+        onEvent?.let { this.onEvent = it }
         GooglePay.register()
         val generation = ++bindGeneration
         applyUpdatingOrder(true)
@@ -312,43 +309,37 @@ fun GooglePayButton(
     }
 
     val methods = controller.availability?.allowedPaymentMethodsJson
-    var buttonLaidOut by remember { mutableStateOf(false) }
+    var buttonDrawn by remember { mutableStateOf(false) }
     if (!methods.isNullOrBlank()) {
         GooglePayButtonWidget(
             appearance = controller.appearance,
             allowedPaymentMethods = methods,
             enabled = controller.isInteractionEnabled && controller.availability?.ready != false,
             onClick = { controller.startPayment() },
-            modifier = modifier.onGloballyPositioned { coords ->
-                if (coords.size.width > 1 && coords.size.height > 1) buttonLaidOut = true
-            },
+            modifier = modifier,
+            onDrawn = { buttonDrawn = true },
         )
-        ReportButtonDraw(surfaceEpoch, buttonLaidOut, emitReady)
+        ReportButtonDraw(surfaceEpoch, buttonDrawn, emitReady)
     } else if (surfaceEpoch > 0) {
         LaunchedEffect(surfaceEpoch) { emitReady() }
     }
 }
 
 @Composable
-private fun ReportButtonDraw(epoch: Int, laidOut: Boolean, onDrawn: () -> Unit) {
-    val view = LocalView.current
-    val laidOutState = rememberUpdatedState(laidOut)
+private fun ReportButtonDraw(epoch: Int, drawn: Boolean, onDrawn: () -> Unit) {
+    val drawnState = rememberUpdatedState(drawn)
     val onDrawnState = rememberUpdatedState(onDrawn)
     LaunchedEffect(epoch) {
         if (epoch <= 0) return@LaunchedEffect
-        var frames = 0
-        while (frames < MaxButtonFrames && !laidOutState.value) {
+        val startedAt = System.nanoTime()
+        while (
+            System.nanoTime() - startedAt < SurfaceDrawTimeoutNanos &&
+            !drawnState.value
+        ) {
             withFrameNanos { }
-            frames++
-        }
-        suspendCancellableCoroutine { continuation ->
-            val listener = OneShotPreDrawListener.add(view) {
-                if (continuation.isActive) continuation.resume(Unit)
-            }
-            continuation.invokeOnCancellation { listener.removeListener() }
         }
         onDrawnState.value()
     }
 }
 
-private const val MaxButtonFrames = 30
+private const val SurfaceDrawTimeoutNanos = 2_000_000_000L

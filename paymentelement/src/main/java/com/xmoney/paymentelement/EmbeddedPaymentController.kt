@@ -152,9 +152,10 @@ class EmbeddedPaymentController(
      */
     suspend fun updateOrder(
         order: PaymentIntent,
-        onEvent: (EmbeddedEvent) -> Unit = {},
+        onEvent: ((EmbeddedEvent) -> Unit)? = null,
     ) {
-        this.onEvent = onEvent
+        if (isProcessing) throw PaymentError.Payment("Payment in progress")
+        onEvent?.let { this.onEvent = it }
         if (isBound(order)) {
             paymentConfig = liveConfiguration.resolve(order)
             return
@@ -174,10 +175,11 @@ class EmbeddedPaymentController(
      * payable, and [onResult] is not called. A newer [updateOrder] cancels this one.
      */
     suspend fun updateOrder(
-        onEvent: (EmbeddedEvent) -> Unit = {},
+        onEvent: ((EmbeddedEvent) -> Unit)? = null,
         createOrder: suspend () -> PaymentIntent,
     ) {
-        this.onEvent = onEvent
+        if (isProcessing) throw PaymentError.Payment("Payment in progress")
+        onEvent?.let { this.onEvent = it }
         val generation = ++bindGeneration
         applyUpdatingOrder(true)
         val order = try {

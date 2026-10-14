@@ -772,15 +772,26 @@ private fun EmbeddedCheckoutScreen(
 
     LaunchedEffect(embedded, total, description, retryKey) {
         if (lines.isEmpty()) return@LaunchedEffect
-        if (intent != null) delay(300)
         error = null
         try {
-            // PaymentElement calls updateOrder when [intent] changes. Keep it
-            // mounted — do not clear intent or flip Ready.
-            intent = DemoCheckoutBackend.createPaymentIntent(
-                amountMinor = total,
-                description = description,
-            )
+            if (intent == null) {
+                intent = DemoCheckoutBackend.createPaymentIntent(
+                    amountMinor = total,
+                    description = description,
+                )
+            } else {
+                var next: PaymentIntent? = null
+                embedded.updateOrder {
+                    delay(300)
+                    DemoCheckoutBackend.createPaymentIntent(
+                        amountMinor = total,
+                        description = description,
+                    ).also { next = it }
+                }
+                // PaymentElement's repeated bind is a no-op. Keep it mounted
+                // and do not flip Ready while the cart changes.
+                intent = next
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

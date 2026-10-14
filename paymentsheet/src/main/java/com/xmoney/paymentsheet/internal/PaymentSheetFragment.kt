@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -90,6 +91,7 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         GooglePay.register()
+        surfaceReady = viewModel.readyEmitted
         resolutionLauncher = registerForActivityResult(
             ActivityResultContracts.StartIntentSenderForResult(),
         ) { result ->
@@ -226,6 +228,9 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
                                     } else {
                                         Modifier
                                     },
+                                )
+                                .then(
+                                    if (showCoin) Modifier.clearAndSetSemantics { } else Modifier,
                                 ),
                         ) {
                             PaymentSheetContent(
@@ -241,7 +246,7 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
                                 onSurfaceDrawn = {
                                     if (!surfaceReady) {
                                         surfaceReady = true
-                                        viewModel.onEvent(PaymentSheetEvent.Ready)
+                                        viewModel.emitReadyOnce()
                                     }
                                 },
                             )

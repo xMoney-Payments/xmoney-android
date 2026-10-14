@@ -67,11 +67,10 @@ private const val AMOUNT_MIN_MINOR = 500L
 /**
  * Update the bound order without unmounting Payment Element.
  *
- * Create a new `payload` + `checksum` on **your** server, then
- * [EmbeddedPaymentController.updateOrder] that [PaymentIntent]. Pay is
- * locked until it returns. Compose [PaymentElement] also calls `updateOrder`
- * when its `intent` changes — this sample calls `updateOrder` itself so the
- * native API is visible.
+ * Pass the server call that creates the new `payload` + `checksum` to
+ * [EmbeddedPaymentController.updateOrder]. Pay is locked during the debounce,
+ * server call, and bind. Then pass the returned [PaymentIntent] to
+ * [PaymentElement]; its repeated bind is a no-op.
  */
 class UpdateOrderSampleActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

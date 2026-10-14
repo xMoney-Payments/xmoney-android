@@ -13,8 +13,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * Waits until the card form has a real size and, when Google Pay is shown, the
- * wallet button has pre-drawn. Gives up after a short run of frames so a button
- * that never lands cannot hold the loading surface open.
+ * wallet button has pre-drawn. Gives up after two seconds so a button that
+ * never lands cannot hold the loading surface open.
  */
 @Composable
 internal fun ReportSurfaceDraw(
@@ -31,13 +31,12 @@ internal fun ReportSurfaceDraw(
     val onDrawnState = rememberUpdatedState(onDrawn)
     LaunchedEffect(epoch) {
         if (epoch <= 0) return@LaunchedEffect
-        var frames = 0
+        val startedAt = System.nanoTime()
         while (
-            frames < MaxSurfaceFrames &&
+            System.nanoTime() - startedAt < SurfaceDrawTimeoutNanos &&
             !(formReadyState.value && (!walletShownState.value || walletReadyState.value))
         ) {
             withFrameNanos { }
-            frames++
         }
         view.awaitPreDraw()
         onDrawnState.value()
@@ -63,4 +62,4 @@ internal suspend fun View.awaitPreDraw() {
     }
 }
 
-private const val MaxSurfaceFrames = 30
+private const val SurfaceDrawTimeoutNanos = 2_000_000_000L

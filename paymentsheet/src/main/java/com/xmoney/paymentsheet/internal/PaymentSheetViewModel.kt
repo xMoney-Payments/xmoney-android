@@ -29,6 +29,8 @@ class PaymentSheetViewModel(
     var onComplete: (EngineResult) -> Unit = {}
 
     private var completed = false
+    var readyEmitted: Boolean = savedStateHandle[KEY_READY_EMITTED] ?: false
+        private set
     private var cachedTheme: CheckoutTheme? = null
     private var lastThemeDark: Boolean? = null
 
@@ -58,8 +60,16 @@ class PaymentSheetViewModel(
         onComplete(result)
     }
 
+    fun emitReadyOnce() {
+        if (readyEmitted) return
+        readyEmitted = true
+        savedStateHandle[KEY_READY_EMITTED] = true
+        onEvent(PaymentSheetEvent.Ready)
+    }
+
     companion object {
         internal const val KEY_PENDING = "xmoney_pending_payment"
+        internal const val KEY_READY_EMITTED = "xmoney_ready_emitted"
     }
 
     class Factory(

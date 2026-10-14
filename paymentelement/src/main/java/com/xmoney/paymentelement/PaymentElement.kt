@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.paymentelement.theme.CheckoutTheme
@@ -89,6 +90,9 @@ fun PaymentElement(
                         } else {
                             Modifier
                         },
+                    )
+                    .then(
+                        if (!revealed) Modifier.clearAndSetSemantics { } else Modifier,
                     ),
             ) {
                 PaymentForm(

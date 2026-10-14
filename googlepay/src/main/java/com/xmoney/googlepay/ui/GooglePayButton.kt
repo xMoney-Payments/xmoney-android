@@ -11,10 +11,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import com.google.pay.button.ButtonTheme
 import com.google.pay.button.ButtonType
@@ -22,6 +25,7 @@ import com.google.pay.button.PayButton
 import com.xmoney.payments.config.WalletAppearance
 import com.xmoney.payments.config.WalletButtonColor
 import com.xmoney.payments.config.WalletButtonType
+import java.util.concurrent.atomic.AtomicBoolean
 
 internal val GooglePayButtonHeight = 56.dp
 
@@ -34,8 +38,12 @@ fun GooglePayButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     isDarkBackground: Boolean = false,
+    onDrawn: () -> Unit = {},
 ) {
     var useFallback by remember { mutableStateOf(false) }
+    val currentOnDrawn by rememberUpdatedState(onDrawn)
+    val drawReported = remember { AtomicBoolean(false) }
+    val hostView = LocalView.current
     val radius = (appearance.radius ?: 28f).dp
     val buttonTheme = resolveButtonTheme(appearance.color, isDarkBackground)
     val buttonType = resolveButtonType(appearance.type)
@@ -44,6 +52,12 @@ fun GooglePayButton(
         modifier = modifier
             .fillMaxWidth()
             .height(GooglePayButtonHeight)
+            .drawWithContent {
+                drawContent()
+                if (drawReported.compareAndSet(false, true)) {
+                    hostView.post { currentOnDrawn() }
+                }
+            }
             .clipToBounds(),
     ) {
         if (!useFallback) {

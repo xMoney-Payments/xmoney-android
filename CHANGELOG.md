@@ -24,6 +24,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The loading coin stays at its initial height. The surface resizes once, when the form and Google Pay button have drawn.
 - Compose `GooglePayEvent.Ready` fires after the button has pre-drawn, or as soon as Google Pay is known to be unavailable. Activity `GooglePay.present()` / `updateOrder()` still emit `Ready` when the order is bound on the open host.
 - `EmbeddedPaymentController.updateOrder()` no longer emits `Ready`. `PaymentElement` does, after the surface draws.
+- `GooglePayController.updateOrder()` no longer emits `Ready`. `GooglePayButton` does, after the wallet button draws.
+- Embedded and Google Pay `updateOrder()` calls now throw `PaymentError.Payment` while a payment is in progress, matching iOS.
 
 ### Fixed
 
