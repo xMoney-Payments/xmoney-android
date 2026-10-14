@@ -26,7 +26,6 @@ class ThreeDSHostControllerTest {
             val presented = async(Dispatchers.Unconfined) {
                 host.presentThreeDS(
                     url = "https://acs.example/challenge",
-                    returnUrlMatcher = { false },
                     formMethod = "GET",
                     params = emptyMap(),
                     onShown = {},
@@ -58,7 +57,6 @@ class ThreeDSHostControllerTest {
             val presented = async(Dispatchers.Unconfined) {
                 host.presentThreeDS(
                     url = "https://acs.example/challenge",
-                    returnUrlMatcher = { false },
                     formMethod = "GET",
                     params = emptyMap(),
                     onShown = {},

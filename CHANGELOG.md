@@ -6,8 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- 3DS can hand the shopper to their bank app and keep waiting while the payment is confirmed.
+- The shopper is asked before a bank app opens.
+
 ### Changed
 
+- 3DS completion follows the transaction. The return page no longer closes the challenge.
+- `browserLanguage` sent with a card payment is capped at 8 characters.
+- Closing after a switch to the bank app waits for the bank's answer.
+- The SDK no longer changes the app-wide WebView cookie setting. Only the 3DS WebView accepts third-party cookies.
+- Browser headers are sent only with the card payment request.
 - `Ready` on Payment Element, Payment Sheet, and the Compose Google Pay button is emitted after the card form has been laid out and, when Google Pay is offered, the wallet button has pre-drawn. It no longer fires when order bind returns.
 - Payment Element and Payment Sheet keep a loading coin over the form until that first draw. The cover swallows taps. A later `updateOrder` emits `Ready` again and does not bring the coin back.
 - The loading coin stays at its initial height. The surface resizes once, when the form and Google Pay button have drawn.
@@ -16,6 +26,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- An approval in the bank app is no longer reported as a failure after a dropped status check.
+- The bank-app hand-off works on Android 11 and later.
+- A load error on the return page no longer fails the payment.
+- A challenge shown again after the activity is recreated no longer stays on screen with no payment behind it.
+- A payment in progress is no longer lost when the screen rotates or the app is closed in the background during authentication.
+- A screen closed during authentication no longer reports a canceled payment.
+- The keyboard no longer covers the bank's code field.
+- Bank links that open the bank app over https now open the app on Android 11 and later, except links to the merchant's own app and to card-network sites.
+- Changing the language or font size during authentication no longer interrupts the challenge.
+- Screenshots are blocked while the authentication page is shown.
 - A merchant loader that collapsed the checkout to zero height could open before the Google Pay button had a real size. The example gate now lays the child out at its intrinsic size while covered, so the button can draw before `Ready`.
 
 ## [1.0.0] - 2026-09-08

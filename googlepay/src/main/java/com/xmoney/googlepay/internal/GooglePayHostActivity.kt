@@ -35,6 +35,7 @@ import com.xmoney.payments.engine.DigitalWalletAuthorizing
 import com.xmoney.payments.engine.EngineResult
 import com.xmoney.payments.engine.OrderConsumption
 import com.xmoney.payments.engine.PaymentSession
+import com.xmoney.payments.engine.PendingPayment
 import com.xmoney.payments.engine.SheetState
 import com.xmoney.payments.model.OrderChecksum
 import com.xmoney.payments.model.OrderPayload
@@ -134,6 +135,13 @@ class GooglePayHostActivity : FragmentActivity(), GooglePayCloseTarget, GooglePa
             )
         }
 
+        @Suppress("DEPRECATION")
+        val restoredPending = savedInstanceState?.getParcelable<PendingPayment>(STATE_PENDING)
+        if (restoredPending != null) {
+            recoverPayment(restoredPending)
+            return
+        }
+
         lifecycleScope.launch {
             try {
                 bindOrder(initialIntent)
@@ -142,6 +150,24 @@ class GooglePayHostActivity : FragmentActivity(), GooglePayCloseTarget, GooglePa
             } catch (_: Exception) {
                 // bindOrder already finished the host
             }
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        if (::session.isInitialized) {
+            session.pendingPayment?.let { outState.putParcelable(STATE_PENDING, it) }
+        }
+    }
+
+    /** The wallet payment was submitted before this activity was destroyed. Report its result. */
+    private fun recoverPayment(pending: PendingPayment) {
+        isProcessing = true
+        walletUiProcessing = true
+        lifecycleScope.launch {
+            val result = session.recover(pending)
+            isProcessing = false
+            finishWithResult(result)
         }
     }
 
@@ -251,6 +277,7 @@ class GooglePayHostActivity : FragmentActivity(), GooglePayCloseTarget, GooglePa
     companion object {
         const val EXTRA_CONFIG = "xmoney_google_pay_config"
         const val EXTRA_REQUEST_ID = "xmoney_google_pay_request_id"
+        private const val STATE_PENDING = "xmoney_pending_payment"
 
         fun createIntent(
             context: Context,

@@ -23,6 +23,11 @@ android {
         compose = true
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.isReturnDefaultValues = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -55,6 +60,7 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation("org.json:json:20240303")
+    testImplementation(libs.robolectric)
 }
 
 apply(from = rootProject.file("gradle/maven-publishing.gradle"))

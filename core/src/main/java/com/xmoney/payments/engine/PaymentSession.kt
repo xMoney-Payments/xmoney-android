@@ -10,6 +10,8 @@ import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.payments.network.HttpClient
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 
 /** Shared payment session for Sheet, Embedded, and standalone Google Pay. */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
@@ -41,11 +43,26 @@ class PaymentSession(
             engine.onCardHolderVerification = value
         }
 
+    /** Set while a submitted payment has no result yet. Hosts save it to [recover] after recreation. */
+    var pendingPayment: PendingPayment? = null
+        private set
+    var onPendingChanged: ((PendingPayment?) -> Unit)? = null
+
     private var boundKey: String? = null
     private var bindGeneration: Int = 0
+    /** A screen destroyed mid-payment cancels this; [recover] waits for it to unwind. */
+    private var activeOperation: Job? = null
 
     init {
         injectCardHolderVerification()
+        trackPending(engine)
+    }
+
+    private fun trackPending(target: PaymentEngine) {
+        target.onPending = { pending ->
+            pendingPayment = pending
+            onPendingChanged?.invoke(pending)
+        }
     }
 
     suspend fun bind(intent: PaymentIntent, activity: FragmentActivity? = null): SheetState {
@@ -63,6 +80,7 @@ class PaymentSession(
                 configuration.card.cardHolderVerification?.onCardHolderVerification?.let {
                     next.onCardHolderVerification = it
                 }
+                trackPending(next)
             }
         }
 
@@ -91,9 +109,20 @@ class PaymentSession(
     suspend fun submitSavedCard(cardId: String, presenter: ThreeDSPresenter): EngineResult =
         submit(didAuthorize = true) { engine.submitSavedCard(cardId, presenter) }
 
+    /** Reports the result of a payment whose screen was destroyed, instead of taking a second payment. */
+    suspend fun recover(pending: PendingPayment): EngineResult {
+        activeOperation?.takeIf { it.isCancelled }?.join()
+        return submit(didAuthorize = true) { engine.resume(pending) }
+    }
+
     suspend fun startWallet(authorizer: DigitalWalletAuthorizing): EngineResult {
         if (!beginOperation()) return canceled
-        val result = authorizer.start()
+        val result = try {
+            authorizer.start()
+        } catch (e: CancellationException) {
+            isProcessing = false
+            throw e
+        }
         finish(result, authorizer.didAuthorizePayment)
         return result
     }
@@ -126,17 +155,21 @@ class PaymentSession(
         operation: suspend () -> EngineResult,
     ): EngineResult {
         if (!beginOperation()) return canceled
+        val job = currentCoroutineContext()[Job]
+        activeOperation = job
         return try {
             val result = operation()
             finish(result, didAuthorize)
             result
         } catch (e: CancellationException) {
             isProcessing = false
-            canceled
+            throw e
         } catch (e: PaymentError) {
             finishFailed(e)
         } catch (e: Exception) {
             finishFailed(PaymentError.Payment(e.message ?: PaymentError.GENERIC_PAYMENT))
+        } finally {
+            if (activeOperation === job) activeOperation = null
         }
     }
 
@@ -160,6 +193,9 @@ class PaymentSession(
     }
 
     companion object {
+        /** Identifies a signed order, for [PendingPaymentStore]. */
+        fun orderKey(intent: PaymentIntent): String = key(intent)
+
         private fun key(intent: PaymentIntent): String =
             key(intent.orderPayload, intent.orderChecksum)
 
