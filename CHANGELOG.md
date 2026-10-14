@@ -10,7 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - 3DS can hand the shopper to their bank app and keep waiting while the payment is confirmed.
 - The shopper is asked before a bank app opens.
-- `EmbeddedPaymentController.updateOrder { }` and `GooglePayController.updateOrder { }` take a lambda that creates the next order. Pay is locked from the call, including while the lambda runs, until the new order is bound.
+- `EmbeddedPaymentController.updateOrder { }`, `GooglePayController.updateOrder { }`, and Activity `GooglePay.updateOrder { }` take a lambda that creates the next order. Pay is locked from the call, including while the lambda runs, until the new order is bound.
 
 ### Changed
 
@@ -20,12 +20,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The SDK no longer changes the app-wide WebView cookie setting. Only the 3DS WebView accepts third-party cookies.
 - Browser headers are sent only with the card payment request.
 - `Ready` on Payment Element, Payment Sheet, and the Compose Google Pay button is emitted after the card form has been laid out and, when Google Pay is offered, the wallet button has pre-drawn. It no longer fires when order bind returns.
-- Payment Element and Payment Sheet keep a loading coin over the form until that first draw. The cover swallows taps. `Ready` is emitted once. A later `updateOrder` does not emit it again or bring the coin back.
+- Payment Element and Payment Sheet keep a loading coin over the form until that first draw. The cover swallows taps and hides covered controls from accessibility. `Ready` is emitted once per mounted surface. A later `updateOrder` does not emit it again or bring the coin back.
 - The loading coin stays at its initial height. The surface resizes once, when the form and Google Pay button have drawn.
-- Compose `GooglePayEvent.Ready` fires after the button has pre-drawn, or as soon as Google Pay is known to be unavailable. Activity `GooglePay.present()` / `updateOrder()` still emit `Ready` when the order is bound on the open host.
+- Compose `GooglePayEvent.Ready` fires after the button has pre-drawn, or as soon as Google Pay is known to be unavailable. Activity `GooglePay.present()` emits `Ready` after its initial bind; later `updateOrder()` calls do not.
 - `EmbeddedPaymentController.updateOrder()` no longer emits `Ready`. `PaymentElement` does, after the surface draws.
 - `GooglePayController.updateOrder()` no longer emits `Ready`. `GooglePayButton` does, after the wallet button draws.
 - Embedded and Google Pay `updateOrder()` calls now throw `PaymentError.Payment` while a payment is in progress, matching iOS.
+- A newer closure-based `updateOrder` cooperatively cancels the previous order-creation task. An initial Element or Compose Google Pay bind failure replaces loading with an SDK-authored failure state. A later bind failure throws and leaves the previous order payable, without `onResult`. An initial Activity Google Pay load failure delivers `Failed` and finishes the host.
+
+### Breaking changes
+
+- `Ready` is scoped to a mounted surface instead of a controller and is no longer an update-completion signal.
+
+### Migration
+
+- Listen for `Ready` on `PaymentElement` or `GooglePayButton`, not on a direct controller `updateOrder()` call. Direct `EmbeddedPaymentController.updateOrder()` and Compose `GooglePayController.updateOrder()` no longer emit it.
+- `Ready` is emitted once per mounted surface, for the first draw. A remount emits it again. Do not show a new loader that waits for `Ready` on later order updates; use `isInteractionEnabled` for update-order chrome.
+- Treat the suspend return as update completion and handle `CancellationException` when a newer update supersedes an older one. Keep order-creation endpoints idempotent.
+- A failed `updateOrder` after a checkout surface is already bound throws and does not call `onResult`. Keep the mounted surface; the previous order is still payable.
+- Activity Google Pay finishes its host when the first load fails. Wait for `onResult`, not for the activity to remain open with an error.
+- Keep `PaymentElement` and `GooglePayButton` composed at their real size under merchant loading. A zero-height host cannot draw the Google Pay button and delays `Ready` until the two-second fallback.
+- Publish and consume the Android SDK artifacts at the same version. Payment Sheet and Payment Element share internal Compose surface contracts.
 
 ### Fixed
 
@@ -39,6 +54,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Bank links that open the bank app over https now open the app on Android 11 and later, except links to the merchant's own app and to card-network sites.
 - Changing the language or font size during authentication no longer interrupts the challenge.
 - Screenshots are blocked while the authentication page is shown.
+
+### Example app
+
 - In the example app, Pay could charge the previous order when tapped right after an amount change, before the new order was bound. The update-order samples now use `updateOrder { }`.
 - A merchant loader that collapsed the checkout to zero height could open before the Google Pay button had a real size. The example gate now lays the child out at its intrinsic size while covered, so the button can draw before `Ready`.
 

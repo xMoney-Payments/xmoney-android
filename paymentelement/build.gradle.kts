@@ -56,6 +56,10 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation("org.json:json:20240303")
     testImplementation(libs.robolectric)
+    testImplementation(libs.okhttp)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
 }
 
 apply(from = rootProject.file("gradle/maven-publishing.gradle"))

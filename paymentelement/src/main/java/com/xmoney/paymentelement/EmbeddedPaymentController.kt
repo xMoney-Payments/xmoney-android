@@ -29,6 +29,9 @@ import com.xmoney.payments.model.SavedCard
 import com.xmoney.payments.threeds.ThreeDSHostController
 import com.xmoney.payments.validation.CardFieldValidators
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 /**
@@ -62,7 +65,10 @@ class EmbeddedPaymentController(
 
     internal var isUpdatingOrder by mutableStateOf(false)
         private set
+    internal var bindError: String? by mutableStateOf(null)
+        private set
     private var bindGeneration = 0
+    private var createOrderTask: Deferred<PaymentIntent>? = null
     private var threeDS: ThreeDSHostController? = null
     private var authorizer: DigitalWalletAuthorizing? = null
     private var resolutionLauncher: ActivityResultLauncher<IntentSenderRequest>? = null
@@ -149,18 +155,22 @@ class EmbeddedPaymentController(
      * the in-flight one ([CancellationException]); the new intent is installed
      * only after success. Pay is not locked while you create [order] on your
      * server; pass that call to the `createOrder` overload to lock it too.
+     * Rebinding the already-bound order is always a no-op, including while a
+     * payment is in progress.
      */
     suspend fun updateOrder(
         order: PaymentIntent,
         onEvent: ((EmbeddedEvent) -> Unit)? = null,
     ) {
-        if (isProcessing) throw PaymentError.Payment("Payment in progress")
-        onEvent?.let { this.onEvent = it }
+        onEvent?.let { this@EmbeddedPaymentController.onEvent = it }
         if (isBound(order)) {
             paymentConfig = liveConfiguration.resolve(order)
             return
         }
+        if (isProcessing) throw PaymentError.Payment("Payment in progress")
         val generation = ++bindGeneration
+        createOrderTask?.cancel()
+        createOrderTask = null
         applyUpdatingOrder(true)
         bindLocked(generation, order)
     }
@@ -177,22 +187,27 @@ class EmbeddedPaymentController(
     suspend fun updateOrder(
         onEvent: ((EmbeddedEvent) -> Unit)? = null,
         createOrder: suspend () -> PaymentIntent,
-    ) {
+    ) = coroutineScope {
         if (isProcessing) throw PaymentError.Payment("Payment in progress")
-        onEvent?.let { this.onEvent = it }
+        onEvent?.let { this@EmbeddedPaymentController.onEvent = it }
         val generation = ++bindGeneration
         applyUpdatingOrder(true)
+        createOrderTask?.cancel()
+        val task = async { createOrder() }
+        createOrderTask = task
         val order = try {
-            createOrder()
+            task.await()
         } catch (e: Throwable) {
             if (generation == bindGeneration) applyUpdatingOrder(false)
             throw e
+        } finally {
+            if (createOrderTask === task) createOrderTask = null
         }
         if (generation != bindGeneration) throw CancellationException()
         if (isBound(order)) {
             paymentConfig = liveConfiguration.resolve(order)
             applyUpdatingOrder(false)
-            return
+            return@coroutineScope
         }
         bindLocked(generation, order)
     }
@@ -201,7 +216,9 @@ class EmbeddedPaymentController(
         boundIntent == order && sheetState != null && !isOrderConsumed
 
     private suspend fun bindLocked(generation: Int, order: PaymentIntent) {
+        val initial = sheetState == null
         val threeDSHost = ThreeDSHostController(activity) { liveConfiguration.options.locale }
+        bindError = null
         try {
             val loaded = session.bind(order, activity)
             if (generation != bindGeneration) throw CancellationException()
@@ -237,12 +254,15 @@ class EmbeddedPaymentController(
         } catch (e: Exception) {
             if (generation != bindGeneration) throw CancellationException()
             applyUpdatingOrder(false)
-            onResult(
-                OrderConsumption.merchantResult(
-                    if (e is PaymentError) EngineResult.failed(e)
-                    else EngineResult.failed("LOAD_ERROR", e.message ?: PaymentError.GENERIC_LOAD),
-                ),
-            )
+            if (initial) {
+                bindError = if (e is PaymentError) e.merchantMessage() else PaymentError.GENERIC_LOAD
+                onResult(
+                    OrderConsumption.merchantResult(
+                        if (e is PaymentError) EngineResult.failed(e)
+                        else EngineResult.failed("LOAD_ERROR", e.message ?: PaymentError.GENERIC_LOAD),
+                    ),
+                )
+            }
             throw e
         }
     }

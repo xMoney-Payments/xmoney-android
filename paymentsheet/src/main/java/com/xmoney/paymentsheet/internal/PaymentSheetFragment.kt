@@ -91,7 +91,6 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         GooglePay.register()
-        surfaceReady = viewModel.readyEmitted
         resolutionLauncher = registerForActivityResult(
             ActivityResultContracts.StartIntentSenderForResult(),
         ) { result ->
@@ -246,7 +245,7 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
                                 onSurfaceDrawn = {
                                     if (!surfaceReady) {
                                         surfaceReady = true
-                                        viewModel.emitReadyOnce()
+                                        viewModel.emitReady()
                                     }
                                 },
                             )
@@ -401,6 +400,7 @@ private fun LoadingCoin(theme: CheckoutTheme, onHeight: (Dp) -> Unit) {
                     indication = null,
                     onClick = {},
                 )
+                .clearAndSetSemantics { }
                 .padding(40.dp),
             contentAlignment = Alignment.Center,
         ) {

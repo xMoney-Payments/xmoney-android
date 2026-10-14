@@ -113,20 +113,39 @@ class GooglePay(
      *
      * Call after [present], while the overlay is still open. The wallet button
      * is disabled until this returns. This does not emit [GooglePayEvent.Processing].
-     * While a charge is in flight the call returns without [GooglePayEvent.Ready].
+     * While a charge is in flight a different intent throws [com.xmoney.payments.model.PaymentError.Payment].
+     * Later updates do not emit [GooglePayEvent.Ready].
      * A newer [updateOrder] cancels the in-flight one ([CancellationException]).
      *
      * @throws IllegalStateException if this instance has no open host
      */
     suspend fun updateOrder(
         intent: PaymentIntent,
-        onEvent: (GooglePayEvent) -> Unit = {},
+        onEvent: ((GooglePayEvent) -> Unit)? = null,
     ) {
         GooglePay.register()
         val requestId = lastRequestId
             ?: throw IllegalStateException("Google Pay is not presented")
         withContext(Dispatchers.Main.immediate) {
             GooglePaySessionRegistry.updateOrder(requestId, intent, onEvent)
+        }
+    }
+
+    /**
+     * Create and bind a new signed order on the open Google Pay host.
+     *
+     * Interaction is disabled before [createOrder] starts. A newer update
+     * cooperatively cancels an in-flight creation task.
+     */
+    suspend fun updateOrder(
+        onEvent: ((GooglePayEvent) -> Unit)? = null,
+        createOrder: suspend () -> PaymentIntent,
+    ) {
+        GooglePay.register()
+        val requestId = lastRequestId
+            ?: throw IllegalStateException("Google Pay is not presented")
+        withContext(Dispatchers.Main.immediate) {
+            GooglePaySessionRegistry.updateOrder(requestId, onEvent, createOrder)
         }
     }
 
@@ -137,9 +156,10 @@ class GooglePay(
 }
 
 /**
- * [Ready] from [GooglePayButton] is emitted after the button has pre-drawn, or
- * as soon as Google Pay is known to be unavailable. [GooglePay.present] and
- * [GooglePay.updateOrder] emit [Ready] when the order is bound on the open host.
+ * [Ready] from [GooglePayButton] is emitted once per mounted surface, after the
+ * button has pre-drawn, or as soon as Google Pay is known to be unavailable.
+ * [GooglePay.present] emits [Ready] after the initial host bind. Later
+ * [GooglePay.updateOrder] calls do not emit it.
  */
 sealed class GooglePayEvent {
     data object Ready : GooglePayEvent()

@@ -6,6 +6,7 @@ import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -34,7 +35,11 @@ import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.payments.model.PaymentResult
 import com.xmoney.payments.threeds.ThreeDSHostController
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Compose-facing controller for embedding Google Pay in a merchant screen.
@@ -62,6 +67,8 @@ class GooglePayController internal constructor(
         private set
     internal var isProcessing by mutableStateOf(false)
         private set
+    internal var bindError: String? by mutableStateOf(null)
+        private set
     var isOrderConsumed: Boolean by mutableStateOf(false)
         private set
     /** False during [updateOrder], an in-flight charge, or after the order is consumed. */
@@ -75,6 +82,7 @@ class GooglePayController internal constructor(
 
     private var isUpdatingOrder by mutableStateOf(false)
     private var bindGeneration = 0
+    private var createOrderTask: Deferred<PaymentIntent>? = null
     private var boundIntent: PaymentIntent? = null
 
     /** Site/config allows Google Pay for this order. */
@@ -115,17 +123,20 @@ class GooglePayController internal constructor(
      * This does not emit [GooglePayEvent.Processing]. A newer [updateOrder]
      * cancels the in-flight one ([CancellationException]). The button is not
      * locked while you create [intent] on your server; pass that call to the
-     * `createOrder` overload to lock it too.
+     * `createOrder` overload to lock it too. Rebinding the already-bound intent
+     * is always a no-op, including while a payment is in progress.
      */
     suspend fun updateOrder(
         intent: PaymentIntent,
         onEvent: ((GooglePayEvent) -> Unit)? = null,
     ) {
-        if (isProcessing) throw PaymentError.Payment("Payment in progress")
         onEvent?.let { this.onEvent = it }
         GooglePay.register()
         if (isBound(intent)) return
+        if (isProcessing) throw PaymentError.Payment("Payment in progress")
         val generation = ++bindGeneration
+        createOrderTask?.cancel()
+        createOrderTask = null
         applyUpdatingOrder(true)
         bindLocked(generation, intent)
     }
@@ -142,22 +153,27 @@ class GooglePayController internal constructor(
     suspend fun updateOrder(
         onEvent: ((GooglePayEvent) -> Unit)? = null,
         createOrder: suspend () -> PaymentIntent,
-    ) {
+    ) = coroutineScope {
         if (isProcessing) throw PaymentError.Payment("Payment in progress")
-        onEvent?.let { this.onEvent = it }
+        onEvent?.let { this@GooglePayController.onEvent = it }
         GooglePay.register()
         val generation = ++bindGeneration
         applyUpdatingOrder(true)
+        createOrderTask?.cancel()
+        val task = async { createOrder() }
+        createOrderTask = task
         val intent = try {
-            createOrder()
+            task.await()
         } catch (e: Throwable) {
             if (generation == bindGeneration) applyUpdatingOrder(false)
             throw e
+        } finally {
+            if (createOrderTask === task) createOrderTask = null
         }
         if (generation != bindGeneration) throw CancellationException()
         if (isBound(intent)) {
             applyUpdatingOrder(false)
-            return
+            return@coroutineScope
         }
         bindLocked(generation, intent)
     }
@@ -166,7 +182,9 @@ class GooglePayController internal constructor(
         boundIntent == intent && availability != null && !isOrderConsumed
 
     private suspend fun bindLocked(generation: Int, intent: PaymentIntent) {
+        val initial = availability == null
         val host = ThreeDSHostController(activity) { liveConfiguration.options.locale }
+        bindError = null
         try {
             val loaded = session.bind(intent, activity)
             if (generation != bindGeneration) throw CancellationException()
@@ -201,11 +219,14 @@ class GooglePayController internal constructor(
         } catch (e: Exception) {
             if (generation != bindGeneration) throw CancellationException()
             applyUpdatingOrder(false)
-            onResult(
-                OrderConsumption.merchantResult(
-                    EngineResult.failed("LOAD_ERROR", e.message ?: PaymentError.GENERIC_LOAD),
-                ),
-            )
+            if (initial) {
+                bindError = if (e is PaymentError) e.merchantMessage() else PaymentError.GENERIC_LOAD
+                onResult(
+                    OrderConsumption.merchantResult(
+                        EngineResult.failed("LOAD_ERROR", e.message ?: PaymentError.GENERIC_LOAD),
+                    ),
+                )
+            }
             throw e
         }
     }
@@ -281,9 +302,9 @@ fun rememberGooglePay(
 /**
  * Standalone Google Pay button. When [intent] changes, calls
  * [GooglePayController.updateOrder]. The button stays disabled until that returns.
- * [GooglePayEvent.Ready] is emitted once, after the button has first pre-drawn, or as
- * soon as Google Pay is known to be unavailable. A later [intent] change does not
- * emit it again.
+ * [GooglePayEvent.Ready] is emitted once per mounted surface, after the button has
+ * first pre-drawn, or as soon as Google Pay is known to be unavailable. A later
+ * [intent] change does not emit it again.
  */
 @Composable
 fun GooglePayButton(
@@ -301,9 +322,21 @@ fun GooglePayButton(
             currentOnEvent(GooglePayEvent.Ready)
         }
     }
-    LaunchedEffect(controller, intent) {
-        controller.updateOrder(intent) { event ->
-            if (event !is GooglePayEvent.Ready) currentOnEvent(event)
+    val isProcessing = controller.isProcessing
+    LaunchedEffect(controller, intent, isProcessing) {
+        try {
+            controller.updateOrder(intent) { event ->
+                if (event !is GooglePayEvent.Ready) currentOnEvent(event)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: PaymentError.Payment) {
+            return@LaunchedEffect
+        } catch (_: Exception) {
+            if (controller.bindError != null && controller.availability == null) {
+                surfaceEpoch++
+            }
+            return@LaunchedEffect
         }
         surfaceEpoch++
     }
@@ -320,6 +353,9 @@ fun GooglePayButton(
             onDrawn = { buttonDrawn = true },
         )
         ReportButtonDraw(surfaceEpoch, buttonDrawn, emitReady)
+    } else if (controller.bindError != null) {
+        Text(controller.bindError ?: PaymentError.GENERIC_LOAD, modifier = modifier)
+        LaunchedEffect(surfaceEpoch) { emitReady() }
     } else if (surfaceEpoch > 0) {
         LaunchedEffect(surfaceEpoch) { emitReady() }
     }
@@ -331,15 +367,15 @@ private fun ReportButtonDraw(epoch: Int, drawn: Boolean, onDrawn: () -> Unit) {
     val onDrawnState = rememberUpdatedState(onDrawn)
     LaunchedEffect(epoch) {
         if (epoch <= 0) return@LaunchedEffect
-        val startedAt = System.nanoTime()
-        while (
-            System.nanoTime() - startedAt < SurfaceDrawTimeoutNanos &&
-            !drawnState.value
-        ) {
-            withFrameNanos { }
+        val drawnInTime = withTimeoutOrNull(SurfaceDrawTimeoutMillis) {
+            while (!drawnState.value) withFrameNanos { }
+            true
+        } == true
+        if (!drawnInTime) {
+            android.util.Log.d("XMoneySurfaceDraw", "Google Pay draw timed out; revealing fallback")
         }
         onDrawnState.value()
     }
 }
 
-private const val SurfaceDrawTimeoutNanos = 2_000_000_000L
+private const val SurfaceDrawTimeoutMillis = 2_000L

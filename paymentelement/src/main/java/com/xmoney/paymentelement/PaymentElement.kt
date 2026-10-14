@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -25,12 +26,14 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
+import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.paymentelement.theme.CheckoutTheme
 import com.xmoney.paymentelement.ui.PaymentForm
 import com.xmoney.paymentelement.ui.UIHelpers
 import com.xmoney.paymentelement.ui.XCoinFlipLoader
-import com.xmoney.paymentelement.ui.awaitPreDraw
+import com.xmoney.paymentelement.ui.awaitPreDrawOrTimeout
+import kotlinx.coroutines.CancellationException
 
 /**
  * Merchant-hosted Payment Element. Renders available methods (Google Pay,
@@ -38,9 +41,9 @@ import com.xmoney.paymentelement.ui.awaitPreDraw
  * without the bottom-sheet chrome.
  *
  * When [intent] changes, calls [EmbeddedPaymentController.updateOrder].
- * Pay stays locked until that returns. [EmbeddedEvent.Ready] is emitted once, after
- * the card form and, when offered, the Google Pay button have first pre-drawn.
- * A later [intent] change does not emit it again.
+ * Pay stays locked until that returns. [EmbeddedEvent.Ready] is emitted once per
+ * mounted surface, after the card form and, when offered, the Google Pay button have
+ * first pre-drawn. A later [intent] change does not emit it again.
  */
 @Composable
 fun PaymentElement(
@@ -56,15 +59,30 @@ fun PaymentElement(
     var coverHeight by remember { mutableStateOf(0.dp) }
     val density = LocalDensity.current
     val view = LocalView.current
-    LaunchedEffect(controller, intent) {
-        controller.updateOrder(intent) { event ->
-            if (event !is EmbeddedEvent.Ready) currentOnEvent(event)
+    val isProcessing = controller.isProcessing
+    LaunchedEffect(controller, intent, isProcessing) {
+        try {
+            controller.updateOrder(intent) { event ->
+                if (event !is EmbeddedEvent.Ready) currentOnEvent(event)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: PaymentError.Payment) {
+            return@LaunchedEffect
+        } catch (_: Exception) {
+            if (controller.bindError != null && controller.sheetState == null) {
+                surfaceEpoch++
+            }
+            return@LaunchedEffect
         }
         surfaceEpoch++
     }
-    LaunchedEffect(revealed) {
-        if (!revealed || readyEmitted) return@LaunchedEffect
-        view.awaitPreDraw()
+    LaunchedEffect(controller.bindError, surfaceEpoch) {
+        if (controller.bindError == null || controller.sheetState != null || surfaceEpoch <= 0) {
+            return@LaunchedEffect
+        }
+        view.awaitPreDrawOrTimeout()
+        if (!revealed) revealed = true
         if (!readyEmitted) {
             readyEmitted = true
             currentOnEvent(EmbeddedEvent.Ready)
@@ -112,9 +130,20 @@ fun PaymentElement(
                         if (!revealed) {
                             revealed = true
                         }
+                        if (!readyEmitted) {
+                            readyEmitted = true
+                            currentOnEvent(EmbeddedEvent.Ready)
+                        }
                     },
                 )
             }
+        } else if (controller.bindError != null) {
+            Text(
+                text = controller.bindError ?: "",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+            )
         }
         if (!revealed) {
             val isDark = if (config != null) {
@@ -136,6 +165,7 @@ fun PaymentElement(
                         indication = null,
                         onClick = {},
                     )
+                    .clearAndSetSemantics { }
                     .padding(40.dp),
                 contentAlignment = Alignment.Center,
             ) {

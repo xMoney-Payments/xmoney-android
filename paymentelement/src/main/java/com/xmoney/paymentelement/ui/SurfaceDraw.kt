@@ -1,5 +1,7 @@
 package com.xmoney.paymentelement.ui
 
+import android.os.SystemClock
+import android.util.Log
 import android.view.View
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -8,8 +10,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.OneShotPreDrawListener
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Waits until the card form has a real size and, when Google Pay is shown, the
@@ -31,24 +35,46 @@ internal fun ReportSurfaceDraw(
     val onDrawnState = rememberUpdatedState(onDrawn)
     LaunchedEffect(epoch) {
         if (epoch <= 0) return@LaunchedEffect
-        val startedAt = System.nanoTime()
-        while (
-            System.nanoTime() - startedAt < SurfaceDrawTimeoutNanos &&
-            !(formReadyState.value && (!walletShownState.value || walletReadyState.value))
-        ) {
-            withFrameNanos { }
+        val deadline = SystemClock.elapsedRealtime() + SurfaceDrawTimeoutMillis
+        val contentReady = withTimeoutOrNull(SurfaceDrawTimeoutMillis) {
+            while (!(formReadyState.value && (!walletShownState.value || walletReadyState.value))) {
+                withFrameNanos { }
+            }
+            true
+        } == true
+        val remaining = (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+        val preDrawn = remaining > 0L && withTimeoutOrNull(remaining) {
+            view.awaitPreDraw()
+            true
+        } == true
+        if (!contentReady || !preDrawn) {
+            Log.d(SurfaceDrawLogTag, "Checkout draw timed out; revealing fallback")
         }
-        view.awaitPreDraw()
         onDrawnState.value()
     }
 }
 
 internal fun View.armSizedPreDraw(onDrawn: () -> Unit) {
+    val completed = AtomicBoolean(false)
+    postDelayed(
+        {
+            if (completed.compareAndSet(false, true)) {
+                Log.d(SurfaceDrawLogTag, "Wallet draw timed out; revealing fallback")
+                onDrawn()
+            }
+        },
+        SurfaceDrawTimeoutMillis,
+    )
+    armSizedPreDraw(completed, onDrawn)
+}
+
+private fun View.armSizedPreDraw(completed: AtomicBoolean, onDrawn: () -> Unit) {
     OneShotPreDrawListener.add(this) {
+        if (completed.get()) return@add
         if (width > 1 && height > 1) {
-            onDrawn()
+            if (completed.compareAndSet(false, true)) onDrawn()
         } else if (isAttachedToWindow) {
-            armSizedPreDraw(onDrawn)
+            armSizedPreDraw(completed, onDrawn)
         }
     }
 }
@@ -62,4 +88,15 @@ internal suspend fun View.awaitPreDraw() {
     }
 }
 
-private const val SurfaceDrawTimeoutNanos = 2_000_000_000L
+internal suspend fun View.awaitPreDrawOrTimeout() {
+    val drew = withTimeoutOrNull(SurfaceDrawTimeoutMillis) {
+        awaitPreDraw()
+        true
+    } == true
+    if (!drew) {
+        Log.d(SurfaceDrawLogTag, "Checkout draw timed out; revealing fallback")
+    }
+}
+
+private const val SurfaceDrawTimeoutMillis = 2_000L
+private const val SurfaceDrawLogTag = "XMoneySurfaceDraw"

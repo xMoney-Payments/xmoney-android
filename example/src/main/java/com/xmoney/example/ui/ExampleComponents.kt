@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -402,7 +403,8 @@ fun MerchantReadyGate(
         Box(
             Modifier
                 .fillMaxWidth()
-                .wrapContentHeight(align = Alignment.Top, unbounded = true),
+                .wrapContentHeight(align = Alignment.Top, unbounded = true)
+                .then(if (!hasBound) Modifier.clearAndSetSemantics { } else Modifier),
         ) {
             content()
         }
@@ -415,7 +417,8 @@ fun MerchantReadyGate(
                     .onSizeChanged { size ->
                         val height = with(density) { size.height.toDp() }
                         if (height > 1.dp && height != placeholderHeight) placeholderHeight = height
-                    },
+                    }
+                    .clearAndSetSemantics { contentDescription = message },
             ) {
                 placeholder()
             }
