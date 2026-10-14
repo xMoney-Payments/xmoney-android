@@ -54,7 +54,7 @@ internal fun View.armSizedPreDraw(onDrawn: () -> Unit) {
     }
 }
 
-private suspend fun View.awaitPreDraw() {
+internal suspend fun View.awaitPreDraw() {
     suspendCancellableCoroutine { continuation ->
         val listener = OneShotPreDrawListener.add(this) {
             if (continuation.isActive) continuation.resume(Unit)

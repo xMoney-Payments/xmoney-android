@@ -4,8 +4,6 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -131,7 +129,6 @@ private fun EmbeddedPaymentSampleScreen(activity: FragmentActivity) {
         title = "Embedded Element",
         subtitle = "Payment form lives in your layout.",
         activity = activity,
-        scrollable = false,
         showTestCards = true,
     ) {
         SampleOrderCard()
@@ -150,9 +147,7 @@ private fun EmbeddedPaymentSampleScreen(activity: FragmentActivity) {
                     PaymentElement(
                         controller = embedded,
                         intent = intent!!,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState()),
+                        modifier = Modifier.fillMaxWidth(),
                         onEvent = { event ->
                             if (event is EmbeddedEvent.Ready) ready = true
                         },

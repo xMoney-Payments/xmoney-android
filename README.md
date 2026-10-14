@@ -134,7 +134,7 @@ Copy-paste sample: [`PaymentSheetSampleActivity.kt`](example/src/main/java/com/x
 
 ## Payment Element
 
-Same form as the sheet, without the bottom-sheet chrome. Mount it in your layout. Embedded does not add outer content padding or a page fill — the host background shows through; supply your own page spacing. Keep merchant loading until `EmbeddedEvent.Ready`. Bind runs only while `PaymentElement` is composed, so leave it mounted at its real height and cover it — a zero-height slot cannot draw the Google Pay button. `Ready` fires after the card form and, when offered, the wallet button have pre-drawn. The element’s own coin stays up until that first `Ready` and swallows taps; a later `updateOrder` emits `Ready` again without bringing the coin back:
+Same form as the sheet, without the bottom-sheet chrome. Mount it in your layout. Embedded does not add outer content padding or a page fill — the host background shows through; supply your own page spacing. Keep merchant loading until `EmbeddedEvent.Ready`. Bind runs only while `PaymentElement` is composed, so leave it mounted at its real height and cover it — a zero-height slot cannot draw the Google Pay button. `Ready` fires after the card form and, when offered, the wallet button have pre-drawn. The element’s own coin stays up until `Ready` and swallows taps. `Ready` fires once; a later `updateOrder` does not emit it again or bring the coin back:
 
 ```kotlin
 var ready by remember { mutableStateOf(false) }
@@ -171,7 +171,16 @@ embedded.updateOrder(
 )
 ```
 
-Compose `PaymentElement` / `GooglePayButton` call `updateOrder` when `intent` changes. Keep the surface mounted; do not set the intent to `null` or swap the form for a loader. Pay stays locked (`isInteractionEnabled`) until `updateOrder` returns. `Ready` follows after the surface has drawn. Gate a merchant-owned Pay button with `embedded.isInteractionEnabled`. Direct `EmbeddedPaymentController.updateOrder()` does not emit `Ready`.
+When the shopper changes the cart, pass the server call instead. Pay is locked from the call, including while your server creates the order, so a fast Pay tap cannot charge the previous order. If the lambda throws, the previous order stays bound and payable, and `onResult` is not called:
+
+```kotlin
+embedded.updateOrder {
+    val (payload, checksum) = backend.createOrder(cart)
+    PaymentIntent(OrderPayload(payload), OrderChecksum(checksum))
+}
+```
+
+Compose `PaymentElement` / `GooglePayButton` call `updateOrder` when `intent` changes. Keep the surface mounted; do not set the intent to `null` or swap the form for a loader. Pay stays locked (`isInteractionEnabled`) until `updateOrder` returns. `Ready` is emitted once, for the first draw, and not again on `updateOrder`. Gate a merchant-owned Pay button with `embedded.isInteractionEnabled`. Direct `EmbeddedPaymentController.updateOrder()` does not emit `Ready`.
 
 Copy-paste sample: [`UpdateOrderSampleActivity.kt`](example/src/main/java/com/xmoney/example/samples/UpdateOrderSampleActivity.kt)
 
@@ -265,7 +274,7 @@ googlePay.dismiss()
 
 Pre-auth dismiss delivers `PaymentResult.Canceled` and does **not** consume. Present or tap again with the same intent.
 
-A new `PaymentIntent` on `GooglePayButton` calls `GooglePayController.updateOrder` (same as Element). Wallet chrome uses `GooglePayController.updateAppearance`.
+A new `PaymentIntent` on `GooglePayButton` calls `GooglePayController.updateOrder` (same as Element). When the cart changes, call `googlePay.updateOrder { backend.createOrder(cart) }` first so the wallet button is locked while your server creates the order, then pass the returned intent to `GooglePayButton`. Wallet chrome uses `GooglePayController.updateAppearance`.
 
 Copy-paste sample: [`GooglePaySampleActivity.kt`](example/src/main/java/com/xmoney/example/samples/GooglePaySampleActivity.kt) · Activity API: [`GooglePayActivitySample.kt`](example/src/main/java/com/xmoney/example/samples/GooglePayActivitySample.kt)
 

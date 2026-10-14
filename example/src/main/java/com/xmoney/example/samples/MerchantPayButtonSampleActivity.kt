@@ -4,8 +4,6 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -130,7 +128,6 @@ private fun MerchantPayButtonScreen(activity: FragmentActivity) {
         title = "Merchant Pay button",
         subtitle = "SDK form, your CTA. confirm() after Ready.",
         activity = activity,
-        scrollable = false,
         showTestCards = true,
     ) {
         SampleOrderCard()
@@ -153,9 +150,7 @@ private fun MerchantPayButtonScreen(activity: FragmentActivity) {
                     PaymentElement(
                         controller = embedded,
                         intent = intent!!,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState()),
+                        modifier = Modifier.fillMaxWidth(),
                         onEvent = { event ->
                             when (event) {
                                 EmbeddedEvent.Ready -> ready = true

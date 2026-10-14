@@ -9,9 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Remove
@@ -134,18 +132,23 @@ private fun UpdateOrderSampleScreen(activity: FragmentActivity) {
 
     LaunchedEffect(amountMinor, consumed) {
         if (consumed) return@LaunchedEffect
-        if (hostIntent != null) delay(300)
         val initial = hostIntent == null
         if (initial) loading = true
         error = null
         try {
-            val next = DemoCheckoutBackend.createPaymentIntent(amountMinor = amountMinor)
-            // Native equivalent of iOS element.updateOrder(intent:).
-            // Pay / confirm / Google Pay are no-ops until updateOrder returns.
-            // Ready comes from PaymentElement after the form has drawn.
-            // Keep the Element mounted — do not clear intent or flip Ready.
-            embedded.updateOrder(next)
-            hostIntent = next
+            if (initial) {
+                hostIntent = DemoCheckoutBackend.createPaymentIntent(amountMinor = amountMinor)
+            } else {
+                // Pay / confirm / Google Pay are locked from here, including the
+                // debounce and the server call, until the new order is bound.
+                // Keep the Element mounted — do not clear intent or flip Ready.
+                var next: PaymentIntent? = null
+                embedded.updateOrder {
+                    delay(300)
+                    DemoCheckoutBackend.createPaymentIntent(amountMinor = amountMinor).also { next = it }
+                }
+                hostIntent = next
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -159,12 +162,11 @@ private fun UpdateOrderSampleScreen(activity: FragmentActivity) {
         title = "Update order",
         subtitle = "updateOrder() a new PaymentIntent — Pay locked until it returns.",
         activity = activity,
-        scrollable = false,
         showTestCards = true,
     ) {
         UpdateOrderCard(
             amountMinor = amountMinor,
-            enabled = !consumed && embedded.isInteractionEnabled,
+            enabled = !consumed && !embedded.isProcessing,
             onAmountChange = { amountMinor = it },
         )
         when {
@@ -187,9 +189,7 @@ private fun UpdateOrderSampleScreen(activity: FragmentActivity) {
                     PaymentElement(
                         controller = embedded,
                         intent = hostIntent!!,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState()),
+                        modifier = Modifier.fillMaxWidth(),
                         onEvent = { event ->
                             if (event is EmbeddedEvent.Ready) ready = true
                         },

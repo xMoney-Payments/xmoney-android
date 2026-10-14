@@ -22,12 +22,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.paymentelement.theme.CheckoutTheme
 import com.xmoney.paymentelement.ui.PaymentForm
 import com.xmoney.paymentelement.ui.UIHelpers
 import com.xmoney.paymentelement.ui.XCoinFlipLoader
+import com.xmoney.paymentelement.ui.awaitPreDraw
 
 /**
  * Merchant-hosted Payment Element. Renders available methods (Google Pay,
@@ -35,8 +37,9 @@ import com.xmoney.paymentelement.ui.XCoinFlipLoader
  * without the bottom-sheet chrome.
  *
  * When [intent] changes, calls [EmbeddedPaymentController.updateOrder].
- * Pay stays locked until that returns. [EmbeddedEvent.Ready] is emitted after
- * the card form and, when offered, the Google Pay button have pre-drawn.
+ * Pay stays locked until that returns. [EmbeddedEvent.Ready] is emitted once, after
+ * the card form and, when offered, the Google Pay button have first pre-drawn.
+ * A later [intent] change does not emit it again.
  */
 @Composable
 fun PaymentElement(
@@ -48,13 +51,23 @@ fun PaymentElement(
     val currentOnEvent by rememberUpdatedState(onEvent)
     var surfaceEpoch by remember { mutableIntStateOf(0) }
     var revealed by remember { mutableStateOf(false) }
+    var readyEmitted by remember { mutableStateOf(false) }
     var coverHeight by remember { mutableStateOf(0.dp) }
     val density = LocalDensity.current
+    val view = LocalView.current
     LaunchedEffect(controller, intent) {
         controller.updateOrder(intent) { event ->
             if (event !is EmbeddedEvent.Ready) currentOnEvent(event)
         }
         surfaceEpoch++
+    }
+    LaunchedEffect(revealed) {
+        if (!revealed || readyEmitted) return@LaunchedEffect
+        view.awaitPreDraw()
+        if (!readyEmitted) {
+            readyEmitted = true
+            currentOnEvent(EmbeddedEvent.Ready)
+        }
     }
 
     val state = controller.sheetState
@@ -92,8 +105,9 @@ fun PaymentElement(
                     modifier = Modifier.fillMaxWidth(),
                     surfaceEpoch = surfaceEpoch,
                     onSurfaceDrawn = {
-                        revealed = true
-                        currentOnEvent(EmbeddedEvent.Ready)
+                        if (!revealed) {
+                            revealed = true
+                        }
                     },
                 )
             }

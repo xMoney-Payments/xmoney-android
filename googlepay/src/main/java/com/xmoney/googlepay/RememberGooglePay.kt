@@ -118,7 +118,9 @@ class GooglePayController internal constructor(
      *
      * The wallet button is disabled until this returns ([isInteractionEnabled]).
      * This does not emit [GooglePayEvent.Processing]. A newer [updateOrder]
-     * cancels the in-flight one ([CancellationException]).
+     * cancels the in-flight one ([CancellationException]). The button is not
+     * locked while you create [intent] on your server; pass that call to the
+     * `createOrder` overload to lock it too.
      */
     suspend fun updateOrder(
         intent: PaymentIntent,
@@ -126,11 +128,47 @@ class GooglePayController internal constructor(
     ) {
         this.onEvent = onEvent
         GooglePay.register()
-        if (boundIntent == intent && availability != null && !isOrderConsumed) {
-            return
-        }
+        if (isBound(intent)) return
         val generation = ++bindGeneration
         applyUpdatingOrder(true)
+        bindLocked(generation, intent)
+    }
+
+    /**
+     * Lock the wallet button, create the next order with [createOrder], then bind it.
+     *
+     * Use this when the shopper changes the cart. [startPayment] is a no-op from
+     * this call until the new order is bound, including while [createOrder] talks
+     * to your server, so a fast tap cannot charge the previous order. If
+     * [createOrder] throws, the previous order stays bound and payable, and
+     * `onResult` is not called. A newer [updateOrder] cancels this one.
+     */
+    suspend fun updateOrder(
+        onEvent: (GooglePayEvent) -> Unit = {},
+        createOrder: suspend () -> PaymentIntent,
+    ) {
+        this.onEvent = onEvent
+        GooglePay.register()
+        val generation = ++bindGeneration
+        applyUpdatingOrder(true)
+        val intent = try {
+            createOrder()
+        } catch (e: Throwable) {
+            if (generation == bindGeneration) applyUpdatingOrder(false)
+            throw e
+        }
+        if (generation != bindGeneration) throw CancellationException()
+        if (isBound(intent)) {
+            applyUpdatingOrder(false)
+            return
+        }
+        bindLocked(generation, intent)
+    }
+
+    private fun isBound(intent: PaymentIntent): Boolean =
+        boundIntent == intent && availability != null && !isOrderConsumed
+
+    private suspend fun bindLocked(generation: Int, intent: PaymentIntent) {
         val host = ThreeDSHostController(activity) { liveConfiguration.options.locale }
         try {
             val loaded = session.bind(intent, activity)
@@ -246,8 +284,9 @@ fun rememberGooglePay(
 /**
  * Standalone Google Pay button. When [intent] changes, calls
  * [GooglePayController.updateOrder]. The button stays disabled until that returns.
- * [GooglePayEvent.Ready] is emitted after the button has pre-drawn, or as soon as
- * Google Pay is known to be unavailable.
+ * [GooglePayEvent.Ready] is emitted once, after the button has first pre-drawn, or as
+ * soon as Google Pay is known to be unavailable. A later [intent] change does not
+ * emit it again.
  */
 @Composable
 fun GooglePayButton(
@@ -258,6 +297,13 @@ fun GooglePayButton(
 ) {
     val currentOnEvent by rememberUpdatedState(onEvent)
     var surfaceEpoch by remember { mutableIntStateOf(0) }
+    var readyEmitted by remember { mutableStateOf(false) }
+    val emitReady = {
+        if (!readyEmitted) {
+            readyEmitted = true
+            currentOnEvent(GooglePayEvent.Ready)
+        }
+    }
     LaunchedEffect(controller, intent) {
         controller.updateOrder(intent) { event ->
             if (event !is GooglePayEvent.Ready) currentOnEvent(event)
@@ -277,9 +323,9 @@ fun GooglePayButton(
                 if (coords.size.width > 1 && coords.size.height > 1) buttonLaidOut = true
             },
         )
-        ReportButtonDraw(surfaceEpoch, buttonLaidOut) { currentOnEvent(GooglePayEvent.Ready) }
+        ReportButtonDraw(surfaceEpoch, buttonLaidOut, emitReady)
     } else if (surfaceEpoch > 0) {
-        LaunchedEffect(surfaceEpoch) { currentOnEvent(GooglePayEvent.Ready) }
+        LaunchedEffect(surfaceEpoch) { emitReady() }
     }
 }
 

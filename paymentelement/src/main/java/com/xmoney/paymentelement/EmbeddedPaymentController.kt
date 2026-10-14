@@ -147,19 +147,58 @@ class EmbeddedPaymentController(
      * [PaymentElement] emits [EmbeddedEvent.Ready] after the surface draws.
      * A newer [updateOrder] cancels
      * the in-flight one ([CancellationException]); the new intent is installed
-     * only after success.
+     * only after success. Pay is not locked while you create [order] on your
+     * server; pass that call to the `createOrder` overload to lock it too.
      */
     suspend fun updateOrder(
         order: PaymentIntent,
         onEvent: (EmbeddedEvent) -> Unit = {},
     ) {
         this.onEvent = onEvent
-        if (boundIntent == order && sheetState != null && !isOrderConsumed) {
+        if (isBound(order)) {
             paymentConfig = liveConfiguration.resolve(order)
             return
         }
         val generation = ++bindGeneration
         applyUpdatingOrder(true)
+        bindLocked(generation, order)
+    }
+
+    /**
+     * Lock Pay, create the next order with [createOrder], then bind it.
+     *
+     * Use this when the shopper changes the cart. Pay, [confirm], and Google Pay
+     * are no-ops from this call until the new order is bound, including while
+     * [createOrder] talks to your server, so a fast Pay tap cannot charge the
+     * previous order. If [createOrder] throws, the previous order stays bound and
+     * payable, and [onResult] is not called. A newer [updateOrder] cancels this one.
+     */
+    suspend fun updateOrder(
+        onEvent: (EmbeddedEvent) -> Unit = {},
+        createOrder: suspend () -> PaymentIntent,
+    ) {
+        this.onEvent = onEvent
+        val generation = ++bindGeneration
+        applyUpdatingOrder(true)
+        val order = try {
+            createOrder()
+        } catch (e: Throwable) {
+            if (generation == bindGeneration) applyUpdatingOrder(false)
+            throw e
+        }
+        if (generation != bindGeneration) throw CancellationException()
+        if (isBound(order)) {
+            paymentConfig = liveConfiguration.resolve(order)
+            applyUpdatingOrder(false)
+            return
+        }
+        bindLocked(generation, order)
+    }
+
+    private fun isBound(order: PaymentIntent): Boolean =
+        boundIntent == order && sheetState != null && !isOrderConsumed
+
+    private suspend fun bindLocked(generation: Int, order: PaymentIntent) {
         val threeDSHost = ThreeDSHostController(activity) { liveConfiguration.options.locale }
         try {
             val loaded = session.bind(order, activity)
