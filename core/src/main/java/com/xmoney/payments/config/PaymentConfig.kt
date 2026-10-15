@@ -11,6 +11,7 @@ data class PaymentConfig(
     val card: CardConfig = CardConfig(),
     val paymentMethods: PaymentMethodsConfig = PaymentMethodsConfig(),
     val options: OptionsConfig = OptionsConfig(),
+    val customerDetails: CustomerDetailsConfig = CustomerDetailsConfig(),
 ) {
     fun resolve(intent: PaymentIntent): ResolvedPaymentConfig = ResolvedPaymentConfig(
         publicKey = publicKey,
@@ -19,7 +20,20 @@ data class PaymentConfig(
         card = card,
         paymentMethods = paymentMethods,
         options = options,
+        customerDetails = customerDetails,
     )
+}
+
+/**
+ * Which payment methods collect customer details.
+ * The field list itself comes from `/inline-checkout/fields`.
+ */
+@Parcelize
+data class CustomerDetailsConfig(
+    val card: Boolean = false,
+    val googlePay: Boolean = false,
+) : Parcelable {
+    val anyEnabled: Boolean get() = card || googlePay
 }
 
 @Parcelize
@@ -151,4 +165,14 @@ data class ResolvedPaymentConfig(
     val card: CardConfig = CardConfig(),
     val paymentMethods: PaymentMethodsConfig = PaymentMethodsConfig(),
     val options: OptionsConfig = OptionsConfig(),
-) : Parcelable
+    val customerDetails: CustomerDetailsConfig = CustomerDetailsConfig(),
+) : Parcelable {
+    /** Session config for a host that only receives the resolved, parcelable config. */
+    fun toPaymentConfig(): PaymentConfig = PaymentConfig(
+        publicKey = publicKey,
+        card = card,
+        paymentMethods = paymentMethods,
+        options = options,
+        customerDetails = customerDetails,
+    )
+}

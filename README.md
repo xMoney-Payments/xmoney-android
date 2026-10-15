@@ -154,6 +154,22 @@ sheet.present(activity, intent, onEvent = { /* Ready / Processing */ }, onResult
 
 The sheet keeps its loading coin up until the form and, when offered, the Google Pay button have pre-drawn, then emits `PaymentSheetEvent.Ready`.
 
+### Customer details
+
+`customerDetails` asks the shopper for the fields your account requires. If that list cannot be loaded, checkout continues without the form.
+
+```kotlin
+PaymentConfig(
+    publicKey = "pk_test…",
+    customerDetails = CustomerDetailsConfig(
+        card = true,       // entry row above the card form
+        googlePay = true,  // billing contact from the Google Pay sheet
+    ),
+)
+```
+
+Card and saved-card Pay stay blocked until those fields are valid. `confirm()` runs that check. Google Pay does not block: it requests the billing contact and sends it with the payment.
+
 While idle, the sheet can be dragged closed. Drag, back, and scrim lock while a charge is in flight. `dismiss()` waits for an in-flight charge; idle close still cancels. A second `present()` while idle replaces the open sheet (the previous present completes with `Canceled`); while a charge is in flight the second `present()` is a no-op. Do not treat that `Canceled` as “leave checkout” if you immediately presented again.
 
 Copy-paste sample: [`PaymentSheetSampleActivity.kt`](example/src/main/java/com/xmoney/example/samples/PaymentSheetSampleActivity.kt) · Activity API: [`PaymentSheetActivitySample.kt`](example/src/main/java/com/xmoney/example/samples/PaymentSheetActivitySample.kt)

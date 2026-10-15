@@ -233,8 +233,8 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
                                 config = vm.config,
                                 state = loaded.state,
                                 isProcessing = isProcessing,
-                                onPayCard = { payWithCard(it) },
-                                onSelectSaved = { paySavedCard(it) },
+                                onPayCard = { input, details -> payWithCard(input, details) },
+                                onSelectSaved = { card, details -> paySavedCard(card, details) },
                                 onDeleteSaved = { deleteSavedCard(it) },
                                 onGooglePay = { startGooglePay() },
                                 onCancel = { requestClose() },
@@ -307,7 +307,7 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
         }
     }
 
-    private fun payWithCard(input: CardInput) {
+    private fun payWithCard(input: CardInput, customerDetails: Map<String, String>? = null) {
         val invalid = CardFieldValidators.validateCardNumber(input.number) != null ||
             CardFieldValidators.validateExpiry(input.expiryMonth, input.expiryYear) != null ||
             CardFieldValidators.validateCVV(input.cvv) != null ||
@@ -316,11 +316,11 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
         session.onCardHolderVerification =
             CheckoutSessionRegistry.get(viewModel.requestId)?.onCardHolderVerification
                 ?: viewModel.config.card.cardHolderVerification?.onCardHolderVerification
-        runSubmission { session.submitNewCard(input, threeDSHostController) }
+        runSubmission { session.submitNewCard(input, threeDSHostController, customerDetails) }
     }
 
-    private fun paySavedCard(card: SavedCard) =
-        runSubmission { session.submitSavedCard(card.id, threeDSHostController) }
+    private fun paySavedCard(card: SavedCard, customerDetails: Map<String, String>? = null) =
+        runSubmission { session.submitSavedCard(card.id, threeDSHostController, customerDetails) }
 
     private suspend fun deleteSavedCard(card: SavedCard) {
         val updated = session.deleteSavedCard(card.id)

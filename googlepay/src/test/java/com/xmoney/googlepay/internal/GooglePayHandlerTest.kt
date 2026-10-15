@@ -1,5 +1,7 @@
 package com.xmoney.googlepay.internal
 
+import com.xmoney.payments.customerdetails.CustomerDetailsVisibility
+import com.xmoney.payments.customerdetails.GooglePayBillingParameters
 import com.xmoney.payments.model.OrderPayloadInfo
 import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.model.WalletParams
@@ -114,6 +116,57 @@ class GooglePayHandlerTest {
     @Test
     fun testEnvironmentRequestsPanOnlyForIssuer3DS() {
         assertEquals(listOf("PAN_ONLY"), GooglePayHandler.allowedAuthMethods(isLive = false))
+    }
+
+    @Test
+    fun customerDetailsBillingRequestsFullAddressPhoneAndEmail() {
+        val billing = GooglePayBillingParameters.resolve(
+            enabled = true,
+            visibility = CustomerDetailsVisibility.resolve(
+                listOf("firstName", "email", "phone", "address"),
+            ),
+        )
+        val method = GooglePayHandler.cardPaymentMethodJson(params, isLive = false, billing)
+        val parameters = method.getJSONObject("parameters")
+        assertTrue(parameters.getBoolean("billingAddressRequired"))
+        assertEquals("FULL", parameters.getJSONObject("billingAddressParameters").getString("format"))
+        assertTrue(parameters.getJSONObject("billingAddressParameters").getBoolean("phoneNumberRequired"))
+        val request = GooglePayHandler.applyEmailRequired(JSONObject(), billing)
+        assertTrue(request.getBoolean("emailRequired"))
+    }
+
+    @Test
+    fun customerDetailsOffOmitsBillingParameters() {
+        val method = GooglePayHandler.cardPaymentMethodJson(params, isLive = false)
+        assertFalse(method.getJSONObject("parameters").has("billingAddressRequired"))
+        val request = GooglePayHandler.applyEmailRequired(JSONObject(), GooglePayBillingParameters.None)
+        assertFalse(request.has("emailRequired"))
+    }
+
+    @Test
+    fun billingContactParsesGooglePayPaymentData() {
+        val contact = GooglePayHandler.billingContact(
+            """
+            {
+              "email": "a@b.co",
+              "paymentMethodData": {
+                "info": {
+                  "billingAddress": {
+                    "name": "Jane Doe",
+                    "address1": "Main",
+                    "countryCode": "US",
+                    "administrativeArea": "CA"
+                  }
+                }
+              }
+            }
+            """.trimIndent(),
+        )
+        assertEquals("Jane", contact?.firstName)
+        assertEquals("Doe", contact?.lastName)
+        assertEquals("a@b.co", contact?.email)
+        assertEquals("CA", contact?.state)
+        assertEquals(null, GooglePayHandler.billingContact("{}"))
     }
 
     @Test

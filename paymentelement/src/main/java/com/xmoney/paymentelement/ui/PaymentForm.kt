@@ -1,19 +1,20 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.xmoney.paymentelement.ui
 
 import androidx.compose.ui.viewinterop.AndroidView
 import com.xmoney.paymentelement.R
 import com.xmoney.paymentelement.theme.CheckoutTheme
+import com.xmoney.payments.customerdetails.CustomerDetailsInput
 import com.xmoney.payments.engine.DigitalWalletFactory
 import com.xmoney.payments.engine.WalletButtonArgs
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.SizeTransform
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -54,20 +55,35 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.focus.FocusDirection
@@ -76,6 +92,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.xmoney.payments.validation.CardFieldValidators
 import com.xmoney.payments.validation.CardFieldValidators.localizedMessage
@@ -91,12 +108,13 @@ fun PaymentForm(
     config: ResolvedPaymentConfig,
     state: SheetState,
     isProcessing: Boolean,
-    onPayCard: (CardInput) -> Unit,
-    onSelectSaved: (SavedCard) -> Unit,
+    onPayCard: (CardInput, Map<String, String>?) -> Unit,
+    onSelectSaved: (SavedCard, Map<String, String>?) -> Unit,
     onDeleteSaved: suspend (SavedCard) -> Unit = {},
     onGooglePay: () -> Unit,
     modifier: Modifier = Modifier,
     header: @Composable (() -> Unit)? = null,
+    personalDetailsHeader: @Composable ((onBack: () -> Unit) -> Unit)? = null,
     isOrderConsumed: Boolean = false,
     isUpdatingOrder: Boolean = false,
     onBindSubmit: ((() -> Unit) -> Unit)? = null,
@@ -125,6 +143,29 @@ fun PaymentForm(
     var cardInput by remember { mutableStateOf(CardInput()) }
     var cardFormValid by remember { mutableStateOf(false) }
     var showCardErrors by remember { mutableStateOf(false) }
+    val needsDetails = config.customerDetails.card && state.customerDetailsVisibility.isActive
+    var savedInput by rememberSaveable(
+        state.customerDetailsVisibility,
+        stateSaver = CustomerDetailsInputSaver,
+    ) { mutableStateOf(CustomerDetailsInput()) }
+    var savedCompleted by rememberSaveable(state.customerDetailsVisibility) { mutableStateOf(false) }
+    val detailsState = remember(state.customerDetailsVisibility, config.card.validationMode) {
+        PersonalDetailsFormState(state.customerDetailsVisibility, config.card.validationMode).apply {
+            restore(savedInput, savedCompleted)
+        }
+    }
+    SideEffect {
+        savedInput = detailsState.input
+        savedCompleted = detailsState.completed
+    }
+    var showingDetails by rememberSaveable { mutableStateOf(false) }
+    var detailsAttempted by remember { mutableStateOf(false) }
+    var detailsScrollNonce by remember { mutableIntStateOf(0) }
+    val detailsErrorRequester = remember { BringIntoViewRequester() }
+    val showDetailsError = needsDetails && detailsAttempted && !detailsState.completed
+    LaunchedEffect(detailsScrollNonce) {
+        if (showDetailsError) detailsErrorRequester.bringIntoView()
+    }
     val deleteScope = rememberCoroutineScope()
     val savedCardIds = state.savedCards.map { it.id }
     val walletMethods = state.googlePayAllowedPaymentMethods
@@ -167,18 +208,56 @@ fun PaymentForm(
         }
     }
 
-    val submitSelected: () -> Unit = {
+    val detailsTransition = updateTransition(targetState = showingDetails, label = "personalDetails")
+    val cardAlpha by detailsTransition.animateFloat(
+        transitionSpec = {
+            if (targetState) {
+                tween(durationMillis = PageFadeOutMs)
+            } else {
+                tween(durationMillis = PageFadeInMs, delayMillis = PageFadeOutMs)
+            }
+        },
+        label = "cardAlpha",
+    ) { onDetails -> if (onDetails) 0f else 1f }
+    val detailsAlpha by detailsTransition.animateFloat(
+        transitionSpec = {
+            if (targetState) {
+                tween(durationMillis = PageFadeInMs, delayMillis = PageFadeOutMs)
+            } else {
+                tween(durationMillis = PageFadeOutMs)
+            }
+        },
+        label = "detailsAlpha",
+    ) { onDetails -> if (onDetails) 1f else 0f }
+    // Height follows the page that is still on screen, and switches only once that page has faded out.
+    val detailsOnScreen = detailsAlpha > PageAlphaHidden ||
+        (showingDetails && cardAlpha <= PageAlphaHidden)
+    val detailsOnScreenState = rememberUpdatedState(detailsOnScreen)
+
+    val paySelected: () -> Unit = {
+        val detailsReady = !needsDetails || detailsState.completed
+        if (needsDetails && !detailsReady) {
+            detailsAttempted = true
+            detailsScrollNonce += 1
+        }
         val useNewCard = !hasSavedCards || selectedMethod == PaymentMethod.NewCard
         if (useNewCard) {
-            if (!cardFormValid) {
-                showCardErrors = true
-            } else {
-                onPayCard(cardInput)
-            }
-        } else {
+            if (!cardFormValid) showCardErrors = true
+            if (cardFormValid && detailsReady) onPayCard(cardInput, detailsState.payload())
+        } else if (detailsReady) {
             val saved = state.savedCards.firstOrNull { it.id == selectedSavedId }
-            if (saved != null) onSelectSaved(saved)
+            if (saved != null) onSelectSaved(saved, detailsState.payload())
         }
+    }
+    // Continue only saves the page and returns. Host confirm() saves a valid page and pays.
+    val continueDetails: () -> Unit = {
+        if (detailsState.confirm()) showingDetails = false
+    }
+    val submitSelected: () -> Unit = {
+        val pageOpen = detailsOnScreenState.value
+        val valid = if (pageOpen) detailsState.confirm() else true
+        if (pageOpen && valid) showingDetails = false
+        if (hostConfirmPays(pageOpen, valid)) paySelected()
     }
 
     DisposableEffect(
@@ -189,10 +268,23 @@ fun PaymentForm(
         cardFormValid,
         cardInput,
         interactionEnabled,
+        showingDetails,
+        detailsState.completed,
+        needsDetails,
     ) {
         onBindSubmit?.invoke(submitSelected)
         onDispose { onBindSubmit?.invoke {} }
     }
+
+    val focusManager = LocalFocusManager.current
+    val leaveDetails = {
+        detailsState.onLeave()
+        showingDetails = false
+    }
+    LaunchedEffect(showingDetails) {
+        if (showingDetails) focusManager.clearFocus(force = true)
+    }
+    BackHandler(enabled = showingDetails && interactionEnabled, onBack = leaveDetails)
 
     Column(
         modifier = modifier
@@ -209,15 +301,29 @@ fun PaymentForm(
                 .padding(horizontal = horizontalPadding),
             verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
-            header?.invoke()
-
-            Column(
-                modifier = Modifier.padding(
-                    top = topPadding,
-                    bottom = bottomPadding,
-                ),
-                verticalArrangement = Arrangement.spacedBy(0.dp),
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(
+                        animationSpec = tween(
+                            durationMillis = SheetInDurationMs,
+                            easing = FastOutSlowInEasing,
+                        ),
+                    ),
             ) {
+                Column(
+                    modifier = Modifier.pageLayer(
+                        ownsHeight = !detailsOnScreen,
+                        alpha = cardAlpha,
+                    ),
+                ) {
+                    header?.invoke()
+                    Column(
+                        modifier = Modifier.padding(
+                            top = topPadding,
+                            bottom = bottomPadding,
+                        ),
+                    ) {
                 if (config.paymentMethods.googlePay.enabled &&
                     DigitalWalletFactory.makeGooglePay == null
                 ) {
@@ -249,6 +355,23 @@ fun PaymentForm(
                             .clipToBounds(),
                     )
                     OrDivider(theme, config.options.locale)
+                }
+
+                if (needsDetails) {
+                    val walletAbove = !walletMethods.isNullOrBlank() && walletFactory != null && walletShown
+                    PersonalDetailsEntryRow(
+                        theme = theme,
+                        locale = config.options.locale,
+                        completed = detailsState.completed,
+                        showError = detailsAttempted && !detailsState.completed,
+                        enabled = interactionEnabled,
+                        onClick = {
+                            focusManager.clearFocus(force = true)
+                            showingDetails = true
+                        },
+                        topPadding = if (walletAbove) 24.dp - SheetOrDividerVerticalMargin else 0.dp,
+                        modifier = Modifier.bringIntoViewRequester(detailsErrorRequester),
+                    )
                 }
 
                 if (hasSavedCards) {
@@ -340,6 +463,23 @@ fun PaymentForm(
                         },
                     )
                 }
+                    }
+                }
+                if (detailsOnScreen) {
+                    PersonalDetailsLayer(
+                        theme = theme,
+                        config = config,
+                        state = detailsState,
+                        enabled = interactionEnabled,
+                        fillBackground = !embedded,
+                        personalDetailsHeader = personalDetailsHeader,
+                        onBack = leaveDetails,
+                        modifier = Modifier.pageLayer(
+                            ownsHeight = true,
+                            alpha = detailsAlpha,
+                        ),
+                    )
+                }
             }
         }
 
@@ -349,10 +489,124 @@ fun PaymentForm(
             state = state,
             isProcessing = isProcessing,
             interactionEnabled = interactionEnabled,
-            onSubmit = submitSelected,
+            onSubmit = {
+                if (detailsOnScreenState.value) continueDetails() else paySelected()
+            },
             horizontalPadding = horizontalPadding,
             compact = embedded,
             showSubmitButton = !embedded || config.card.submitButton.visible,
+            continueMode = detailsOnScreen,
+        )
+    }
+}
+
+private const val PageFadeOutMs = 120
+private const val PageFadeInMs = 180
+private const val PageAlphaHidden = 0.01f
+
+private fun Modifier.pageLayer(ownsHeight: Boolean, alpha: Float): Modifier {
+    val layer = this
+        .fillMaxWidth()
+        .layout { measurable, constraints ->
+            val placeable = measurable.measure(constraints)
+            val height = if (ownsHeight) placeable.height else 0
+            layout(placeable.width, height) {
+                if (ownsHeight) placeable.place(0, 0)
+            }
+        }
+        .graphicsLayer { this.alpha = alpha }
+    return if (ownsHeight && alpha > PageAlphaHidden) {
+        layer
+    } else {
+        layer
+            .clearAndSetSemantics { }
+            .focusProperties { canFocus = false }
+    }
+}
+
+@Composable
+private fun PersonalDetailsLayer(
+    theme: CheckoutTheme,
+    config: ResolvedPaymentConfig,
+    state: PersonalDetailsFormState,
+    enabled: Boolean,
+    fillBackground: Boolean,
+    personalDetailsHeader: @Composable ((onBack: () -> Unit) -> Unit)?,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (fillBackground) Modifier.background(theme.background) else Modifier),
+    ) {
+        if (personalDetailsHeader != null) {
+            personalDetailsHeader(onBack)
+        } else {
+            PersonalDetailsPageHeader(
+                theme = theme,
+                locale = config.options.locale,
+                enabled = enabled,
+                onBack = onBack,
+            )
+        }
+        PersonalDetailsForm(
+            state = state,
+            config = config,
+            theme = theme,
+        )
+    }
+}
+
+@androidx.annotation.RestrictTo(androidx.annotation.RestrictTo.Scope.LIBRARY_GROUP)
+@Composable
+fun PersonalDetailsPageHeader(
+    theme: CheckoutTheme,
+    locale: String,
+    enabled: Boolean,
+    onBack: () -> Unit,
+) {
+    val backLabel = Strings.text("personalDetails.back", locale)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(theme.neutralChip)
+                .clickable(enabled = enabled, onClick = onBack)
+                .semantics {
+                    contentDescription = backLabel
+                    role = Role.Button
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(
+                painter = painterResource(R.drawable.xmoney_ic_chevron_down),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(width = 13.dp, height = 8.dp)
+                    .rotate(90f)
+                    .clearAndSetSemantics { },
+                colorFilter = ColorFilter.tint(theme.primaryText),
+            )
+        }
+        SheetText(
+            Strings.text("personalDetails.enterDetails", locale),
+            theme = theme,
+            fontSize = 21f,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = (-0.03).em,
+            lineHeight = 21f,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .padding(start = 12.dp)
+                .weight(1f),
         )
     }
 }
@@ -368,6 +622,7 @@ private fun PaymentFormFooter(
     horizontalPadding: Dp = SheetContentHorizontalPadding,
     compact: Boolean = false,
     showSubmitButton: Boolean = true,
+    continueMode: Boolean = false,
 ) {
     Column(
         modifier = Modifier
@@ -388,7 +643,11 @@ private fun PaymentFormFooter(
                 state.orderInfo.currency,
                 config.options.locale,
             )
-            val payTitle = Strings.submitButtonTitle(config.card.submitButton.type.value, config.options.locale, amount)
+            val payTitle = if (continueMode) {
+                Strings.text("personalDetails.continue", config.options.locale)
+            } else {
+                Strings.submitButtonTitle(config.card.submitButton.type.value, config.options.locale, amount)
+            }
 
             SubmitButton(
                 theme = theme,
@@ -428,3 +687,38 @@ private fun OrDivider(theme: CheckoutTheme, locale: String) {
 private class WalletViewHolder {
     var view: android.view.View? = null
 }
+
+/** Host confirm pays unless the details page is open and invalid. Continue never calls this. */
+internal fun hostConfirmPays(detailsPageOpen: Boolean, detailsValid: Boolean): Boolean {
+    if (!detailsPageOpen) return true
+    return detailsValid
+}
+
+internal val CustomerDetailsInputSaver = listSaver<CustomerDetailsInput, String>(
+    save = {
+        listOf(
+            it.fullName,
+            it.email,
+            it.phoneCountry,
+            it.phoneNational,
+            it.country,
+            it.region,
+            it.address,
+            it.city,
+            it.postalCode,
+        )
+    },
+    restore = {
+        CustomerDetailsInput(
+            fullName = it[0],
+            email = it[1],
+            phoneCountry = it[2],
+            phoneNational = it[3],
+            country = it[4],
+            region = it[5],
+            address = it[6],
+            city = it[7],
+            postalCode = it[8],
+        )
+    },
+)

@@ -138,11 +138,19 @@ class PaymentSession(
     ): DigitalWalletAuthorizing? =
         DigitalWalletFactory.makeGooglePay?.invoke(candidate.engine, presenter, activity)
 
-    suspend fun submitNewCard(input: CardInput, presenter: ThreeDSPresenter): EngineResult =
-        submit(didAuthorize = true) { engine.submitNewCard(input, presenter) }
+    suspend fun submitNewCard(
+        input: CardInput,
+        presenter: ThreeDSPresenter,
+        customerDetails: Map<String, String>? = null,
+    ): EngineResult =
+        submit(didAuthorize = true) { engine.submitNewCard(input, presenter, customerDetails) }
 
-    suspend fun submitSavedCard(cardId: String, presenter: ThreeDSPresenter): EngineResult =
-        submit(didAuthorize = true) { engine.submitSavedCard(cardId, presenter) }
+    suspend fun submitSavedCard(
+        cardId: String,
+        presenter: ThreeDSPresenter,
+        customerDetails: Map<String, String>? = null,
+    ): EngineResult =
+        submit(didAuthorize = true) { engine.submitSavedCard(cardId, presenter, customerDetails) }
 
     /** Reports the result of a payment whose screen was destroyed, instead of taking a second payment. */
     suspend fun recover(pending: PendingPayment): EngineResult {
