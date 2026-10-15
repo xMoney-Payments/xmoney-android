@@ -26,7 +26,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run unit tests
-        run: ./gradlew :core:test :googlepay:test :paymentelement:test :paymentsheet:test --stacktrace
+        run: ./gradlew :core:test :googlepay:test :paymentelement:test :paymentsheet:test :example:testDebugUnitTest --stacktrace
 
       - name: Assemble example app
         run: ./gradlew :example:assembleDebug --stacktrace
