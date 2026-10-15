@@ -64,6 +64,7 @@ import com.xmoney.paymentelement.EmbeddedEvent
 import com.xmoney.paymentelement.EmbeddedPaymentController
 import com.xmoney.paymentelement.PaymentElement
 import com.xmoney.paymentelement.rememberEmbeddedPayment
+import com.xmoney.payments.config.CustomerDetailsConfig
 import com.xmoney.payments.config.CardConfig
 import com.xmoney.payments.config.CardGrouping
 import com.xmoney.payments.config.CardHolderName
@@ -109,6 +110,8 @@ fun DemoCheckoutScreen(
     var savedCardsEnabled by remember { mutableStateOf(true) }
     var saveCardOptInVisible by remember { mutableStateOf(true) }
     var cardHolderVerificationEnabled by remember { mutableStateOf(false) }
+    var customerDetailsCard by remember { mutableStateOf(false) }
+    var customerDetailsGooglePay by remember { mutableStateOf(false) }
     var walletColor by remember { mutableStateOf(playgroundWalletColorOptions.first()) }
     var walletType by remember { mutableStateOf(playgroundWalletTypeOptions.first()) }
     var walletRadius by remember { mutableFloatStateOf(28f) }
@@ -139,6 +142,8 @@ fun DemoCheckoutScreen(
         saveCardOptInVisible,
         selectedGrouping.value,
         cardHolderVerificationEnabled,
+        customerDetailsCard,
+        customerDetailsGooglePay,
         selectedButtonType.value,
         selectedValidation.value,
         submitVisible,
@@ -155,6 +160,8 @@ fun DemoCheckoutScreen(
         savedCardsEnabled,
         saveCardOptInVisible,
         cardHolderVerificationEnabled,
+        customerDetailsCard,
+        customerDetailsGooglePay,
         sdkStyle,
         wallet,
     ) {
@@ -193,6 +200,10 @@ fun DemoCheckoutScreen(
                     visible = submitVisible,
                     type = SubmitButtonType.from(selectedButtonType.value),
                 ),
+            ),
+            customerDetails = CustomerDetailsConfig(
+                card = customerDetailsCard,
+                googlePay = customerDetailsGooglePay,
             ),
             options = OptionsConfig(
                 locale = selectedLocale.value,
@@ -459,6 +470,13 @@ fun DemoCheckoutScreen(
                     enabled = savedCardsEnabled,
                 )
                 ExampleSwitchRow(
+                    title = "Customer details",
+                    subtitle = "customerDetails.card · personal details before card pay",
+                    checked = customerDetailsCard,
+                    onCheckedChange = { customerDetailsCard = it },
+                    showDivider = true,
+                )
+                ExampleSwitchRow(
                     title = "Card holder verification",
                     subtitle = "Validate name via account-validation before pay",
                     checked = cardHolderVerificationEnabled,
@@ -477,6 +495,14 @@ fun DemoCheckoutScreen(
                     subtitle = "paymentMethods.googlePay.enabled",
                     checked = googlePayEnabled,
                     onCheckedChange = { googlePayEnabled = it },
+                )
+                ExampleSwitchRow(
+                    title = "Customer details",
+                    subtitle = "customerDetails.googlePay · ask Google Pay for billing contact",
+                    checked = customerDetailsGooglePay,
+                    onCheckedChange = { customerDetailsGooglePay = it },
+                    showDivider = true,
+                    enabled = googlePayEnabled,
                 )
                 Column(
                     modifier = Modifier

@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.xmoney.paymentelement.R
@@ -252,9 +253,13 @@ internal fun LabeledCardFields(
 }
 
 @Composable
-internal fun ErrorBadgeMessage(message: String, theme: CheckoutTheme) {
+internal fun ErrorBadgeMessage(
+    message: String,
+    theme: CheckoutTheme,
+    topPadding: Dp = 8.dp,
+) {
     Row(
-        modifier = Modifier.padding(start = 2.dp, end = 2.dp, top = 8.dp),
+        modifier = Modifier.padding(start = 2.dp, end = 2.dp, top = topPadding),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -401,6 +406,9 @@ internal fun ContainedFieldRow(
                             color = theme.placeholderText,
                             fontSize = 18f,
                             fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                     inner()

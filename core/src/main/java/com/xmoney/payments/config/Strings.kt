@@ -111,7 +111,7 @@ object Strings {
         "button.subscribe" to "Subscribe for {{amount}}",
         "button.topUp" to "Top up {{amount}}",
         "button.deposit" to "Deposit {{amount}}",
-    )
+    ) + PersonalDetailsStrings.en
 
     private val el = mapOf(
         "sheet.title" to "Πληρωμή",
@@ -179,7 +179,7 @@ object Strings {
         "button.subscribe" to "Συνδρομή {{amount}}",
         "button.topUp" to "Φόρτιση {{amount}}",
         "button.deposit" to "Κατάθεση {{amount}}",
-    )
+    ) + PersonalDetailsStrings.el
 
     private val ro = mapOf(
         "sheet.title" to "Plată",
@@ -247,7 +247,7 @@ object Strings {
         "button.subscribe" to "Abonare {{amount}}",
         "button.topUp" to "Alimentează {{amount}}",
         "button.deposit" to "Depune {{amount}}",
-    )
+    ) + PersonalDetailsStrings.ro
 
     private val bg = mapOf(
         "sheet.title" to "Плащане",
@@ -315,7 +315,7 @@ object Strings {
         "button.subscribe" to "Абонирай се за {{amount}}",
         "button.topUp" to "Зареди {{amount}}",
         "button.deposit" to "Депозирай {{amount}}",
-    )
+    ) + PersonalDetailsStrings.bg
 
     private val hu = mapOf(
         "sheet.title" to "Fizetés",
@@ -383,7 +383,7 @@ object Strings {
         "button.subscribe" to "Előfizetés {{amount}} összegre",
         "button.topUp" to "Feltöltés {{amount}}",
         "button.deposit" to "Befizetés {{amount}}",
-    )
+    ) + PersonalDetailsStrings.hu
 
     private val pl = mapOf(
         "sheet.title" to "Płatność",
@@ -451,7 +451,7 @@ object Strings {
         "button.subscribe" to "Subskrybuj za {{amount}}",
         "button.topUp" to "Doładuj {{amount}}",
         "button.deposit" to "Wpłać {{amount}}",
-    )
+    ) + PersonalDetailsStrings.pl
 
     private val bundles = mapOf(
         "en-US" to en,

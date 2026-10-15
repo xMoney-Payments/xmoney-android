@@ -2,6 +2,7 @@ package com.xmoney.payments.engine
 
 import com.xmoney.payments.config.PaymentEnvironment
 import com.xmoney.payments.config.ResolvedPaymentConfig
+import com.xmoney.payments.customerdetails.CustomerDetailsVisibility
 import com.xmoney.payments.model.CardHolderVerificationResult
 import com.xmoney.payments.model.CardInput
 import com.xmoney.payments.model.OrderPayloadDecoder
@@ -16,11 +17,13 @@ import com.xmoney.payments.service.AccountService
 import com.xmoney.payments.service.CardsService
 import com.xmoney.payments.service.ConfigService
 import com.xmoney.payments.service.DigitalWalletsService
+import com.xmoney.payments.service.InlineCheckoutFieldsService
 import com.xmoney.payments.service.PaymentService
 import com.xmoney.payments.service.TransactionService
 import com.xmoney.payments.util.DeviceMetadata
 
 import android.content.Context
+import android.util.Log
 import androidx.annotation.RestrictTo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -48,6 +51,7 @@ data class SheetState(
     val googlePayAllowedPaymentMethods: String? = null,
     val googlePayReady: Boolean = false,
     val nameCheckValidationEnabled: Boolean = false,
+    val customerDetailsVisibility: CustomerDetailsVisibility = CustomerDetailsVisibility.Inactive,
 )
 
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
@@ -71,6 +75,14 @@ class PaymentEngine(
     private val wallets = DigitalWalletsService(http, env)
     private val payment = PaymentService(http, env, appContext)
     private val transactions = TransactionService(http, env)
+    private val inlineFields = InlineCheckoutFieldsService(http, env)
+
+    /**
+     * Same value as [SheetState.customerDetailsVisibility]. Google Pay reads it here
+     * because the wallet controller does not keep the sheet state.
+     */
+    var customerDetailsVisibility: CustomerDetailsVisibility = CustomerDetailsVisibility.Inactive
+        private set
 
     private var sessionToken: String = ""
     private var nameCheckValidationEnabled: Boolean = false
@@ -103,10 +115,21 @@ class PaymentEngine(
                 null
             }
         }
+        val fieldsTask = async {
+            if (config.customerDetails.anyEnabled) inlineFields.getFields(sessionToken) else emptyList()
+        }
 
         val siteConfig = configTask.await()
         nameCheckValidationEnabled = siteConfig.nameCheckValidationEnabled
         walletTask.await()
+        val visibility = CustomerDetailsVisibility.resolve(fieldsTask.await())
+        customerDetailsVisibility = visibility
+        if (config.customerDetails.anyEnabled && !visibility.isActive) {
+            Log.w(
+                "customer-details",
+                "[customer-details] Collection is enabled but /inline-checkout/fields returned no requested fields.",
+            )
+        }
 
         SheetState(
             sessionToken = sessionToken,
@@ -114,13 +137,18 @@ class PaymentEngine(
             savedCards = cardsTask.await(),
             googlePayAvailable = config.paymentMethods.googlePay.enabled && googlePayConfigured,
             nameCheckValidationEnabled = nameCheckValidationEnabled,
+            customerDetailsVisibility = visibility,
         )
     }
 
     suspend fun refreshSavedCards(): List<SavedCard> =
         runCatching { cards.getCards(sessionToken) }.getOrDefault(emptyList())
 
-    suspend fun submitNewCard(card: CardInput, presenter: ThreeDSPresenter): EngineResult {
+    suspend fun submitNewCard(
+        card: CardInput,
+        presenter: ThreeDSPresenter,
+        customerDetails: Map<String, String>? = null,
+    ): EngineResult {
         val verification = config.card.cardHolderVerification
         if (verification != null) {
             if (!nameCheckValidationEnabled) {
@@ -144,17 +172,26 @@ class PaymentEngine(
                 )
             }
         }
-        val fields = payment.cardFields(card, config.orderPayload, config.orderChecksum)
+        val fields = payment.cardFields(card, config.orderPayload, config.orderChecksum, customerDetails)
         return submit(fields, presenter)
     }
 
-    suspend fun submitSavedCard(cardId: String, presenter: ThreeDSPresenter): EngineResult {
-        val fields = payment.savedCardFields(cardId, config.orderPayload, config.orderChecksum)
+    suspend fun submitSavedCard(
+        cardId: String,
+        presenter: ThreeDSPresenter,
+        customerDetails: Map<String, String>? = null,
+    ): EngineResult {
+        val fields = payment.savedCardFields(cardId, config.orderPayload, config.orderChecksum, customerDetails)
         return submit(fields, presenter)
     }
 
-    suspend fun submitWallet(walletType: String, token: String, presenter: ThreeDSPresenter): EngineResult {
-        val fields = payment.walletFields(walletType, token, config.orderPayload, config.orderChecksum)
+    suspend fun submitWallet(
+        walletType: String,
+        token: String,
+        presenter: ThreeDSPresenter,
+        customerDetails: Map<String, String>? = null,
+    ): EngineResult {
+        val fields = payment.walletFields(walletType, token, config.orderPayload, config.orderChecksum, customerDetails)
         return submit(fields, presenter)
     }
 

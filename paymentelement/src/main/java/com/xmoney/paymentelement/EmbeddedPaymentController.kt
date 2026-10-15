@@ -27,10 +27,11 @@ import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.payments.model.PaymentResult
 import com.xmoney.payments.model.SavedCard
-import com.xmoney.payments.threeds.ThreeDSHostController
-import com.xmoney.payments.validation.CardFieldValidators
 import com.xmoney.payments.model.UpdateOrderSuperseded
+import com.xmoney.payments.threeds.ThreeDSHostController
 import com.xmoney.payments.util.onMainThread
+import com.xmoney.payments.validation.CardFieldValidators
+import kotlin.jvm.JvmOverloads
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
@@ -362,7 +363,14 @@ class EmbeddedPaymentController(
         }
     }
 
-    fun payWithCard(input: CardInput) {
+    /**
+     * Charges a new card immediately.
+     *
+     * Does not open or enforce the personal-details page. [customerDetails] is sent
+     * as given. Use [confirm] so the embedded form collects required details first.
+     */
+    @JvmOverloads
+    fun payWithCard(input: CardInput, customerDetails: Map<String, String>? = null) {
         if (!isInteractionEnabled) return
         val config = paymentConfig ?: return
         val invalid = CardFieldValidators.validateCardNumber(input.number) != null ||
@@ -373,13 +381,20 @@ class EmbeddedPaymentController(
         val presenter = threeDS ?: return
         session.onCardHolderVerification =
             config.card.cardHolderVerification?.onCardHolderVerification
-        runSubmission { session.submitNewCard(input, presenter) }
+        runSubmission { session.submitNewCard(input, presenter, customerDetails) }
     }
 
-    fun paySavedCard(card: SavedCard) {
+    /**
+     * Charges a saved card immediately.
+     *
+     * Does not open or enforce the personal-details page. [customerDetails] is sent
+     * as given. Use [confirm] so the embedded form collects required details first.
+     */
+    @JvmOverloads
+    fun paySavedCard(card: SavedCard, customerDetails: Map<String, String>? = null) {
         if (!isInteractionEnabled) return
         val presenter = threeDS ?: return
-        runSubmission { session.submitSavedCard(card.id, presenter) }
+        runSubmission { session.submitSavedCard(card.id, presenter, customerDetails) }
     }
 
     suspend fun deleteSavedCard(card: SavedCard) {

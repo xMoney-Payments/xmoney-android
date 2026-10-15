@@ -45,6 +45,7 @@ import com.xmoney.payments.model.CardInput
 import com.xmoney.payments.model.SavedCard
 import com.xmoney.paymentelement.theme.CheckoutTheme
 import com.xmoney.paymentelement.ui.PaymentForm
+import com.xmoney.paymentelement.ui.PersonalDetailsPageHeader
 import com.xmoney.paymentelement.ui.UIHelpers
 
 @Composable
@@ -52,8 +53,8 @@ internal fun PaymentSheetContent(
     config: ResolvedPaymentConfig,
     state: SheetState,
     isProcessing: Boolean,
-    onPayCard: (CardInput) -> Unit,
-    onSelectSaved: (SavedCard) -> Unit,
+    onPayCard: (CardInput, Map<String, String>?) -> Unit,
+    onSelectSaved: (SavedCard, Map<String, String>?) -> Unit,
     onDeleteSaved: suspend (SavedCard) -> Unit,
     onGooglePay: () -> Unit,
     onCancel: () -> Unit,
@@ -90,6 +91,15 @@ internal fun PaymentSheetContent(
                 locale = config.options.locale,
                 enabled = !isProcessing,
                 onCancel = onCancel,
+            )
+        },
+        personalDetailsHeader = { onBack ->
+            SheetHandle(theme)
+            PersonalDetailsPageHeader(
+                theme = theme,
+                locale = config.options.locale,
+                enabled = !isProcessing,
+                onBack = onBack,
             )
         },
     )

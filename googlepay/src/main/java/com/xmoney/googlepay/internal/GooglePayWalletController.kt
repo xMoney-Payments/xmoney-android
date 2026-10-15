@@ -11,6 +11,8 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.wallet.PaymentData
+import com.xmoney.payments.customerdetails.CustomerDetails
+import com.xmoney.payments.customerdetails.GooglePayBillingParameters
 import com.xmoney.payments.engine.DigitalWalletAuthorizing
 import com.xmoney.payments.engine.PaymentEngine
 import com.xmoney.payments.engine.SheetState
@@ -134,7 +136,11 @@ class GooglePayWalletController(
             val job = payScope.launch {
                 try {
                     val params = engine.walletParams("googlePay")
-                    val request = handler.loadPaymentDataRequest(params, orderInfo)
+                    val billing = GooglePayBillingParameters.resolve(
+                        engine.config.customerDetails.googlePay,
+                        engine.customerDetailsVisibility,
+                    )
+                    val request = handler.loadPaymentDataRequest(params, orderInfo, billing)
                     val task = handler.paymentsClient.loadPaymentData(request)
                     task.addOnCompleteListener { completed ->
                         if (!cont.isActive) return@addOnCompleteListener
@@ -231,7 +237,12 @@ class GooglePayWalletController(
         scope.launch {
             try {
                 val token = GooglePayHandler.extractToken(paymentData)
-                val result = engine.submitWallet("googlePay", token, presenter)
+                val customerDetails = CustomerDetails.apiPayloadFromWallet(
+                    GooglePayHandler.billingContact(paymentData),
+                    engine.config.customerDetails.googlePay,
+                    engine.customerDetailsVisibility,
+                )
+                val result = engine.submitWallet("googlePay", token, presenter, customerDetails)
                 resumeResult(result)
             } catch (e: CancellationException) {
                 throw e
