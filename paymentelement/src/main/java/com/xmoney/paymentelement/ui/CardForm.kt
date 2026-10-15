@@ -59,6 +59,7 @@ internal fun CardForm(
     theme: CheckoutTheme,
     showHolderName: Boolean,
     showSaveOptIn: Boolean,
+    showSaveNotice: Boolean = false,
     holderFirst: Boolean = false,
     sectionLabel: String? = null,
     saveCardLabel: String? = null,
@@ -86,7 +87,7 @@ internal fun CardForm(
             expiryYear = year,
             cvv = cvv,
             holderName = if (showHolderName) holder else null,
-            saveCard = showSaveOptIn && save,
+            saveCard = showSaveNotice || (showSaveOptIn && save),
         )
     }
 
@@ -145,6 +146,10 @@ internal fun CardForm(
 
     LaunchedEffect(showErrors) {
         if (showErrors) emitChange(DisplayTrigger.SUBMIT)
+    }
+
+    LaunchedEffect(showSaveNotice) {
+        if (showSaveNotice) emitChange(DisplayTrigger.CHANGE)
     }
 
     fun shouldShowError(field: CardField): Boolean {
@@ -373,7 +378,13 @@ internal fun CardForm(
             }
         }
 
-        if (showSaveOptIn) {
+        if (showSaveNotice) {
+            SavedCardNotice(
+                theme = theme,
+                title = Strings.text("elements.savedCardNoticeTitle", locale),
+                body = Strings.text("elements.savedCardNoticeBody", locale),
+            )
+        } else if (showSaveOptIn) {
             SaveCardCheckbox(
                 theme = theme,
                 checked = save,

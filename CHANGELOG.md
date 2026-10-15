@@ -15,6 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `PaymentError.PaymentInProgress` (a `PaymentError.Payment`) is thrown when `updateOrder` asks for a different order during a charge.
 - `UpdateOrderSuperseded`, a `CancellationException`, is thrown by an `updateOrder` call that a newer call replaced.
 - The loading coin is announced as "Loading" by TalkBack, in the configured locale.
+- When the order payload has `saveCard` enabled, the new-card form shows a notice that the card will be saved for future payments and submits the payment with the card saved. The save checkbox is not shown. Paying with an already stored card is unchanged.
 
 ### Changed
 
