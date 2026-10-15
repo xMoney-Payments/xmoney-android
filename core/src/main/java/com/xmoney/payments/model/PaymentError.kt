@@ -6,7 +6,10 @@ sealed class PaymentError(
 ) : Exception(message) {
     class Network(message: String = GENERIC_NETWORK) : PaymentError("NETWORK_ERROR", message)
     class Session(message: String = "Missing session token") : PaymentError("SESSION_ERROR", message)
-    class Payment(message: String) : PaymentError("PAYMENT_ERROR", message)
+    open class Payment(message: String) : PaymentError("PAYMENT_ERROR", message)
+
+    /** `updateOrder` asked for a different order while a charge was in flight. */
+    class PaymentInProgress : Payment(PAYMENT_IN_PROGRESS)
     class ThreeDS(message: String = "Missing 3DS URL") : PaymentError("THREE_DS_ERROR", message)
     class PollTimeout(message: String = "Polling timed out") : PaymentError("POLL_TIMEOUT", message)
     class InvalidKey(message: String = "Invalid public key") : PaymentError("INVALID_PUBLIC_KEY", message)
@@ -41,8 +44,10 @@ sealed class PaymentError(
         const val MISSING_GOOGLE_PAY_AMOUNT_OR_CURRENCY =
             "Missing amount or currency for Google Pay."
         const val EMPTY_GOOGLE_PAY_TOKEN = "Empty Google Pay token"
+        const val PAYMENT_IN_PROGRESS = "Payment in progress"
 
         private val sdkAuthoredMessages = setOf(
+            PAYMENT_IN_PROGRESS,
             NAME_CHECK_NOT_ENABLED,
             VERIFICATION_REJECTED,
             "Missing session token",

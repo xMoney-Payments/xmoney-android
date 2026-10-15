@@ -69,6 +69,7 @@ private fun GooglePaySampleScreen(activity: FragmentActivity) {
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     var bound by remember { mutableStateOf(false) }
+    var loadFailed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -93,16 +94,26 @@ private fun GooglePaySampleScreen(activity: FragmentActivity) {
 
     val googlePay = rememberGooglePay(
         configuration = configuration,
-        onResult = { lastResult = it },
+        onResult = { result ->
+            lastResult = result
+            // A failed first load emits no Ready: open the gate onto the SDK failure text.
+            if (result is PaymentResult.Failed) {
+                bound = true
+                loadFailed = true
+            }
+        },
     )
     LaunchedEffect(wallet) { googlePay.updateAppearance(wallet) }
 
-    fun loadOrder() {
+    fun loadOrder(retry: Boolean = false) {
         scope.launch {
             loading = true
             error = null
             lastResult = null
-            bound = false
+            if (!retry) {
+                bound = false
+                loadFailed = false
+            }
             intent = null
             try {
                 intent = DemoCheckoutBackend.createPaymentIntent()
@@ -143,7 +154,10 @@ private fun GooglePaySampleScreen(activity: FragmentActivity) {
                         intent = intent!!,
                         modifier = Modifier.fillMaxWidth(),
                         onEvent = { event ->
-                            if (event is GooglePayEvent.Ready) bound = true
+                            if (event is GooglePayEvent.Ready) {
+                                bound = true
+                                loadFailed = false
+                            }
                         },
                     )
                 }
@@ -153,7 +167,14 @@ private fun GooglePaySampleScreen(activity: FragmentActivity) {
                         ExampleStatusKind.Neutral,
                     )
                 }
-                if (bound && !googlePay.isReady) {
+                if (loadFailed) {
+                    // Keep the gate open: a repeat failure in the same streak does not call onResult again.
+                    ExampleButton(
+                        label = "Try again",
+                        variant = ExampleButtonVariant.Secondary,
+                        onClick = { loadOrder(retry = true) },
+                    )
+                } else if (bound && !googlePay.isReady) {
                     ExampleStatusChip(
                         "Google Pay isn’t available on this device.",
                         ExampleStatusKind.Neutral,

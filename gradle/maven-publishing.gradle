@@ -17,3 +17,16 @@ afterEvaluate {
         artifact(dokkaJavadocJar)
     }
 }
+
+// Payment Sheet, Payment Element, Google Pay and Core share LIBRARY_GROUP APIs.
+// Each artifact pins its siblings to its own version so Gradle upgrades them together.
+def xmoneyArtifacts = ["payments-core", "paymentelement", "paymentsheet", "googlepay"]
+dependencies {
+    constraints {
+        xmoneyArtifacts.findAll { it != property("POM_ARTIFACT_ID") }.each { artifact ->
+            api("${property("GROUP")}:${artifact}:${property("VERSION_NAME")}") {
+                because("xMoney SDK artifacts share internal APIs and must use one version")
+            }
+        }
+    }
+}

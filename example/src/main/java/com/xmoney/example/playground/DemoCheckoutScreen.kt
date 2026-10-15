@@ -299,12 +299,20 @@ fun DemoCheckoutScreen(
             return@LaunchedEffect
         }
         if (pendingOrder == null || inlineOrderConsumed) return@LaunchedEffect
-        delay(300)
         error = null
         try {
-            // Keep the mounted Element / wallet button; they call updateOrder
-            // when [pendingOrder] changes.
-            pendingOrder = createOrder()
+            // Pay is locked from here, including the debounce and the server
+            // call, until the new order is bound. Keep the mounted Element /
+            // wallet button; their bind of the returned intent is then a no-op.
+            val create: suspend () -> PaymentIntent = {
+                delay(300)
+                createOrder()
+            }
+            pendingOrder = if (mode == IntegrationMode.Embedded) {
+                embedded.updateOrder(createOrder = create)
+            } else {
+                googlePay.updateOrder(createOrder = create)
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

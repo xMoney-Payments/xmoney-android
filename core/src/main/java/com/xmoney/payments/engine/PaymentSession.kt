@@ -8,10 +8,20 @@ import com.xmoney.payments.model.CardHolderVerificationResult
 import com.xmoney.payments.model.CardInput
 import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.model.PaymentIntent
+import com.xmoney.payments.model.UpdateOrderSuperseded
 import com.xmoney.payments.network.HttpClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
+
+/** A loaded order that [PaymentSession.commit] can make current. */
+@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+class BindCandidate internal constructor(
+    internal val key: String,
+    internal val engine: PaymentEngine,
+    val state: SheetState,
+    internal val alreadyBound: Boolean,
+)
 
 /** Shared payment session for Sheet, Embedded, and standalone Google Pay. */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
@@ -65,13 +75,29 @@ class PaymentSession(
         }
     }
 
+    /** True when [intent] is the order this session last committed. */
+    fun isBound(intent: PaymentIntent): Boolean = state != null && boundKey == key(intent)
+
+    /** Load and commit in one step. A newer [bind] on this session cancels an older one. */
     suspend fun bind(intent: PaymentIntent, activity: FragmentActivity? = null): SheetState {
+        val generation = ++bindGeneration
+        val candidate = load(intent, activity)
+        if (generation != bindGeneration) throw UpdateOrderSuperseded()
+        commit(candidate)
+        return candidate.state
+    }
+
+    /**
+     * Loads [intent] without changing this session. Call [commit] only after the
+     * caller has checked that its request is still current, so a superseded load
+     * can never replace the order the shopper sees.
+     */
+    suspend fun load(intent: PaymentIntent, activity: FragmentActivity? = null): BindCandidate {
         val key = key(intent)
         state?.let { current ->
-            if (boundKey == key) return current
+            if (boundKey == key) return BindCandidate(key, engine, current, alreadyBound = true)
         }
 
-        val generation = ++bindGeneration
         val resolved = configuration.resolve(intent)
         val engineToLoad = if (key(engine.config.orderPayload, engine.config.orderChecksum) == key) {
             engine
@@ -91,17 +117,26 @@ class PaymentSession(
         if (decorate != null && loaded.googlePayAvailable && activity != null) {
             loaded = decorate(engineToLoad, loaded, activity)
         }
-        if (generation != bindGeneration) {
-            throw CancellationException()
-        }
+        return BindCandidate(key, engineToLoad, loaded, alreadyBound = false)
+    }
 
-        engine = engineToLoad
-        boundKey = key
-        state = loaded
+    /** Makes [candidate] the bound order. Re-committing the bound order keeps its consumed state. */
+    fun commit(candidate: BindCandidate) {
+        if (candidate.alreadyBound && boundKey == candidate.key && state != null) return
+        engine = candidate.engine
+        boundKey = candidate.key
+        state = candidate.state
         isOrderConsumed = false
         isProcessing = false
-        return loaded
     }
+
+    /** Builds the wallet authorizer for a loaded but not yet committed [candidate]. */
+    fun makeWalletAuthorizer(
+        candidate: BindCandidate,
+        presenter: ThreeDSPresenter,
+        activity: FragmentActivity,
+    ): DigitalWalletAuthorizing? =
+        DigitalWalletFactory.makeGooglePay?.invoke(candidate.engine, presenter, activity)
 
     suspend fun submitNewCard(input: CardInput, presenter: ThreeDSPresenter): EngineResult =
         submit(didAuthorize = true) { engine.submitNewCard(input, presenter) }

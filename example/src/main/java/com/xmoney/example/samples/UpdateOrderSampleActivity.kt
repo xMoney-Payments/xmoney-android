@@ -9,9 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Remove
@@ -22,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,11 +68,10 @@ private const val AMOUNT_MIN_MINOR = 500L
 /**
  * Update the bound order without unmounting Payment Element.
  *
- * Create a new `payload` + `checksum` on **your** server, then
- * [EmbeddedPaymentController.updateOrder] that [PaymentIntent]. Pay is
- * locked until it returns. Compose [PaymentElement] also calls `updateOrder`
- * when its `intent` changes — this sample calls `updateOrder` itself so the
- * native API is visible.
+ * Pass the server call that creates the new `payload` + `checksum` to
+ * [EmbeddedPaymentController.updateOrder]. Pay is locked during the debounce,
+ * server call, and bind. Then pass the returned [PaymentIntent] to
+ * [PaymentElement]; its repeated bind is a no-op.
  */
 class UpdateOrderSampleActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -95,6 +93,8 @@ private fun UpdateOrderSampleScreen(activity: FragmentActivity) {
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     var ready by remember { mutableStateOf(false) }
+    var loadFailed by remember { mutableStateOf(false) }
+    var retryKey by remember { mutableIntStateOf(0) }
 
     val style = exampleForcedStyle()
     val wallet = exampleWalletAppearance()
@@ -117,7 +117,14 @@ private fun UpdateOrderSampleScreen(activity: FragmentActivity) {
 
     val embedded = rememberEmbeddedPayment(
         configuration = configuration,
-        onResult = { lastResult = it },
+        onResult = { result ->
+            lastResult = result
+            // A failed first load emits no Ready: open the gate onto the SDK failure text.
+            if (result is PaymentResult.Failed) {
+                ready = true
+                loadFailed = true
+            }
+        },
     )
 
     LaunchedEffect(appearance) { embedded.updateAppearance(appearance) }
@@ -132,21 +139,23 @@ private fun UpdateOrderSampleScreen(activity: FragmentActivity) {
 
     val consumed = lastResult != null && embedded.isOrderConsumed
 
-    LaunchedEffect(amountMinor, consumed) {
+    LaunchedEffect(amountMinor, consumed, retryKey) {
         if (consumed) return@LaunchedEffect
-        if (hostIntent != null) delay(300)
         val initial = hostIntent == null
         if (initial) loading = true
         error = null
         try {
-            val next = DemoCheckoutBackend.createPaymentIntent(amountMinor = amountMinor)
-            // Native equivalent of iOS element.updateOrder(intent:).
-            // Pay / confirm / Google Pay are no-ops until updateOrder returns.
-            // Keep the Element mounted — do not clear intent or flip Ready.
-            embedded.updateOrder(next) { event ->
-                if (event is EmbeddedEvent.Ready) ready = true
+            if (initial) {
+                hostIntent = DemoCheckoutBackend.createPaymentIntent(amountMinor = amountMinor)
+            } else {
+                // Pay / confirm / Google Pay are locked from here, including the
+                // debounce and the server call, until the new order is bound.
+                // Keep the Element mounted — do not clear intent or flip Ready.
+                hostIntent = embedded.updateOrder {
+                    delay(300)
+                    DemoCheckoutBackend.createPaymentIntent(amountMinor = amountMinor)
+                }
             }
-            hostIntent = next
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -158,14 +167,13 @@ private fun UpdateOrderSampleScreen(activity: FragmentActivity) {
 
     SampleScaffold(
         title = "Update order",
-        subtitle = "updateOrder() a new PaymentIntent — Pay locked until Ready.",
+        subtitle = "updateOrder() a new PaymentIntent — Pay locked until it returns.",
         activity = activity,
-        scrollable = false,
         showTestCards = true,
     ) {
         UpdateOrderCard(
             amountMinor = amountMinor,
-            enabled = !consumed && embedded.isInteractionEnabled,
+            enabled = !consumed && !embedded.isProcessing,
             onAmountChange = { amountMinor = it },
         )
         when {
@@ -178,6 +186,7 @@ private fun UpdateOrderSampleScreen(activity: FragmentActivity) {
                         lastResult = null
                         hostIntent = null
                         ready = false
+                        loadFailed = false
                         amountMinor = SAMPLE_AMOUNT_MINOR
                     },
                 )
@@ -188,11 +197,29 @@ private fun UpdateOrderSampleScreen(activity: FragmentActivity) {
                     PaymentElement(
                         controller = embedded,
                         intent = hostIntent!!,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState()),
+                        modifier = Modifier.fillMaxWidth(),
                         onEvent = { event ->
-                            if (event is EmbeddedEvent.Ready) ready = true
+                            when (event) {
+                                EmbeddedEvent.Ready -> {
+                                    ready = true
+                                    loadFailed = false
+                                }
+                                is EmbeddedEvent.UpdateFailed ->
+                                    error = "Could not update the order. Pay is locked until it binds."
+                                is EmbeddedEvent.Processing -> Unit
+                            }
+                        },
+                    )
+                }
+                if (loadFailed) {
+                    // Keep the gate open: a repeat failure in the same streak does not call onResult again.
+                    ExampleButton(
+                        label = "Try again",
+                        variant = ExampleButtonVariant.Secondary,
+                        onClick = {
+                            lastResult = null
+                            hostIntent = null
+                            retryKey++
                         },
                     )
                 }

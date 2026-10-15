@@ -46,6 +46,7 @@ import com.xmoney.payments.config.PaymentMethodsConfig
 import com.xmoney.payments.config.SavedCardsConfig
 import com.xmoney.payments.config.UserInterfaceStyle
 import com.xmoney.payments.model.PaymentIntent
+import com.xmoney.payments.model.PaymentResult
 
 @Composable
 fun AppearancePlaygroundScreen(
@@ -84,10 +85,12 @@ fun AppearancePlaygroundScreen(
         )
     }
 
+    var loadFailed by remember(previewStyle) { mutableStateOf(false) }
     val embedded = key(previewStyle) {
         rememberEmbeddedPayment(
             configuration = configuration,
-            onResult = {},
+            // A failed first load emits no Ready: open the gate onto the SDK failure text.
+            onResult = { if (it is PaymentResult.Failed) loadFailed = true },
         )
     }
     LaunchedEffect(draft.appearanceSignature) {
@@ -157,6 +160,7 @@ fun AppearancePlaygroundScreen(
                 error = error,
                 pendingOrder = pendingOrder,
                 embedded = embedded,
+                loadFailed = loadFailed,
             )
 
             ClassicsGallery(
@@ -493,6 +497,7 @@ private fun PreviewSection(
     error: String?,
     pendingOrder: PaymentIntent?,
     embedded: EmbeddedPaymentController,
+    loadFailed: Boolean,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Live preview", style = MaterialTheme.typography.titleMedium)
@@ -514,7 +519,7 @@ private fun PreviewSection(
                         .border(1.dp, MaterialTheme.colorScheme.outline, shape)
                         .padding(16.dp),
                 ) {
-                    MerchantReadyGate(ready = ready, message = "Preparing preview…") {
+                    MerchantReadyGate(ready = ready || loadFailed, message = "Preparing preview…") {
                         PaymentElement(
                             controller = embedded,
                             intent = pendingOrder,

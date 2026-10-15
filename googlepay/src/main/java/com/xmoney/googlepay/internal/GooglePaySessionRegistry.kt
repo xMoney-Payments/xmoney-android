@@ -13,13 +13,21 @@ internal fun interface GooglePayCloseTarget {
     fun requestClose(): Boolean
 }
 
-internal fun interface GooglePayOrderTarget {
-    suspend fun updateOrder(intent: PaymentIntent, onEvent: (GooglePayEvent) -> Unit)
+internal interface GooglePayOrderTarget {
+    suspend fun updateOrder(
+        intent: PaymentIntent,
+        onEvent: ((GooglePayEvent) -> Unit)? = null,
+    )
+
+    suspend fun updateOrder(
+        onEvent: ((GooglePayEvent) -> Unit)? = null,
+        createOrder: suspend () -> PaymentIntent,
+    ): PaymentIntent
 }
 
 internal object GooglePaySessionRegistry {
     data class Session(
-        val onEvent: (GooglePayEvent) -> Unit = {},
+        var onEvent: (GooglePayEvent) -> Unit = {},
         val onResult: (PaymentResult) -> Unit = {},
         var config: ResolvedPaymentConfig? = null,
         var host: WeakReference<FragmentActivity>? = null,
@@ -28,6 +36,8 @@ internal object GooglePaySessionRegistry {
         var isAvailable: Boolean = false,
         var isReady: Boolean = false,
         var closing: Boolean = false,
+        /** Per presentation, so a recreated host does not emit Ready again. */
+        var readyEmitted: Boolean = false,
     )
 
     private val sessions = ConcurrentHashMap<String, Session>()
@@ -80,7 +90,7 @@ internal object GooglePaySessionRegistry {
     suspend fun updateOrder(
         requestId: String?,
         intent: PaymentIntent,
-        onEvent: (GooglePayEvent) -> Unit = {},
+        onEvent: ((GooglePayEvent) -> Unit)? = null,
     ) {
         if (requestId.isNullOrBlank()) {
             throw IllegalStateException("Google Pay is not presented")
@@ -88,5 +98,18 @@ internal object GooglePaySessionRegistry {
         val target = sessions[requestId]?.orderTarget?.get()
             ?: throw IllegalStateException("Google Pay is not presented")
         target.updateOrder(intent, onEvent)
+    }
+
+    suspend fun updateOrder(
+        requestId: String?,
+        onEvent: ((GooglePayEvent) -> Unit)? = null,
+        createOrder: suspend () -> PaymentIntent,
+    ): PaymentIntent {
+        if (requestId.isNullOrBlank()) {
+            throw IllegalStateException("Google Pay is not presented")
+        }
+        val target = sessions[requestId]?.orderTarget?.get()
+            ?: throw IllegalStateException("Google Pay is not presented")
+        return target.updateOrder(onEvent, createOrder)
     }
 }

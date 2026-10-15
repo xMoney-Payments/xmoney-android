@@ -171,11 +171,20 @@ class GooglePaySessionRegistryTest {
         var lastIntent: PaymentIntent? = null
         override suspend fun updateOrder(
             intent: PaymentIntent,
-            onEvent: (GooglePayEvent) -> Unit,
+            onEvent: ((GooglePayEvent) -> Unit)?,
         ) {
             if (processing) return
             calls += 1
             lastIntent = intent
+        }
+
+        override suspend fun updateOrder(
+            onEvent: ((GooglePayEvent) -> Unit)?,
+            createOrder: suspend () -> PaymentIntent,
+        ): PaymentIntent {
+            val order = createOrder()
+            updateOrder(order, onEvent)
+            return order
         }
     }
 }

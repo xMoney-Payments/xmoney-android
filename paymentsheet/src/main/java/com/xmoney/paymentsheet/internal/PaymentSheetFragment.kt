@@ -15,17 +15,24 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
@@ -47,6 +54,8 @@ import com.xmoney.payments.threeds.ThreeDSHostController
 import com.xmoney.payments.validation.CardFieldValidators
 import com.xmoney.paymentsheet.PaymentSheetEvent
 import com.xmoney.paymentsheet.ui.PaymentSheetContent
+import com.xmoney.paymentelement.ui.LoadingCover
+import com.xmoney.paymentelement.ui.hiddenFromUser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -153,18 +162,8 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
     @androidx.compose.runtime.Composable
     private fun PaymentSheetRoot() {
         val vm = viewModel
+        var coverHeight by remember { mutableStateOf(0.dp) }
         when (val current = uiState) {
-            is UiState.Loading -> {
-                val isDark = UIHelpers.isDarkMode(vm.config, isSystemInDarkTheme())
-                val theme = vm.theme(isDark)
-                SheetSurface(theme) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(40.dp),
-                        contentAlignment = Alignment.Center,
-                    ) { XCoinFlipLoader(color = CheckoutTheme.BrandPrimary) }
-                }
-            }
-
             is UiState.Failed -> {
                 val isDark = UIHelpers.isDarkMode(vm.config, isSystemInDarkTheme())
                 val theme = vm.theme(isDark)
@@ -196,16 +195,61 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
                 }
             }
 
-            is UiState.Loaded -> PaymentSheetContent(
-                config = vm.config,
-                state = current.state,
-                isProcessing = isProcessing,
-                onPayCard = { payWithCard(it) },
-                onSelectSaved = { paySavedCard(it) },
-                onDeleteSaved = { deleteSavedCard(it) },
-                onGooglePay = { startGooglePay() },
-                onCancel = { requestClose() },
-            )
+            else -> {
+                val loaded = current as? UiState.Loaded
+                val surfaceReady = vm.surfaceReady
+                val showCoin = loaded == null || !surfaceReady
+                val heightLocked = loaded != null && showCoin && coverHeight > 0.dp
+                val isDark = UIHelpers.isDarkMode(vm.config, isSystemInDarkTheme())
+                val theme = vm.theme(isDark)
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (heightLocked) {
+                                Modifier.height(coverHeight).clipToBounds()
+                            } else {
+                                Modifier
+                            },
+                        ),
+                ) {
+                    if (loaded != null && (surfaceReady || heightLocked)) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (heightLocked) {
+                                        Modifier.wrapContentHeight(
+                                            align = Alignment.Top,
+                                            unbounded = true,
+                                        )
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                .hiddenFromUser(showCoin),
+                        ) {
+                            PaymentSheetContent(
+                                config = vm.config,
+                                state = loaded.state,
+                                isProcessing = isProcessing,
+                                onPayCard = { payWithCard(it) },
+                                onSelectSaved = { paySavedCard(it) },
+                                onDeleteSaved = { deleteSavedCard(it) },
+                                onGooglePay = { startGooglePay() },
+                                onCancel = { requestClose() },
+                                surfaceEpoch = 1,
+                                onSurfaceDrawn = { vm.markSurfaceReady() },
+                            )
+                        }
+                    }
+                    if (showCoin) {
+                        LoadingCoin(theme, vm.config.options.locale) { height ->
+                            if (coverHeight == 0.dp && height > 1.dp) coverHeight = height
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -220,7 +264,6 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
                 authorizer = session.makeWalletAuthorizer(threeDSHostController, requireActivity())
                 authorizer?.bindResolutionLauncher(resolutionLauncher)
                 uiState = UiState.Loaded(state)
-                viewModel.onEvent(PaymentSheetEvent.Ready)
                 val pending = pendingWalletResult
                 pendingWalletResult = null
                 if (pending != null) {
@@ -331,6 +374,19 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
 
     companion object {
         const val TAG = "PaymentSheet"
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun LoadingCoin(theme: CheckoutTheme, locale: String, onHeight: (Dp) -> Unit) {
+    val density = LocalDensity.current
+    SheetSurface(theme) {
+        LoadingCover(
+            locale = locale,
+            modifier = Modifier.onSizeChanged { size ->
+                onHeight(with(density) { size.height.toDp() })
+            },
+        )
     }
 }
 
