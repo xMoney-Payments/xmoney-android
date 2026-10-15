@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -92,6 +93,8 @@ private fun UpdateOrderSampleScreen(activity: FragmentActivity) {
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     var ready by remember { mutableStateOf(false) }
+    var loadFailed by remember { mutableStateOf(false) }
+    var retryKey by remember { mutableIntStateOf(0) }
 
     val style = exampleForcedStyle()
     val wallet = exampleWalletAppearance()
@@ -114,7 +117,14 @@ private fun UpdateOrderSampleScreen(activity: FragmentActivity) {
 
     val embedded = rememberEmbeddedPayment(
         configuration = configuration,
-        onResult = { lastResult = it },
+        onResult = { result ->
+            lastResult = result
+            // A failed first load emits no Ready: open the gate onto the SDK failure text.
+            if (result is PaymentResult.Failed) {
+                ready = true
+                loadFailed = true
+            }
+        },
     )
 
     LaunchedEffect(appearance) { embedded.updateAppearance(appearance) }
@@ -129,7 +139,7 @@ private fun UpdateOrderSampleScreen(activity: FragmentActivity) {
 
     val consumed = lastResult != null && embedded.isOrderConsumed
 
-    LaunchedEffect(amountMinor, consumed) {
+    LaunchedEffect(amountMinor, consumed, retryKey) {
         if (consumed) return@LaunchedEffect
         val initial = hostIntent == null
         if (initial) loading = true
@@ -176,6 +186,7 @@ private fun UpdateOrderSampleScreen(activity: FragmentActivity) {
                         lastResult = null
                         hostIntent = null
                         ready = false
+                        loadFailed = false
                         amountMinor = SAMPLE_AMOUNT_MINOR
                     },
                 )
@@ -189,11 +200,26 @@ private fun UpdateOrderSampleScreen(activity: FragmentActivity) {
                         modifier = Modifier.fillMaxWidth(),
                         onEvent = { event ->
                             when (event) {
-                                EmbeddedEvent.Ready -> ready = true
+                                EmbeddedEvent.Ready -> {
+                                    ready = true
+                                    loadFailed = false
+                                }
                                 is EmbeddedEvent.UpdateFailed ->
                                     error = "Could not update the order. Pay is locked until it binds."
                                 is EmbeddedEvent.Processing -> Unit
                             }
+                        },
+                    )
+                }
+                if (loadFailed) {
+                    // Keep the gate open: a repeat failure in the same streak does not call onResult again.
+                    ExampleButton(
+                        label = "Try again",
+                        variant = ExampleButtonVariant.Secondary,
+                        onClick = {
+                            lastResult = null
+                            hostIntent = null
+                            retryKey++
                         },
                     )
                 }

@@ -62,11 +62,12 @@ fun PaymentElement(
     var readyEmitted by remember(controller) { mutableStateOf(false) }
     var coverHeight by remember(controller) { mutableStateOf(0.dp) }
     var deferredIntent by remember(controller) { mutableStateOf<PaymentIntent?>(null) }
+    val lastIntent = remember(controller) { arrayOfNulls<PaymentIntent>(1) }
     val density = LocalDensity.current
 
-    suspend fun bind(target: PaymentIntent) {
+    suspend fun bind(target: PaymentIntent, intentChanged: Boolean) {
         try {
-            controller.rebindFromSurface(target, forward)
+            controller.rebindFromSurface(target, forward, intentChanged)
             if (deferredIntent == target) deferredIntent = null
         } catch (e: CancellationException) {
             throw e
@@ -79,12 +80,14 @@ fun PaymentElement(
 
     LaunchedEffect(controller, intent) {
         deferredIntent = null
-        bind(intent)
+        val previous = lastIntent[0]
+        lastIntent[0] = intent
+        bind(intent, intentChanged = previous != null && previous != intent)
     }
     val isProcessing = controller.isProcessing
     LaunchedEffect(controller, isProcessing) {
         val pending = deferredIntent
-        if (!isProcessing && pending != null) bind(pending)
+        if (!isProcessing && pending != null) bind(pending, intentChanged = true)
     }
 
     val state = controller.sheetState

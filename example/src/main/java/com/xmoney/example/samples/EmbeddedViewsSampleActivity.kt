@@ -117,6 +117,7 @@ private fun ViewsEmbeddedContent() {
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     var ready by remember { mutableStateOf(false) }
+    var loadFailed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     val style = exampleForcedStyle()
@@ -140,7 +141,14 @@ private fun ViewsEmbeddedContent() {
 
     val embedded = rememberEmbeddedPayment(
         configuration = configuration,
-        onResult = { lastResult = it },
+        onResult = { result ->
+            lastResult = result
+            // A failed first load emits no Ready: open the gate onto the SDK failure text.
+            if (result is PaymentResult.Failed) {
+                ready = true
+                loadFailed = true
+            }
+        },
     )
     LaunchedEffect(appearance) { embedded.updateAppearance(appearance) }
     LaunchedEffect(style) { embedded.updateStyle(style) }
@@ -152,12 +160,15 @@ private fun ViewsEmbeddedContent() {
         }
     }
 
-    fun loadOrder() {
+    fun loadOrder(retry: Boolean = false) {
         scope.launch {
             loading = true
             error = null
             lastResult = null
-            ready = false
+            if (!retry) {
+                ready = false
+                loadFailed = false
+            }
             intent = null
             try {
                 intent = DemoCheckoutBackend.createPaymentIntent()
@@ -197,8 +208,19 @@ private fun ViewsEmbeddedContent() {
                         intent = intent!!,
                         modifier = Modifier.fillMaxWidth(),
                         onEvent = { event ->
-                            if (event is EmbeddedEvent.Ready) ready = true
+                            if (event is EmbeddedEvent.Ready) {
+                                ready = true
+                                loadFailed = false
+                            }
                         },
+                    )
+                }
+                if (loadFailed) {
+                    // Keep the gate open: a repeat failure in the same streak does not call onResult again.
+                    ExampleButton(
+                        label = "Try again",
+                        variant = ExampleButtonVariant.Secondary,
+                        onClick = { loadOrder(retry = true) },
                     )
                 }
             }

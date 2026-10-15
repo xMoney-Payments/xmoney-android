@@ -65,6 +65,7 @@ private fun MerchantPayButtonScreen(activity: FragmentActivity) {
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     var ready by remember { mutableStateOf(false) }
+    var loadFailed by remember { mutableStateOf(false) }
     var processing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -90,7 +91,14 @@ private fun MerchantPayButtonScreen(activity: FragmentActivity) {
 
     val embedded = rememberEmbeddedPayment(
         configuration = configuration,
-        onResult = { lastResult = it },
+        onResult = { result ->
+            lastResult = result
+            // A failed first load emits no Ready: open the gate onto the SDK failure text.
+            if (result is PaymentResult.Failed) {
+                ready = true
+                loadFailed = true
+            }
+        },
     )
     LaunchedEffect(appearance) { embedded.updateAppearance(appearance) }
     LaunchedEffect(style) { embedded.updateStyle(style) }
@@ -102,12 +110,15 @@ private fun MerchantPayButtonScreen(activity: FragmentActivity) {
         }
     }
 
-    fun loadOrder() {
+    fun loadOrder(retry: Boolean = false) {
         scope.launch {
             loading = true
             error = null
             lastResult = null
-            ready = false
+            if (!retry) {
+                ready = false
+                loadFailed = false
+            }
             processing = false
             intent = null
             try {
@@ -153,14 +164,24 @@ private fun MerchantPayButtonScreen(activity: FragmentActivity) {
                         modifier = Modifier.fillMaxWidth(),
                         onEvent = { event ->
                             when (event) {
-                                EmbeddedEvent.Ready -> ready = true
+                                EmbeddedEvent.Ready -> {
+                                    ready = true
+                                    loadFailed = false
+                                }
                                 is EmbeddedEvent.Processing -> processing = event.isProcessing
                                 is EmbeddedEvent.UpdateFailed -> Unit
                             }
                         },
                     )
                 }
-                if (ready) {
+                if (loadFailed) {
+                    // Keep the gate open: a repeat failure in the same streak does not call onResult again.
+                    ExampleButton(
+                        label = "Try again",
+                        variant = ExampleButtonVariant.Secondary,
+                        onClick = { loadOrder(retry = true) },
+                    )
+                } else if (ready) {
                     ExampleButton(
                         label = "Pay",
                         loading = processing,

@@ -1,6 +1,11 @@
 package com.xmoney.googlepay
 
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.fragment.app.FragmentActivity
@@ -9,12 +14,15 @@ import com.xmoney.payments.config.GooglePayConfig
 import com.xmoney.payments.config.PaymentConfig
 import com.xmoney.payments.config.PaymentMethodsConfig
 import com.xmoney.payments.config.Strings
+import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.payments.model.PaymentResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import com.xmoney.payments.engine.DigitalWalletFactory
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -84,6 +92,56 @@ class GooglePayButtonSurfaceTest {
         }
         compose.waitUntil(5_000) { ready == 1 }
         compose.onNodeWithText(failureText).assertDoesNotExist()
+    }
+
+    @Test
+    fun switchingBackToTheBoundIntentClearsTheStaleLock() {
+        val controller = controller()
+        val intent = mutableStateOf(order("bound"))
+        compose.setContent {
+            GooglePayButton(controller, intent.value)
+        }
+        compose.waitUntil(5_000) { controller.boundIntent == order("bound") }
+        backend.fail(order("next"))
+        setIntent(intent, order("next"))
+        compose.waitUntil(5_000) { controller.isStaleOrder }
+
+        setIntent(intent, order("bound"))
+        compose.waitUntil(5_000) { !controller.isStaleOrder }
+        assertTrue(controller.isInteractionEnabled)
+    }
+
+    @Test
+    fun remountWithTheBoundIntentKeepsTheStaleLock() {
+        val controller = controller()
+        val mount = mutableIntStateOf(0)
+        compose.setContent {
+            merchant = rememberCoroutineScope()
+            key(mount.intValue) {
+                GooglePayButton(controller, order("bound"))
+            }
+        }
+        compose.waitUntil(5_000) { controller.boundIntent == order("bound") }
+        backend.fail(order("next"))
+        compose.runOnUiThread {
+            merchant.launch { runCatching { controller.updateOrder(order("next")) } }
+        }
+        compose.waitUntil(5_000) { controller.isStaleOrder }
+
+        compose.runOnUiThread {
+            mount.intValue++
+            Snapshot.sendApplyNotifications()
+        }
+        settle()
+        assertTrue(controller.isStaleOrder)
+        assertFalse(controller.isInteractionEnabled)
+    }
+
+    private fun setIntent(state: MutableState<PaymentIntent>, value: PaymentIntent) {
+        compose.runOnUiThread {
+            state.value = value
+            Snapshot.sendApplyNotifications()
+        }
     }
 
     private fun controller(onResult: (PaymentResult) -> Unit = {}): GooglePayController {

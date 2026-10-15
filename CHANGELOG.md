@@ -35,7 +35,7 @@ These follow the shared iOS/Android update-order contract:
 
 1. **Ready.** Fires once per mounted surface, when the form or wallet button first draws, or after the 2-second fallback. A wallet that is known to be unavailable counts as a settled state, not an error, so Ready still fires. It never fires on a failure screen. If a later retry replaces the failure screen with a form, Ready fires then. Order updates never emit it.
 2. **Initial failure.** The surface shows a themed, localized failure state. `Failed` is delivered once per failure streak, and direct callers get the error thrown. Re-renders must not retry.
-3. **Later bind failure** (an intent is already bound, and binding a new intent fails). Pay stays locked on the stale order (`isInteractionEnabled == false`) until a successful bind. The surface emits `UpdateFailed(error)` and the error is thrown to direct callers. `onResult` is not called.
+3. **Later bind failure** (an intent is already bound, and binding a new intent fails). Pay stays locked on the stale order (`isInteractionEnabled == false`) until a successful bind. The surface emits `UpdateFailed(error)` and the error is thrown to direct callers. `onResult` is not called. A declarative host that switches back to the bound intent clears the lock; a remount does not.
 4. **createOrder closure failure.** The previous order stays bound and payable. The error is thrown; no `UpdateFailed` event is emitted.
 5. **Supersession.** A newer merchant call always wins, even if it passes the already-bound intent; it cancels any in-flight creation or bind. A rebind from the SDK's own surface (SwiftUI or Compose host) with the already-bound intent is a no-op and cancels nothing. A superseded call throws the platform cancellation error: `CancellationError` on iOS, `UpdateOrderSuperseded`, a subclass of `CancellationException`, on Android.
 6. **During a charge.** The same intent is a no-op. A different intent throws "payment in progress", detected with a typed check rather than a string match. The declarative host keeps the intent and retries it once `Processing(false)` arrives.
@@ -55,6 +55,7 @@ Android-specific breaking changes:
 
 ### Migration
 
+- End merchant loading on `onResult(Failed)` as well as `Ready`; a failed first load no longer emits `Ready`.
 - Listen for `Ready` on `PaymentElement` or `GooglePayButton`, not on a direct controller `updateOrder()` call. Do not show a new loader that waits for `Ready` on later order updates; use `isInteractionEnabled` for update-order chrome.
 - Treat the suspend return as update completion. Catch `UpdateOrderSuperseded` (or rethrow `CancellationException`) before treating an update as failed; `runCatching { }` and `catch (e: Exception)` catch it too. Keep order-creation endpoints idempotent.
 - Use the intent returned by `updateOrder { }` as the new `intent` for `PaymentElement` / `GooglePayButton`.
@@ -66,6 +67,7 @@ Android-specific breaking changes:
 
 ### Fixed
 
+- `PaymentElement` and the Compose `GooglePayButton` now unlock Pay when the host switches back to the bound intent after a failed update.
 - An approval in the bank app is no longer reported as a failure after a dropped status check.
 - The bank-app hand-off works on Android 11 and later.
 - A load error on the return page no longer fails the payment.

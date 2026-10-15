@@ -147,6 +147,51 @@ class PaymentElementSurfaceTest {
     }
 
     @Test
+    fun switchingBackToTheBoundIntentClearsTheStaleLock() {
+        val controller = controller()
+        val intent = mutableStateOf(order("bound"))
+        val events = mutableListOf<EmbeddedEvent>()
+        compose.setContent {
+            merchant = rememberCoroutineScope()
+            PaymentElement(controller, intent.value) { events += it }
+        }
+        waitFor(controller, "ready") { events.contains(EmbeddedEvent.Ready) }
+        backend.fail(order("next"))
+        setIntent(intent, order("next"))
+        waitFor(controller, "stale") { controller.isStaleOrder }
+
+        setIntent(intent, order("bound"))
+        waitFor(controller, "stale lock cleared") { !controller.isStaleOrder }
+        assertTrue(controller.isInteractionEnabled)
+        assertEquals(order("bound"), controller.boundIntent)
+    }
+
+    @Test
+    fun remountWithTheBoundIntentKeepsTheStaleLock() {
+        val controller = controller()
+        val mount = mutableIntStateOf(0)
+        val events = mutableListOf<EmbeddedEvent>()
+        compose.setContent {
+            merchant = rememberCoroutineScope()
+            key(mount.intValue) {
+                PaymentElement(controller, order("bound")) { events += it }
+            }
+        }
+        waitFor(controller, "ready") { events.contains(EmbeddedEvent.Ready) }
+        backend.fail(order("next"))
+        val update = merchantUpdate(controller, order("next"))
+        waitFor(controller, "stale") { update.isCompleted && controller.isStaleOrder }
+
+        compose.runOnUiThread {
+            mount.intValue++
+            Snapshot.sendApplyNotifications()
+        }
+        settle()
+        assertTrue(controller.isStaleOrder)
+        assertTrue(!controller.isInteractionEnabled)
+    }
+
+    @Test
     fun intentDuringPaymentBindsOnceProcessingEnds() {
         val controller = controller()
         val intent = mutableStateOf(order("bound"))

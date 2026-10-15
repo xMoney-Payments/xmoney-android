@@ -242,16 +242,27 @@ class EmbeddedPaymentController(
     /**
      * Surface-driven rebind from [PaymentElement]. The bound order, or the order an
      * in-flight merchant call is already binding, is a no-op that cancels nothing.
+     *
+     * [intentChanged] is true when the host's intent changed, as opposed to a first
+     * composition. Switching back to the bound order means the cart matches it
+     * again, so the stale-order lock clears. A mount never clears it: the host may
+     * hold an older intent than an order the merchant bound directly.
      */
     internal suspend fun rebindFromSurface(
         order: PaymentIntent,
         onEvent: (EmbeddedEvent) -> Unit,
+        intentChanged: Boolean = false,
     ) {
         this.onEvent = onEvent
-        if (isBound(order) || inFlightOrder == order) {
-            if (isBound(order)) paymentConfig = liveConfiguration.resolve(order)
+        if (isBound(order)) {
+            paymentConfig = liveConfiguration.resolve(order)
+            if (intentChanged && isStaleOrder) {
+                isStaleOrder = false
+                syncInteractionEnabled()
+            }
             return
         }
+        if (inFlightOrder == order) return
         updateOrder(order)
     }
 

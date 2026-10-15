@@ -213,13 +213,25 @@ class GooglePayController internal constructor(
     /**
      * Surface-driven rebind from [GooglePayButton]. The bound intent, or the intent
      * an in-flight merchant call is already binding, is a no-op that cancels nothing.
+     *
+     * [intentChanged] is true when the host's intent changed, as opposed to a first
+     * composition. Switching back to the bound intent clears the stale-order lock;
+     * a mount never does.
      */
     internal suspend fun rebindFromSurface(
         intent: PaymentIntent,
         onEvent: (GooglePayEvent) -> Unit,
+        intentChanged: Boolean = false,
     ) {
         this.onEvent = onEvent
-        if (isBound(intent) || inFlightOrder == intent) return
+        if (isBound(intent)) {
+            if (intentChanged && isStaleOrder) {
+                isStaleOrder = false
+                syncInteractionEnabled()
+            }
+            return
+        }
+        if (inFlightOrder == intent) return
         updateOrder(intent)
     }
 
@@ -407,6 +419,7 @@ fun GooglePayButton(
     var readyEmitted by remember(controller) { mutableStateOf(false) }
     var buttonDrawn by remember(controller) { mutableStateOf(false) }
     var deferredIntent by remember(controller) { mutableStateOf<PaymentIntent?>(null) }
+    val lastIntent = remember(controller) { arrayOfNulls<PaymentIntent>(1) }
     val emitReady = {
         if (!readyEmitted) {
             readyEmitted = true
@@ -414,9 +427,9 @@ fun GooglePayButton(
         }
     }
 
-    suspend fun bind(target: PaymentIntent) {
+    suspend fun bind(target: PaymentIntent, intentChanged: Boolean) {
         try {
-            controller.rebindFromSurface(target, forward)
+            controller.rebindFromSurface(target, forward, intentChanged)
             if (deferredIntent == target) deferredIntent = null
         } catch (e: CancellationException) {
             throw e
@@ -429,12 +442,14 @@ fun GooglePayButton(
 
     LaunchedEffect(controller, intent) {
         deferredIntent = null
-        bind(intent)
+        val previous = lastIntent[0]
+        lastIntent[0] = intent
+        bind(intent, intentChanged = previous != null && previous != intent)
     }
     val isProcessing = controller.isProcessing
     LaunchedEffect(controller, isProcessing) {
         val pending = deferredIntent
-        if (!isProcessing && pending != null) bind(pending)
+        if (!isProcessing && pending != null) bind(pending, intentChanged = true)
     }
 
     val availability = controller.availability

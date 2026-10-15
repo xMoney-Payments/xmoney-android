@@ -80,8 +80,8 @@ Interim events (`Ready`, `Processing`) do not replace `onResult`. Use `Ready` to
 Shared with the iOS SDK:
 
 1. **Ready.** Fires once per mounted surface, when the form or wallet button first draws, or after the 2-second fallback. A wallet that is known to be unavailable counts as a settled state, not an error, so Ready still fires. It never fires on a failure screen. If a later retry replaces the failure screen with a form, Ready fires then. Order updates never emit it.
-2. **Initial failure.** The surface shows a themed, localized failure state. `Failed` is delivered once per failure streak, and direct callers get the error thrown. Re-renders must not retry.
-3. **Later bind failure** (an intent is already bound, and binding a new intent fails). Pay stays locked on the stale order (`isInteractionEnabled == false`) until a successful bind. The surface emits `UpdateFailed(error)` and the error is thrown to direct callers. `onResult` is not called.
+2. **Initial failure.** The surface shows a themed, localized failure state. `Failed` is delivered once per failure streak, and direct callers get the error thrown. Re-renders must not retry. A merchant loader that waits for Ready must also end on `Failed`. A failed first load shows the SDK failure state and emits no Ready. To retry, call `updateOrder` with a new or the same order, or remount the surface.
+3. **Later bind failure** (an intent is already bound, and binding a new intent fails). Pay stays locked on the stale order (`isInteractionEnabled == false`) until a successful bind. The surface emits `UpdateFailed(error)` and the error is thrown to direct callers. `onResult` is not called. A declarative host that switches back to the bound intent clears the lock; a remount does not.
 4. **createOrder closure failure.** The previous order stays bound and payable. The error is thrown; no `UpdateFailed` event is emitted.
 5. **Supersession.** A newer merchant call always wins, even if it passes the already-bound intent; it cancels any in-flight creation or bind. A rebind from the SDK's own surface (SwiftUI or Compose host) with the already-bound intent is a no-op and cancels nothing. A superseded call throws the platform cancellation error: `CancellationError` on iOS, `UpdateOrderSuperseded`, a subclass of `CancellationException`, on Android.
 6. **During a charge.** The same intent is a no-op. A different intent throws "payment in progress", detected with a typed check rather than a string match. The declarative host keeps the intent and retries it once `Processing(false)` arrives.
@@ -160,14 +160,17 @@ Copy-paste sample: [`PaymentSheetSampleActivity.kt`](example/src/main/java/com/x
 
 ## Payment Element
 
-Same form as the sheet, without the bottom-sheet chrome. Mount it in your layout. Embedded does not add outer content padding or a page fill — the host background shows through; supply your own page spacing. Keep merchant loading until `EmbeddedEvent.Ready`. Bind runs only while `PaymentElement` is composed, so leave it mounted at its real height and cover it — a zero-height slot cannot draw the Google Pay button. `Ready` fires after the card form and, when offered, the wallet button have pre-drawn. The element’s own coin stays up until `Ready`, swallows taps, and hides covered controls from accessibility. `Ready` fires once per mounted element; a later `updateOrder` does not emit it again or bring the coin back:
+Same form as the sheet, without the bottom-sheet chrome. Mount it in your layout. Embedded does not add outer content padding or a page fill — the host background shows through; supply your own page spacing. Keep merchant loading until `EmbeddedEvent.Ready` or `onResult(Failed)`; a failed first load shows the SDK failure text and emits no `Ready`. Do not bring the loader back when you retry: a repeat failure in the same streak does not call `onResult` again. Bind runs only while `PaymentElement` is composed, so leave it mounted at its real height and cover it — a zero-height slot cannot draw the Google Pay button. `Ready` fires after the card form and, when offered, the wallet button have pre-drawn. The element’s own coin stays up until `Ready`, swallows taps, and hides covered controls from accessibility. `Ready` fires once per mounted element; a later `updateOrder` does not emit it again or bring the coin back:
 
 ```kotlin
 var ready by remember { mutableStateOf(false) }
 
 val embedded = rememberEmbeddedPayment(
     configuration = configuration,
-    onResult = { /* PaymentResult */ },
+    onResult = { result ->
+        // First-load failure: show the SDK failure text.
+        if (result is PaymentResult.Failed) ready = true
+    },
 )
 
 if (!ready) { /* merchant loader */ }
@@ -224,11 +227,19 @@ Payment Sheet snapshots config at `present()` — pass appearance on `PaymentCon
 
 ### Merchant-owned Pay button
 
-Embedded only. Hide the SDK button and call `confirm()` after `EmbeddedEvent.Ready`:
+Embedded only. Hide the SDK button and call `confirm()` after `EmbeddedEvent.Ready`. End your loader on `onResult(Failed)` too:
 
 ```kotlin
 card = CardConfig(
     submitButton = SubmitButtonConfig(visible = false),
+)
+
+val embedded = rememberEmbeddedPayment(
+    configuration = configuration,
+    onResult = { result ->
+        // First-load failure: show the SDK failure text.
+        if (result is PaymentResult.Failed) ready = true
+    },
 )
 
 PaymentElement(
@@ -253,12 +264,15 @@ Copy-paste sample: [`EmbeddedPaymentSampleActivity.kt`](example/src/main/java/co
 
 **Compose**
 
-Keep `GooglePayButton` composed at its real size under your loader. `GooglePayEvent.Ready` fires once per mounted button, after the button has pre-drawn, or as soon as Google Pay is known to be unavailable.
+Keep `GooglePayButton` composed at its real size under your loader. `GooglePayEvent.Ready` fires once per mounted button, after the button has pre-drawn, or as soon as Google Pay is known to be unavailable. A failed first load shows the SDK failure text and emits no `Ready`, so end your loader on `onResult(Failed)` too, and keep it down while you retry.
 
 ```kotlin
-val googlePay = rememberGooglePay(configuration, onResult = { /* */ })
-
 var ready by remember { mutableStateOf(false) }
+val googlePay = rememberGooglePay(configuration, onResult = { result ->
+    // First-load failure: show the SDK failure text.
+    if (result is PaymentResult.Failed) ready = true
+})
+
 if (!ready) { /* merchant loader */ }
 GooglePayButton(
     controller = googlePay,

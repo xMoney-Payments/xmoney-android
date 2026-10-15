@@ -191,11 +191,46 @@ class EmbeddedPaymentControllerUpdateOrderTest {
             }
         }
         started.await()
-        controller.rebindFromSurface(bound) { events += it }
+        controller.rebindFromSurface(bound, { events += it }, intentChanged = true)
         assertFalse(creation.isCompleted)
+        assertFalse(controller.isInteractionEnabled)
 
         release.complete(Unit)
         assertEquals(order("next"), creation.await().getOrThrow())
+    }
+
+    @Test
+    fun surfaceSwitchBackToTheBoundIntentClearsTheStaleLock() = runBlocking {
+        val controller = staleController()
+
+        controller.rebindFromSurface(order("bound"), { events += it }, intentChanged = true)
+
+        assertFalse(controller.isStaleOrder)
+        assertTrue(controller.isInteractionEnabled)
+        assertEquals(order("bound"), controller.boundIntent)
+    }
+
+    @Test
+    fun surfaceMountWithTheBoundIntentKeepsTheStaleLock() = runBlocking {
+        val controller = staleController()
+
+        controller.rebindFromSurface(order("bound"), { events += it }, intentChanged = false)
+
+        assertTrue(controller.isStaleOrder)
+        assertFalse(controller.isInteractionEnabled)
+    }
+
+    private suspend fun staleController(): EmbeddedPaymentController {
+        val controller = controller()
+        controller.bind(order("bound"))
+        backend.fail(order("next"))
+        try {
+            controller.bind(order("next"))
+            fail("Expected bind to throw")
+        } catch (_: PaymentError) {
+        }
+        assertTrue(controller.isStaleOrder)
+        return controller
     }
 
     @Test
