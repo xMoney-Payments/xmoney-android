@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.fragment.app.FragmentActivity
 import com.xmoney.googlepay.FakeBackend.Companion.order
@@ -37,7 +38,7 @@ class GooglePayButtonSurfaceTest {
 
     private val activity: FragmentActivity =
         Robolectric.buildActivity(FragmentActivity::class.java).setup().get()
-    private val backend = FakeBackend()
+    private val backend = FakeBackend(inline = true)
 
     @Before
     fun installWithoutPlayServices() {
@@ -80,8 +81,10 @@ class GooglePayButtonSurfaceTest {
                 if (it is GooglePayEvent.Ready) ready++
             }
         }
-        compose.waitUntil(5_000) { controller.bindError != null }
-        compose.onNodeWithText(failureText).assertExists()
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithText(failureText).fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue(controller.bindError != null)
         settle()
         assertEquals(0, ready)
         assertEquals(1, results)

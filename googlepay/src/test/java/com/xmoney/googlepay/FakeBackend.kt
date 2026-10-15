@@ -11,6 +11,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import okio.Buffer
@@ -18,8 +19,12 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/** Answers session-token loads per order: succeed, fail, or hold until released. */
-internal class FakeBackend {
+/**
+ * Answers session-token loads per order: succeed, fail, or hold until released.
+ * With [inline], loads run on the calling thread, so a Compose test's unconfined
+ * effects never resume on an IO thread. [hold] then blocks that thread.
+ */
+internal class FakeBackend(private val inline: Boolean = false) {
     @Volatile var failAll = false
     private val failing = ConcurrentHashMap.newKeySet<String>()
     private val held = ConcurrentHashMap<String, CountDownLatch>()
@@ -81,7 +86,7 @@ internal class FakeBackend {
         configuration = configuration,
         intent = intent,
         context = context,
-        http = HttpClient(client),
+        http = if (inline) HttpClient(client, Dispatchers.Unconfined) else HttpClient(client),
     )
 
     companion object {

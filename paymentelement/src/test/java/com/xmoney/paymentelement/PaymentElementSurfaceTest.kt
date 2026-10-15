@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.fragment.app.FragmentActivity
@@ -98,8 +99,10 @@ class PaymentElementSurfaceTest {
                 if (it is EmbeddedEvent.Ready) ready++
             }
         }
-        waitFor(controller, "controller.bindError != null") { controller.bindError != null }
-        compose.onNodeWithText(failureText).assertExists()
+        waitFor(controller, "failure text shown") {
+            compose.onAllNodesWithText(failureText).fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue(controller.bindError != null)
         settle()
         assertEquals(0, ready)
         assertEquals(1, results)
@@ -277,8 +280,10 @@ class PaymentElementSurfaceTest {
         val newer = merchantUpdate(controller, order("second"))
         waitFor(controller, "newer.isCompleted") { newer.isCompleted }
         backend.release(order("first"))
-        waitFor(controller, "controller.bindError != null") { controller.bindError != null }
-        compose.onNodeWithText(failureText).assertExists()
+        waitFor(controller, "failure text shown") {
+            compose.onAllNodesWithText(failureText).fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue(controller.bindError != null)
         settle()
         assertEquals(0, ready)
         assertEquals(1, results)

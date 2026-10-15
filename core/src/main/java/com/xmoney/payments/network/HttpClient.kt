@@ -3,6 +3,7 @@ package com.xmoney.payments.network
 import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.util.DeviceMetadata
 
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -16,6 +17,7 @@ import java.util.concurrent.TimeUnit
 @androidx.annotation.RestrictTo(androidx.annotation.RestrictTo.Scope.LIBRARY_GROUP)
 class HttpClient(
     private val client: OkHttpClient = sharedOkHttpClient,
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val jsonMedia = "application/json; charset=utf-8".toMediaType()
 
@@ -25,18 +27,18 @@ class HttpClient(
         bearer: String? = null,
         exposingStatus: Boolean = false,
     ): Map<String, Any?> =
-        withContext(Dispatchers.IO) {
+        withContext(io) {
             executeSync(baseRequest(url, bearer).get().build(), exposingStatus)
         }
 
     suspend fun postJson(url: String, body: Map<String, Any?>, bearer: String? = null): Map<String, Any?> =
-        withContext(Dispatchers.IO) {
+        withContext(io) {
             val payload = (mapToJson(body) as JSONObject).toString().toRequestBody(jsonMedia)
             executeSync(baseRequest(url, bearer).post(payload).build())
         }
 
     suspend fun delete(url: String, bearer: String?) {
-        withContext(Dispatchers.IO) {
+        withContext(io) {
             client.newCall(baseRequest(url, bearer).delete().build()).execute().use { response ->
                 if (!response.isSuccessful) {
                     throw PaymentError.Network()
@@ -46,7 +48,7 @@ class HttpClient(
     }
 
     suspend fun postMultipart(url: String, fields: Map<String, String>): Map<String, Any?> =
-        withContext(Dispatchers.IO) {
+        withContext(io) {
             val boundary = "xmoney-${UUID.randomUUID()}"
             val body = buildMultipartBody(boundary, fields)
             val mediaType = "multipart/form-data; boundary=$boundary".toMediaType()
