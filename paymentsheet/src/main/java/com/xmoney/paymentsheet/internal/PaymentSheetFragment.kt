@@ -10,8 +10,6 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,7 +31,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -57,6 +54,8 @@ import com.xmoney.payments.threeds.ThreeDSHostController
 import com.xmoney.payments.validation.CardFieldValidators
 import com.xmoney.paymentsheet.PaymentSheetEvent
 import com.xmoney.paymentsheet.ui.PaymentSheetContent
+import com.xmoney.paymentelement.ui.LoadingCover
+import com.xmoney.paymentelement.ui.hiddenFromUser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -74,7 +73,6 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
     private val session get() = viewModel.session
 
     private var uiState by mutableStateOf<UiState>(UiState.Loading)
-    private var surfaceReady by mutableStateOf(false)
     private var isProcessing by mutableStateOf(false)
     private var didFinish = false
     private var authorizer: DigitalWalletAuthorizing? = null
@@ -199,6 +197,7 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
 
             else -> {
                 val loaded = current as? UiState.Loaded
+                val surfaceReady = vm.surfaceReady
                 val showCoin = loaded == null || !surfaceReady
                 val heightLocked = loaded != null && showCoin && coverHeight > 0.dp
                 val isDark = UIHelpers.isDarkMode(vm.config, isSystemInDarkTheme())
@@ -228,9 +227,7 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
                                         Modifier
                                     },
                                 )
-                                .then(
-                                    if (showCoin) Modifier.clearAndSetSemantics { } else Modifier,
-                                ),
+                                .hiddenFromUser(showCoin),
                         ) {
                             PaymentSheetContent(
                                 config = vm.config,
@@ -242,17 +239,12 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
                                 onGooglePay = { startGooglePay() },
                                 onCancel = { requestClose() },
                                 surfaceEpoch = 1,
-                                onSurfaceDrawn = {
-                                    if (!surfaceReady) {
-                                        surfaceReady = true
-                                        viewModel.emitReady()
-                                    }
-                                },
+                                onSurfaceDrawn = { vm.markSurfaceReady() },
                             )
                         }
                     }
                     if (showCoin) {
-                        LoadingCoin(theme) { height ->
+                        LoadingCoin(theme, vm.config.options.locale) { height ->
                             if (coverHeight == 0.dp && height > 1.dp) coverHeight = height
                         }
                     }
@@ -386,26 +378,15 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
 }
 
 @androidx.compose.runtime.Composable
-private fun LoadingCoin(theme: CheckoutTheme, onHeight: (Dp) -> Unit) {
+private fun LoadingCoin(theme: CheckoutTheme, locale: String, onHeight: (Dp) -> Unit) {
     val density = LocalDensity.current
     SheetSurface(theme) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .onSizeChanged { size ->
-                    onHeight(with(density) { size.height.toDp() })
-                }
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = {},
-                )
-                .clearAndSetSemantics { }
-                .padding(40.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            XCoinFlipLoader(color = CheckoutTheme.BrandPrimary)
-        }
+        LoadingCover(
+            locale = locale,
+            modifier = Modifier.onSizeChanged { size ->
+                onHeight(with(density) { size.height.toDp() })
+            },
+        )
     }
 }
 

@@ -8,6 +8,7 @@ import android.os.Parcelable
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,6 +43,7 @@ import com.xmoney.payments.model.OrderPayload
 import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.payments.threeds.ThreeDSHostController
+import com.xmoney.payments.model.UpdateOrderSuperseded
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
@@ -61,6 +63,10 @@ class GooglePayHostActivity : FragmentActivity(), GooglePayCloseTarget, GooglePa
     private var isProcessing = false
     private var walletUiProcessing by mutableStateOf(false)
     private var isUpdatingOrder by mutableStateOf(false)
+    @VisibleForTesting
+    internal var isStaleOrder by mutableStateOf(false)
+        private set
+    private var localReadyEmitted = false
     private var sheetState by mutableStateOf<SheetState?>(null)
     private var pendingWalletResult: androidx.activity.result.ActivityResult? = null
     private var boundIntent: PaymentIntent? = null
@@ -104,7 +110,7 @@ class GooglePayHostActivity : FragmentActivity(), GooglePayCloseTarget, GooglePa
             OrderPayload(config.orderPayload),
             OrderChecksum(config.orderChecksum),
         )
-        session = newSession?.invoke(paymentConfig, initialIntent, applicationContext)
+        session = sessionFactory?.invoke(paymentConfig, initialIntent, applicationContext)
             ?: PaymentSession(paymentConfig, initialIntent, applicationContext)
         threeDS = ThreeDSHostController(this) { config.options.locale }
 
@@ -128,7 +134,7 @@ class GooglePayHostActivity : FragmentActivity(), GooglePayCloseTarget, GooglePa
             GooglePayHostContent(
                 state = sheetState,
                 appearance = config.paymentMethods.googlePay.appearance,
-                isUpdatingOrder = isUpdatingOrder,
+                isUpdatingOrder = isUpdatingOrder || isStaleOrder,
                 isWalletProcessing = walletUiProcessing,
                 wallet = authorizer,
                 onPay = { wallet ->
@@ -147,7 +153,7 @@ class GooglePayHostActivity : FragmentActivity(), GooglePayCloseTarget, GooglePa
 
         lifecycleScope.launch {
             try {
-                bindOrder(initialIntent, emitReady = true)
+                bindOrder(initialIntent)
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -187,65 +193,83 @@ class GooglePayHostActivity : FragmentActivity(), GooglePayCloseTarget, GooglePa
     ) {
         if (didFinish) throw IllegalStateException("Google Pay is not presented")
         onEvent?.let { sessionOrEmpty()?.onEvent = it }
-        if (boundIntent == intent && sheetState != null && !session.isOrderConsumed) {
+        if (isProcessing) {
+            if (isBound(intent)) return
+            throw PaymentError.PaymentInProgress()
+        }
+        val generation = supersede()
+        if (isBound(intent)) {
+            isStaleOrder = false
+            isUpdatingOrder = false
             return
         }
-        if (isProcessing) throw PaymentError.Payment("Payment in progress")
-        createOrderTask?.cancel()
-        createOrderTask = null
-        bindOrder(intent, emitReady = false)
+        bindOrder(intent, generation)
     }
 
     override suspend fun updateOrder(
         onEvent: ((GooglePayEvent) -> Unit)?,
         createOrder: suspend () -> PaymentIntent,
-    ) = coroutineScope {
+    ): PaymentIntent = coroutineScope {
         if (didFinish) throw IllegalStateException("Google Pay is not presented")
-        if (isProcessing) throw PaymentError.Payment("Payment in progress")
+        if (isProcessing) throw PaymentError.PaymentInProgress()
         onEvent?.let { sessionOrEmpty()?.onEvent = it }
-        val generation = ++bindGeneration
+        val generation = supersede()
         isUpdatingOrder = true
-        createOrderTask?.cancel()
         val task = async { createOrder() }
         createOrderTask = task
         val intent = try {
             task.await()
         } catch (error: Throwable) {
-            if (generation == bindGeneration) isUpdatingOrder = false
+            if (generation != bindGeneration) throw UpdateOrderSuperseded()
+            isUpdatingOrder = false
             throw error
         } finally {
             if (createOrderTask === task) createOrderTask = null
         }
-        if (generation != bindGeneration || didFinish) throw CancellationException()
-        if (boundIntent == intent && sheetState != null && !session.isOrderConsumed) {
+        if (generation != bindGeneration || didFinish || isDestroyed) throw UpdateOrderSuperseded()
+        if (isBound(intent)) {
+            isStaleOrder = false
             isUpdatingOrder = false
-            return@coroutineScope
+            return@coroutineScope intent
         }
-        bindOrder(intent, generation, emitReady = false)
+        bindOrder(intent, generation)
+        intent
     }
+
+    private fun supersede(): Int {
+        val generation = ++bindGeneration
+        createOrderTask?.cancel()
+        createOrderTask = null
+        return generation
+    }
+
+    private fun isBound(intent: PaymentIntent): Boolean =
+        boundIntent == intent && sheetState != null && !session.isOrderConsumed && session.isBound(intent)
+
+    private var readyEmitted: Boolean
+        get() = sessionOrEmpty()?.readyEmitted ?: localReadyEmitted
+        set(value) {
+            sessionOrEmpty()?.readyEmitted = value
+            localReadyEmitted = value
+        }
 
     private suspend fun bindOrder(
         intent: PaymentIntent,
         generation: Int = ++bindGeneration,
-        emitReady: Boolean,
     ) {
+        val initial = sheetState == null
         isUpdatingOrder = true
         try {
-            val loaded = session.bind(intent, this)
-            if (generation != bindGeneration || didFinish) throw CancellationException()
-            val wallet = session.makeWalletAuthorizer(threeDS, this)
+            val candidate = session.load(intent, this)
+            if (generation != bindGeneration || didFinish || isDestroyed) throw UpdateOrderSuperseded()
+            val loaded = candidate.state
+            val wallet = session.makeWalletAuthorizer(candidate, threeDS, this)
             if (wallet == null || !loaded.googlePayAvailable ||
                 loaded.googlePayAllowedPaymentMethods.isNullOrBlank()
             ) {
-                if (generation != bindGeneration) throw CancellationException()
-                val error = PaymentError.GooglePay("Google Pay is not available")
-                if (sheetState == null) {
-                    isUpdatingOrder = false
-                    finishWithResult(EngineResult.failed(error))
-                    return
-                }
-                throw error
+                throw PaymentError.GooglePay("Google Pay is not available")
             }
+            session.commit(candidate)
             wallet.bindResolutionLauncher(resolutionLauncher)
             authorizer = wallet
             boundIntent = intent
@@ -256,8 +280,10 @@ class GooglePayHostActivity : FragmentActivity(), GooglePayCloseTarget, GooglePa
                 isReady = loaded.googlePayReady
             }
             sheetState = loaded
+            isStaleOrder = false
             isUpdatingOrder = false
-            if (emitReady) {
+            if (!readyEmitted) {
+                readyEmitted = true
                 sessionOrEmpty()?.onEvent?.invoke(GooglePayEvent.Ready)
             }
             val pending = pendingWalletResult
@@ -276,20 +302,26 @@ class GooglePayHostActivity : FragmentActivity(), GooglePayCloseTarget, GooglePa
             }
             throw e
         } catch (e: Exception) {
-            if (generation != bindGeneration) throw CancellationException()
+            if (generation != bindGeneration) throw UpdateOrderSuperseded()
             isUpdatingOrder = false
-            if (sheetState == null) {
-                val error = if (e is PaymentError) e else PaymentError.Load(
-                    e.message ?: PaymentError.GENERIC_LOAD,
-                )
+            val error = e as? PaymentError ?: PaymentError.Load(e.message ?: PaymentError.GENERIC_LOAD)
+            if (initial) {
                 finishWithResult(EngineResult.failed(error))
+            } else {
+                isStaleOrder = true
+                sessionOrEmpty()?.onEvent?.invoke(GooglePayEvent.UpdateFailed(error))
             }
             throw e
         }
     }
 
+    @VisibleForTesting
+    internal fun setProcessingForTest(processing: Boolean) {
+        isProcessing = processing
+    }
+
     private fun startPendingWallet(wallet: DigitalWalletAuthorizing) {
-        if (isProcessing || isUpdatingOrder || !session.isInteractionEnabled) return
+        if (isProcessing || isUpdatingOrder || isStaleOrder || !session.isInteractionEnabled) return
         isProcessing = true
         sessionOrEmpty()?.onEvent?.invoke(GooglePayEvent.Processing(true))
         lifecycleScope.launch {
@@ -319,8 +351,9 @@ class GooglePayHostActivity : FragmentActivity(), GooglePayCloseTarget, GooglePa
         const val EXTRA_REQUEST_ID = "xmoney_google_pay_request_id"
         private const val STATE_PENDING = "xmoney_pending_payment"
 
-        /** Test hook. Production leaves this null and builds a live session. */
-        internal var newSession: ((PaymentConfig, PaymentIntent, Context) -> PaymentSession)? = null
+        /** Production leaves this null and builds a live session. */
+        @VisibleForTesting
+        internal var sessionFactory: ((PaymentConfig, PaymentIntent, Context) -> PaymentSession)? = null
 
         fun createIntent(
             context: Context,

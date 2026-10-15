@@ -132,6 +132,7 @@ private fun GooglePayActivityScreen(
                     is GooglePayEvent.Processing -> {
                         if (event.isProcessing) didProcess = true
                     }
+                    is GooglePayEvent.UpdateFailed -> Unit
                 }
             },
         ) { result ->

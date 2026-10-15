@@ -8,9 +8,10 @@ import com.xmoney.payments.model.PaymentResult
 import com.xmoney.googlepay.internal.GooglePayHostActivity
 import com.xmoney.googlepay.internal.GooglePaySessionRegistry
 import com.xmoney.googlepay.internal.GooglePayBootstrap
+import com.xmoney.payments.model.PaymentError
+import com.xmoney.payments.model.UpdateOrderSuperseded
+import com.xmoney.payments.util.onMainThread
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.lang.ref.WeakReference
 import java.util.UUID
 
@@ -112,10 +113,13 @@ class GooglePay(
      * Rebind a new signed order on the open Google Pay host without dismissing it.
      *
      * Call after [present], while the overlay is still open. The wallet button
-     * is disabled until this returns. This does not emit [GooglePayEvent.Processing].
-     * While a charge is in flight a different intent throws [com.xmoney.payments.model.PaymentError.Payment].
-     * Later updates do not emit [GooglePayEvent.Ready].
-     * A newer [updateOrder] cancels the in-flight one ([CancellationException]).
+     * is disabled until this returns. This does not emit [GooglePayEvent.Processing]
+     * or [GooglePayEvent.Ready]. The latest call wins: an in-flight update throws
+     * [UpdateOrderSuperseded], even when [intent] is the order already bound.
+     * While a charge is in flight the bound order is a no-op and a different one
+     * throws [PaymentError.PaymentInProgress]. If the bind fails after an order was
+     * bound, the wallet stays locked on that stale order, [GooglePayEvent.UpdateFailed]
+     * is emitted, and the error is thrown. Runs on the main thread.
      *
      * @throws IllegalStateException if this instance has no open host
      */
@@ -126,25 +130,28 @@ class GooglePay(
         GooglePay.register()
         val requestId = lastRequestId
             ?: throw IllegalStateException("Google Pay is not presented")
-        withContext(Dispatchers.Main.immediate) {
+        onMainThread {
             GooglePaySessionRegistry.updateOrder(requestId, intent, onEvent)
         }
     }
 
     /**
-     * Create and bind a new signed order on the open Google Pay host.
+     * Create and bind a new signed order on the open Google Pay host, and return it.
      *
-     * Interaction is disabled before [createOrder] starts. A newer update
-     * cooperatively cancels an in-flight creation task.
+     * The wallet is disabled before [createOrder] starts. If [createOrder] throws,
+     * the previous order stays payable and the error is thrown, without
+     * [GooglePayEvent.UpdateFailed]. A newer update supersedes this one
+     * ([UpdateOrderSuperseded]) and cancels [createOrder]. [createOrder] runs on the
+     * main thread, so it must be a non-blocking suspend call.
      */
     suspend fun updateOrder(
         onEvent: ((GooglePayEvent) -> Unit)? = null,
         createOrder: suspend () -> PaymentIntent,
-    ) {
+    ): PaymentIntent {
         GooglePay.register()
         val requestId = lastRequestId
             ?: throw IllegalStateException("Google Pay is not presented")
-        withContext(Dispatchers.Main.immediate) {
+        return onMainThread {
             GooglePaySessionRegistry.updateOrder(requestId, onEvent, createOrder)
         }
     }
@@ -157,11 +164,16 @@ class GooglePay(
 
 /**
  * [Ready] from [GooglePayButton] is emitted once per mounted surface, after the
- * button has pre-drawn, or as soon as Google Pay is known to be unavailable.
- * [GooglePay.present] emits [Ready] after the initial host bind. Later
- * [GooglePay.updateOrder] calls do not emit it.
+ * button has pre-drawn, or as soon as Google Pay is known to be unavailable for a
+ * loaded order. It is never emitted on the failure state.
+ * [GooglePay.present] emits [Ready] after its first successful bind; an initial
+ * failure delivers `Failed` without [Ready]. Order updates do not emit it.
+ *
+ * [UpdateFailed] is emitted when binding a new order fails after an order was
+ * already bound. The wallet stays locked on the stale order until a bind succeeds.
  */
 sealed class GooglePayEvent {
     data object Ready : GooglePayEvent()
     data class Processing(val isProcessing: Boolean) : GooglePayEvent()
+    data class UpdateFailed(val error: PaymentError) : GooglePayEvent()
 }

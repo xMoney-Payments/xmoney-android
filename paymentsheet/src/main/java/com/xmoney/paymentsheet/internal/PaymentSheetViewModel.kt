@@ -5,6 +5,9 @@ import com.xmoney.paymentsheet.PaymentSheetEvent
 import com.xmoney.paymentelement.theme.CheckoutTheme
 
 import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -58,7 +61,13 @@ class PaymentSheetViewModel(
         onComplete(result)
     }
 
-    fun emitReady() {
+    /** Survives fragment recreation, so a rotation does not bring the coin or Ready back. */
+    var surfaceReady by mutableStateOf(false)
+        private set
+
+    fun markSurfaceReady() {
+        if (surfaceReady) return
+        surfaceReady = true
         onEvent(PaymentSheetEvent.Ready)
     }
 

@@ -22,7 +22,7 @@ internal interface GooglePayOrderTarget {
     suspend fun updateOrder(
         onEvent: ((GooglePayEvent) -> Unit)? = null,
         createOrder: suspend () -> PaymentIntent,
-    )
+    ): PaymentIntent
 }
 
 internal object GooglePaySessionRegistry {
@@ -36,6 +36,8 @@ internal object GooglePaySessionRegistry {
         var isAvailable: Boolean = false,
         var isReady: Boolean = false,
         var closing: Boolean = false,
+        /** Per presentation, so a recreated host does not emit Ready again. */
+        var readyEmitted: Boolean = false,
     )
 
     private val sessions = ConcurrentHashMap<String, Session>()
@@ -102,12 +104,12 @@ internal object GooglePaySessionRegistry {
         requestId: String?,
         onEvent: ((GooglePayEvent) -> Unit)? = null,
         createOrder: suspend () -> PaymentIntent,
-    ) {
+    ): PaymentIntent {
         if (requestId.isNullOrBlank()) {
             throw IllegalStateException("Google Pay is not presented")
         }
         val target = sessions[requestId]?.orderTarget?.get()
             ?: throw IllegalStateException("Google Pay is not presented")
-        target.updateOrder(onEvent, createOrder)
+        return target.updateOrder(onEvent, createOrder)
     }
 }

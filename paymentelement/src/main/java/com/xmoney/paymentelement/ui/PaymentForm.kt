@@ -132,8 +132,19 @@ fun PaymentForm(
     val walletShown = state.googlePayAvailable && !walletMethods.isNullOrBlank() && walletFactory != null
     var formReady by remember { mutableStateOf(false) }
     var walletEpoch by remember { mutableIntStateOf(-1) }
-    var walletArmEpoch by remember { mutableIntStateOf(0) }
+    val walletHolder = remember { WalletViewHolder() }
     val walletReady = surfaceEpoch > 0 && walletEpoch == surfaceEpoch
+
+    DisposableEffect(surfaceEpoch, walletShown) {
+        val view = walletHolder.view
+        val cancel = if (surfaceEpoch > 0 && walletShown && view != null) {
+            val epoch = surfaceEpoch
+            view.armSizedPreDraw { walletEpoch = epoch }
+        } else {
+            null
+        }
+        onDispose { cancel?.invoke() }
+    }
 
     ReportSurfaceDraw(
         epoch = surfaceEpoch,
@@ -225,16 +236,13 @@ fun PaymentForm(
                     )
                     AndroidView(
                         factory = { context ->
-                            walletFactory.create(context, walletArgs)
+                            walletFactory.create(context, walletArgs).also { walletHolder.view = it }
                         },
                         update = { view ->
                             @Suppress("UNCHECKED_CAST")
                             (view.tag as? MutableState<WalletButtonArgs>)?.value = walletArgs
-                            if (surfaceEpoch > 0 && walletArmEpoch != surfaceEpoch) {
-                                walletArmEpoch = surfaceEpoch
-                                view.armSizedPreDraw { walletEpoch = surfaceEpoch }
-                            }
                         },
+                        onRelease = { walletHolder.view = null },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp)
@@ -415,4 +423,8 @@ private fun OrDivider(theme: CheckoutTheme, locale: String) {
         )
         Divider(modifier = Modifier.weight(1f), color = theme.orDivider)
     }
+}
+
+private class WalletViewHolder {
+    var view: android.view.View? = null
 }

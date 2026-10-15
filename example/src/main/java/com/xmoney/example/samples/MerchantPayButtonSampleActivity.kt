@@ -155,6 +155,7 @@ private fun MerchantPayButtonScreen(activity: FragmentActivity) {
                             when (event) {
                                 EmbeddedEvent.Ready -> ready = true
                                 is EmbeddedEvent.Processing -> processing = event.isProcessing
+                                is EmbeddedEvent.UpdateFailed -> Unit
                             }
                         },
                     )

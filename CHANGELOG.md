@@ -10,7 +10,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - 3DS can hand the shopper to their bank app and keep waiting while the payment is confirmed.
 - The shopper is asked before a bank app opens.
-- `EmbeddedPaymentController.updateOrder { }`, `GooglePayController.updateOrder { }`, and Activity `GooglePay.updateOrder { }` take a lambda that creates the next order. Pay is locked from the call, including while the lambda runs, until the new order is bound.
+- `EmbeddedPaymentController.updateOrder { }`, `GooglePayController.updateOrder { }`, and Activity `GooglePay.updateOrder { }` take a lambda that creates the next order, and return the bound `PaymentIntent`. Pay is locked from the call, including while the lambda runs, until the new order is bound.
+- `EmbeddedEvent.UpdateFailed` and `GooglePayEvent.UpdateFailed` report a failed bind after an order was already bound.
+- `PaymentError.PaymentInProgress` (a `PaymentError.Payment`) is thrown when `updateOrder` asks for a different order during a charge.
+- `UpdateOrderSuperseded`, a `CancellationException`, is thrown by an `updateOrder` call that a newer call replaced.
+- The loading coin is announced as "Loading" by TalkBack, in the configured locale.
 
 ### Changed
 
@@ -20,27 +24,45 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The SDK no longer changes the app-wide WebView cookie setting. Only the 3DS WebView accepts third-party cookies.
 - Browser headers are sent only with the card payment request.
 - `Ready` on Payment Element, Payment Sheet, and the Compose Google Pay button is emitted after the card form has been laid out and, when Google Pay is offered, the wallet button has pre-drawn. It no longer fires when order bind returns.
-- Payment Element and Payment Sheet keep a loading coin over the form until that first draw. The cover swallows taps and hides covered controls from accessibility. `Ready` is emitted once per mounted surface. A later `updateOrder` does not emit it again or bring the coin back.
-- The loading coin stays at its initial height. The surface resizes once, when the form and Google Pay button have drawn.
-- Compose `GooglePayEvent.Ready` fires after the button has pre-drawn, or as soon as Google Pay is known to be unavailable. Activity `GooglePay.present()` emits `Ready` after its initial bind; later `updateOrder()` calls do not.
-- `EmbeddedPaymentController.updateOrder()` no longer emits `Ready`. `PaymentElement` does, after the surface draws.
-- `GooglePayController.updateOrder()` no longer emits `Ready`. `GooglePayButton` does, after the wallet button draws.
-- Embedded and Google Pay `updateOrder()` calls now throw `PaymentError.Payment` while a payment is in progress, matching iOS.
-- A newer closure-based `updateOrder` cooperatively cancels the previous order-creation task. An initial Element or Compose Google Pay bind failure replaces loading with an SDK-authored failure state. A later bind failure throws and leaves the previous order payable, without `onResult`. An initial Activity Google Pay load failure delivers `Failed` and finishes the host.
+- Payment Element and Payment Sheet keep a loading coin over the form until that first draw. The cover swallows taps without taking focus, and covered controls are hidden from accessibility and keyboard focus. The loading coin stays at its initial height. The surface resizes once, when the form and Google Pay button have drawn.
+- Payment Sheet keeps `Ready` per presentation: recreating the sheet's activity does not show the coin or emit `Ready` again.
+- Changing `options.locale` no longer recreates the Compose `GooglePayController`.
+- SDK artifacts declare version constraints on each other, so upgrading one upgrades the others to the same version.
 
 ### Breaking changes
 
-- `Ready` is scoped to a mounted surface instead of a controller and is no longer an update-completion signal.
+These follow the shared iOS/Android update-order contract:
+
+1. **Ready.** Fires once per mounted surface, when the form or wallet button first draws, or after the 2-second fallback. A wallet that is known to be unavailable counts as a settled state, not an error, so Ready still fires. It never fires on a failure screen. If a later retry replaces the failure screen with a form, Ready fires then. Order updates never emit it.
+2. **Initial failure.** The surface shows a themed, localized failure state. `Failed` is delivered once per failure streak, and direct callers get the error thrown. Re-renders must not retry.
+3. **Later bind failure** (an intent is already bound, and binding a new intent fails). Pay stays locked on the stale order (`isInteractionEnabled == false`) until a successful bind. The surface emits `UpdateFailed(error)` and the error is thrown to direct callers. `onResult` is not called.
+4. **createOrder closure failure.** The previous order stays bound and payable. The error is thrown; no `UpdateFailed` event is emitted.
+5. **Supersession.** A newer merchant call always wins, even if it passes the already-bound intent; it cancels any in-flight creation or bind. A rebind from the SDK's own surface (SwiftUI or Compose host) with the already-bound intent is a no-op and cancels nothing. A superseded call throws the platform cancellation error: `CancellationError` on iOS, `UpdateOrderSuperseded`, a subclass of `CancellationException`, on Android.
+6. **During a charge.** The same intent is a no-op. A different intent throws "payment in progress", detected with a typed check rather than a string match. The declarative host keeps the intent and retries it once `Processing(false)` arrives.
+7. **Processing events are never dropped** because a newer update is pending.
+8. **`updateOrder(createOrder:)`** locks Pay immediately, runs the closure on the main thread, propagates the caller's cancellation, and returns the bound intent.
+9. **Session bind is two-phase** (load, then commit). A superseded load never changes the session.
+10. **Loader accessibility.** The coin has a localized "Loading" label and is announced politely. Covered form controls are hidden from accessibility.
+
+Android-specific breaking changes:
+
+- `EmbeddedEvent` and `GooglePayEvent` gained `UpdateFailed`. Exhaustive `when` expressions need a new branch.
+- `EmbeddedPaymentController.updateOrder()` and `GooglePayController.updateOrder()` no longer emit `Ready`; `PaymentElement` and `GooglePayButton` do.
+- An `onEvent` passed to Activity `GooglePay.updateOrder()` replaces the listener given to `present()` for the rest of that presentation, matching `EmbeddedPaymentController`.
+- The `modifier` passed to `PaymentElement` now applies to an outer container that holds both the loading coin and the form, instead of the form itself. Size and scroll modifiers still apply to the whole element; min-size constraints no longer stretch the form.
+- Controller `updateOrder` calls run on the main thread.
+- `PaymentElement` and `GooglePayButton` no longer re-run `updateOrder` after every charge. An intent passed while a charge is running is bound once it ends.
 
 ### Migration
 
-- Listen for `Ready` on `PaymentElement` or `GooglePayButton`, not on a direct controller `updateOrder()` call. Direct `EmbeddedPaymentController.updateOrder()` and Compose `GooglePayController.updateOrder()` no longer emit it.
-- `Ready` is emitted once per mounted surface, for the first draw. A remount emits it again. Do not show a new loader that waits for `Ready` on later order updates; use `isInteractionEnabled` for update-order chrome.
-- Treat the suspend return as update completion and handle `CancellationException` when a newer update supersedes an older one. Keep order-creation endpoints idempotent.
-- A failed `updateOrder` after a checkout surface is already bound throws and does not call `onResult`. Keep the mounted surface; the previous order is still payable.
+- Listen for `Ready` on `PaymentElement` or `GooglePayButton`, not on a direct controller `updateOrder()` call. Do not show a new loader that waits for `Ready` on later order updates; use `isInteractionEnabled` for update-order chrome.
+- Treat the suspend return as update completion. Catch `UpdateOrderSuperseded` (or rethrow `CancellationException`) before treating an update as failed; `runCatching { }` and `catch (e: Exception)` catch it too. Keep order-creation endpoints idempotent.
+- Use the intent returned by `updateOrder { }` as the new `intent` for `PaymentElement` / `GooglePayButton`.
+- Handle `UpdateFailed`: show an error and call `updateOrder` again. Pay stays locked until a bind succeeds.
+- Match `PaymentError.PaymentInProgress` instead of comparing the "Payment in progress" message.
 - Activity Google Pay finishes its host when the first load fails. Wait for `onResult`, not for the activity to remain open with an error.
 - Keep `PaymentElement` and `GooglePayButton` composed at their real size under merchant loading. A zero-height host cannot draw the Google Pay button and delays `Ready` until the two-second fallback.
-- Publish and consume the Android SDK artifacts at the same version. Payment Sheet and Payment Element share internal Compose surface contracts.
+- Upgrade all `com.xmoney` artifacts together. Version constraints now enforce this for Gradle builds.
 
 ### Fixed
 

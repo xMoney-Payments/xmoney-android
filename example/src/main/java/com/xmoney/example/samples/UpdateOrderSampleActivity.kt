@@ -141,12 +141,10 @@ private fun UpdateOrderSampleScreen(activity: FragmentActivity) {
                 // Pay / confirm / Google Pay are locked from here, including the
                 // debounce and the server call, until the new order is bound.
                 // Keep the Element mounted — do not clear intent or flip Ready.
-                var next: PaymentIntent? = null
-                embedded.updateOrder {
+                hostIntent = embedded.updateOrder {
                     delay(300)
-                    DemoCheckoutBackend.createPaymentIntent(amountMinor = amountMinor).also { next = it }
+                    DemoCheckoutBackend.createPaymentIntent(amountMinor = amountMinor)
                 }
-                hostIntent = next
             }
         } catch (e: CancellationException) {
             throw e
@@ -190,7 +188,12 @@ private fun UpdateOrderSampleScreen(activity: FragmentActivity) {
                         intent = hostIntent!!,
                         modifier = Modifier.fillMaxWidth(),
                         onEvent = { event ->
-                            if (event is EmbeddedEvent.Ready) ready = true
+                            when (event) {
+                                EmbeddedEvent.Ready -> ready = true
+                                is EmbeddedEvent.UpdateFailed ->
+                                    error = "Could not update the order. Pay is locked until it binds."
+                                is EmbeddedEvent.Processing -> Unit
+                            }
                         },
                     )
                 }

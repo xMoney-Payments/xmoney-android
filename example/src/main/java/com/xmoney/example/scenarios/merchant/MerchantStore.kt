@@ -780,17 +780,15 @@ private fun EmbeddedCheckoutScreen(
                     description = description,
                 )
             } else {
-                var next: PaymentIntent? = null
-                embedded.updateOrder {
+                // PaymentElement's bind of the returned intent is a no-op. Keep it
+                // mounted and do not flip Ready while the cart changes.
+                intent = embedded.updateOrder {
                     delay(300)
                     DemoCheckoutBackend.createPaymentIntent(
                         amountMinor = total,
                         description = description,
-                    ).also { next = it }
+                    )
                 }
-                // PaymentElement's repeated bind is a no-op. Keep it mounted
-                // and do not flip Ready while the cart changes.
-                intent = next
             }
         } catch (e: CancellationException) {
             throw e

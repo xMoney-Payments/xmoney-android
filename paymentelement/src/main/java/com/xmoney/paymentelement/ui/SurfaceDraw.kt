@@ -54,27 +54,42 @@ internal fun ReportSurfaceDraw(
     }
 }
 
-internal fun View.armSizedPreDraw(onDrawn: () -> Unit) {
+/**
+ * Calls [onDrawn] once this view pre-draws with a real size, or after the draw
+ * timeout. Returns a handle that cancels both the listener and the timer.
+ */
+internal fun View.armSizedPreDraw(onDrawn: () -> Unit): () -> Unit {
     val completed = AtomicBoolean(false)
-    postDelayed(
-        {
-            if (completed.compareAndSet(false, true)) {
-                Log.d(SurfaceDrawLogTag, "Wallet draw timed out; revealing fallback")
-                onDrawn()
-            }
-        },
-        SurfaceDrawTimeoutMillis,
-    )
-    armSizedPreDraw(completed, onDrawn)
+    val listener = arrayOfNulls<OneShotPreDrawListener>(1)
+    val timeout = Runnable {
+        if (completed.compareAndSet(false, true)) {
+            Log.d(SurfaceDrawLogTag, "Wallet draw timed out; revealing fallback")
+            onDrawn()
+        }
+    }
+    postDelayed(timeout, SurfaceDrawTimeoutMillis)
+    armSizedPreDraw(completed, listener) {
+        removeCallbacks(timeout)
+        onDrawn()
+    }
+    return {
+        completed.set(true)
+        removeCallbacks(timeout)
+        listener[0]?.removeListener()
+    }
 }
 
-private fun View.armSizedPreDraw(completed: AtomicBoolean, onDrawn: () -> Unit) {
-    OneShotPreDrawListener.add(this) {
+private fun View.armSizedPreDraw(
+    completed: AtomicBoolean,
+    listener: Array<OneShotPreDrawListener?>,
+    onDrawn: () -> Unit,
+) {
+    listener[0] = OneShotPreDrawListener.add(this) {
         if (completed.get()) return@add
         if (width > 1 && height > 1) {
             if (completed.compareAndSet(false, true)) onDrawn()
         } else if (isAttachedToWindow) {
-            armSizedPreDraw(completed, onDrawn)
+            armSizedPreDraw(completed, listener, onDrawn)
         }
     }
 }

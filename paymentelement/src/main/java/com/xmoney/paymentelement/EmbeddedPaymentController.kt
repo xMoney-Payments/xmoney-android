@@ -4,6 +4,7 @@ import android.app.Activity
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -28,10 +29,11 @@ import com.xmoney.payments.model.PaymentResult
 import com.xmoney.payments.model.SavedCard
 import com.xmoney.payments.threeds.ThreeDSHostController
 import com.xmoney.payments.validation.CardFieldValidators
+import com.xmoney.payments.model.UpdateOrderSuperseded
+import com.xmoney.payments.util.onMainThread
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 /**
@@ -46,7 +48,8 @@ class EmbeddedPaymentController(
     private val onResult: (PaymentResult) -> Unit,
 ) {
     private var liveConfiguration = configuration
-    private val session = PaymentSession(liveConfiguration, placeholderIntent(), activity.applicationContext)
+    @VisibleForTesting
+    internal var session = PaymentSession(liveConfiguration, placeholderIntent(), activity.applicationContext)
 
     var sheetState: SheetState? by mutableStateOf(null)
         private set
@@ -54,7 +57,10 @@ class EmbeddedPaymentController(
         private set
     var isOrderConsumed: Boolean by mutableStateOf(false)
         private set
-    /** False during [updateOrder], an in-flight charge, or after the order is consumed. */
+    /**
+     * False during [updateOrder], an in-flight charge, after the order is consumed,
+     * or while the bound order is stale because a later bind failed.
+     */
     var isInteractionEnabled: Boolean by mutableStateOf(true)
         private set
     var paymentConfig: ResolvedPaymentConfig? by mutableStateOf(null)
@@ -67,14 +73,20 @@ class EmbeddedPaymentController(
         private set
     internal var bindError: String? by mutableStateOf(null)
         private set
+    /** A later bind failed; Pay stays locked on the previous order until a bind succeeds. */
+    internal var isStaleOrder by mutableStateOf(false)
+        private set
     private var bindGeneration = 0
     private var createOrderTask: Deferred<PaymentIntent>? = null
+    private var inFlightOrder: PaymentIntent? = null
+    private var initialFailureReported = false
     private var threeDS: ThreeDSHostController? = null
     private var authorizer: DigitalWalletAuthorizing? = null
     private var resolutionLauncher: ActivityResultLauncher<IntentSenderRequest>? = null
     private var pendingResolution: ActivityResult? = null
     private var onEvent: (EmbeddedEvent) -> Unit = {}
-    private var boundIntent: PaymentIntent? = null
+    internal var boundIntent: PaymentIntent? = null
+        private set
     private var submitHandler: (() -> Unit)? = null
 
     init {
@@ -151,83 +163,129 @@ class EmbeddedPaymentController(
      * ([isInteractionEnabled]). The Pay button keeps its current title — this
      * does not emit [EmbeddedEvent.Processing] or [EmbeddedEvent.Ready].
      * [PaymentElement] emits [EmbeddedEvent.Ready] after the surface draws.
-     * A newer [updateOrder] cancels
-     * the in-flight one ([CancellationException]); the new intent is installed
-     * only after success. Pay is not locked while you create [order] on your
-     * server; pass that call to the `createOrder` overload to lock it too.
-     * Rebinding the already-bound order is always a no-op, including while a
-     * payment is in progress.
+     *
+     * The latest call wins: it supersedes any in-flight [updateOrder], which then
+     * throws [UpdateOrderSuperseded], even when [order] is the order already bound.
+     * The new order is installed only after it loads. Pay is not locked while you
+     * create [order] on your server; pass that call to the `createOrder` overload
+     * to lock it too.
+     *
+     * While a payment is in progress, the bound order is a no-op and any other
+     * order throws [PaymentError.PaymentInProgress]. If binding fails after an
+     * order was already bound, Pay stays locked on that stale order,
+     * [EmbeddedEvent.UpdateFailed] is emitted, the error is thrown, and
+     * [onResult] is not called. Runs on the main thread.
      */
     suspend fun updateOrder(
         order: PaymentIntent,
         onEvent: ((EmbeddedEvent) -> Unit)? = null,
-    ) {
+    ): Unit = onMainThread {
         onEvent?.let { this@EmbeddedPaymentController.onEvent = it }
+        if (isProcessing) {
+            if (isBound(order)) return@onMainThread
+            throw PaymentError.PaymentInProgress()
+        }
+        val generation = supersede()
         if (isBound(order)) {
             paymentConfig = liveConfiguration.resolve(order)
-            return
+            isStaleOrder = false
+            applyUpdatingOrder(false)
+            return@onMainThread
         }
-        if (isProcessing) throw PaymentError.Payment("Payment in progress")
-        val generation = ++bindGeneration
-        createOrderTask?.cancel()
-        createOrderTask = null
         applyUpdatingOrder(true)
         bindLocked(generation, order)
     }
 
     /**
-     * Lock Pay, create the next order with [createOrder], then bind it.
+     * Lock Pay, create the next order with [createOrder], bind it, and return it.
      *
      * Use this when the shopper changes the cart. Pay, [confirm], and Google Pay
      * are no-ops from this call until the new order is bound, including while
      * [createOrder] talks to your server, so a fast Pay tap cannot charge the
      * previous order. If [createOrder] throws, the previous order stays bound and
-     * payable, and [onResult] is not called. A newer [updateOrder] cancels this one.
+     * payable, the error is thrown, and no [EmbeddedEvent.UpdateFailed] is emitted.
+     * A newer [updateOrder] supersedes this one ([UpdateOrderSuperseded]) and
+     * cancels [createOrder]; cancelling the caller cancels it too.
+     *
+     * [createOrder] runs on the main thread, so it must be a non-blocking suspend call.
      */
     suspend fun updateOrder(
         onEvent: ((EmbeddedEvent) -> Unit)? = null,
         createOrder: suspend () -> PaymentIntent,
-    ) = coroutineScope {
-        if (isProcessing) throw PaymentError.Payment("Payment in progress")
+    ): PaymentIntent = onMainThread {
         onEvent?.let { this@EmbeddedPaymentController.onEvent = it }
-        val generation = ++bindGeneration
+        if (isProcessing) throw PaymentError.PaymentInProgress()
+        val generation = supersede()
         applyUpdatingOrder(true)
-        createOrderTask?.cancel()
         val task = async { createOrder() }
         createOrderTask = task
         val order = try {
             task.await()
         } catch (e: Throwable) {
-            if (generation == bindGeneration) applyUpdatingOrder(false)
+            if (generation != bindGeneration) throw UpdateOrderSuperseded()
+            applyUpdatingOrder(false)
             throw e
         } finally {
             if (createOrderTask === task) createOrderTask = null
         }
-        if (generation != bindGeneration) throw CancellationException()
+        if (generation != bindGeneration) throw UpdateOrderSuperseded()
         if (isBound(order)) {
             paymentConfig = liveConfiguration.resolve(order)
+            isStaleOrder = false
             applyUpdatingOrder(false)
-            return@coroutineScope
+            return@onMainThread order
         }
         bindLocked(generation, order)
+        order
+    }
+
+    /**
+     * Surface-driven rebind from [PaymentElement]. The bound order, or the order an
+     * in-flight merchant call is already binding, is a no-op that cancels nothing.
+     */
+    internal suspend fun rebindFromSurface(
+        order: PaymentIntent,
+        onEvent: (EmbeddedEvent) -> Unit,
+    ) {
+        this.onEvent = onEvent
+        if (isBound(order) || inFlightOrder == order) {
+            if (isBound(order)) paymentConfig = liveConfiguration.resolve(order)
+            return
+        }
+        updateOrder(order)
+    }
+
+    internal fun resolvedConfig(order: PaymentIntent): ResolvedPaymentConfig = liveConfiguration.resolve(order)
+
+    private fun supersede(): Int {
+        val generation = ++bindGeneration
+        createOrderTask?.cancel()
+        createOrderTask = null
+        inFlightOrder = null
+        return generation
     }
 
     private fun isBound(order: PaymentIntent): Boolean =
-        boundIntent == order && sheetState != null && !isOrderConsumed
+        boundIntent == order && sheetState != null && !isOrderConsumed && session.isBound(order)
 
     private suspend fun bindLocked(generation: Int, order: PaymentIntent) {
         val initial = sheetState == null
         val threeDSHost = ThreeDSHostController(activity) { liveConfiguration.options.locale }
-        bindError = null
+        inFlightOrder = order
         try {
-            val loaded = session.bind(order, activity)
-            if (generation != bindGeneration) throw CancellationException()
+            val candidate = session.load(order, activity)
+            if (generation != bindGeneration) throw UpdateOrderSuperseded()
+            session.commit(candidate)
+            inFlightOrder = null
+            bindError = null
+            isStaleOrder = false
+            initialFailureReported = false
             boundIntent = order
             paymentConfig = liveConfiguration.resolve(order)
             threeDS = threeDSHost
             authorizer = session.makeWalletAuthorizer(threeDSHost, activity)
             resolutionLauncher?.let { authorizer?.bindResolutionLauncher(it) }
-            sheetState = loaded
+            sheetState = candidate.state
             isOrderConsumed = session.isOrderConsumed
             isProcessing = session.isProcessing
             applyUpdatingOrder(false)
@@ -248,23 +306,33 @@ class EmbeddedPaymentController(
             }
         } catch (e: CancellationException) {
             if (generation == bindGeneration) {
+                inFlightOrder = null
                 applyUpdatingOrder(false)
             }
             throw e
         } catch (e: Exception) {
-            if (generation != bindGeneration) throw CancellationException()
-            applyUpdatingOrder(false)
+            if (generation != bindGeneration) throw UpdateOrderSuperseded()
+            inFlightOrder = null
+            val error = e as? PaymentError ?: PaymentError.Load(e.message ?: PaymentError.GENERIC_LOAD)
             if (initial) {
-                bindError = if (e is PaymentError) e.merchantMessage() else PaymentError.GENERIC_LOAD
-                onResult(
-                    OrderConsumption.merchantResult(
-                        if (e is PaymentError) EngineResult.failed(e)
-                        else EngineResult.failed("LOAD_ERROR", e.message ?: PaymentError.GENERIC_LOAD),
-                    ),
-                )
+                bindError = error.merchantMessage()
+                if (!initialFailureReported) {
+                    initialFailureReported = true
+                    onResult(OrderConsumption.merchantResult(EngineResult.failed(error)))
+                }
+            } else {
+                isStaleOrder = true
             }
+            applyUpdatingOrder(false)
+            if (!initial) onEvent(EmbeddedEvent.UpdateFailed(error))
             throw e
         }
+    }
+
+    @VisibleForTesting
+    internal fun setProcessingForTest(processing: Boolean) {
+        isProcessing = processing
+        syncInteractionEnabled()
     }
 
     fun startGooglePay() {
@@ -344,7 +412,8 @@ class EmbeddedPaymentController(
     }
 
     private fun syncInteractionEnabled() {
-        isInteractionEnabled = !isUpdatingOrder && session.isInteractionEnabled
+        isInteractionEnabled = !isUpdatingOrder && !isStaleOrder && !isProcessing &&
+            session.isInteractionEnabled
     }
 
     companion object {

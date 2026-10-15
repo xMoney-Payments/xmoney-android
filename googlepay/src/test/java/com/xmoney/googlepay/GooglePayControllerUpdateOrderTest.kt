@@ -1,24 +1,21 @@
 package com.xmoney.googlepay
 
 import androidx.fragment.app.FragmentActivity
-import com.xmoney.googlepay.internal.GooglePayAvailability
+import com.xmoney.googlepay.FakeBackend.Companion.order
+import com.xmoney.payments.config.GooglePayConfig
 import com.xmoney.payments.config.PaymentConfig
-import com.xmoney.payments.engine.PaymentSession
-import com.xmoney.payments.network.HttpClient
-import com.xmoney.payments.model.OrderChecksum
-import com.xmoney.payments.model.OrderPayload
+import com.xmoney.payments.config.PaymentMethodsConfig
 import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.payments.model.PaymentResult
-import kotlinx.coroutines.CancellationException
+import com.xmoney.payments.model.UpdateOrderSuperseded
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
-import okhttp3.OkHttpClient
-import okhttp3.Protocol
-import okhttp3.Response
-import okhttp3.ResponseBody.Companion.toResponseBody
+import com.xmoney.payments.engine.DigitalWalletFactory
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Before
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -32,6 +29,21 @@ import org.robolectric.RobolectricTestRunner
 class GooglePayControllerUpdateOrderTest {
     private val activity: FragmentActivity =
         Robolectric.buildActivity(FragmentActivity::class.java).setup().get()
+    private val backend = FakeBackend()
+
+    @Before
+    fun installWithoutPlayServices() {
+        GooglePay.register()
+        DigitalWalletFactory.makeGooglePay = null
+        DigitalWalletFactory.decorateSheetState = null
+    }
+
+    @After
+    fun tearDown() {
+        DigitalWalletFactory.makeGooglePay = null
+        DigitalWalletFactory.decorateSheetState = null
+    }
+    private val events = mutableListOf<GooglePayEvent>()
 
     @Test
     fun createOrderFailureRestoresInteractionAndDoesNotCallOnResult() = runBlocking {
@@ -52,9 +64,19 @@ class GooglePayControllerUpdateOrderTest {
     }
 
     @Test
+    fun createOrderReturnsTheBoundIntent() = runBlocking {
+        val controller = controller()
+
+        val returned = controller.updateOrder { order("next") }
+
+        assertEquals(order("next"), returned)
+        assertEquals(order("next"), controller.boundIntent)
+    }
+
+    @Test
     fun updateOrderDuringPaymentThrowsBeforeCreatingOrder() = runBlocking {
         val controller = controller()
-        setProperty(controller, "setProcessing", Boolean::class.javaPrimitiveType!!, true)
+        controller.setProcessingForTest(true)
         var createOrderCalled = false
 
         try {
@@ -62,39 +84,30 @@ class GooglePayControllerUpdateOrderTest {
                 createOrderCalled = true
                 throw AssertionError("createOrder must not run")
             }
-            fail("Expected PaymentError.Payment")
-        } catch (error: PaymentError.Payment) {
-            assertEquals("Payment in progress", error.message)
+            fail("Expected PaymentError.PaymentInProgress")
+        } catch (_: PaymentError.PaymentInProgress) {
         }
 
-        assertEquals(false, createOrderCalled)
+        assertFalse(createOrderCalled)
     }
 
     @Test
     fun sameIntentDuringPaymentIsNoOp() = runBlocking {
         val controller = controller()
-        val intent = intent("bound")
-        controller.javaClass.getDeclaredField("boundIntent").apply {
-            isAccessible = true
-            set(controller, intent)
-        }
-        setProperty(
-            controller,
-            "setAvailability",
-            GooglePayAvailability::class.java,
-            GooglePayAvailability(
-                available = true,
-                ready = true,
-                allowedPaymentMethodsJson = "[]",
-            ),
-        )
-        setProperty(controller, "setProcessing", Boolean::class.javaPrimitiveType!!, true)
+        controller.bind(order("bound"))
+        controller.setProcessingForTest(true)
 
-        controller.updateOrder(intent)
+        controller.bind(order("bound"))
+
+        try {
+            controller.bind(order("other"))
+            fail("Expected PaymentError.PaymentInProgress")
+        } catch (_: PaymentError.PaymentInProgress) {
+        }
     }
 
     @Test
-    fun supersededCreateOrderIsCancelledAndLatestCallOwnsInteractionLock() = runBlocking {
+    fun supersededCreateOrderThrowsAndLatestCallOwnsInteractionLock() = runBlocking {
         val controller = controller()
         val firstStarted = CompletableDeferred<Unit>()
         val secondStarted = CompletableDeferred<Unit>()
@@ -105,7 +118,7 @@ class GooglePayControllerUpdateOrderTest {
                 controller.updateOrder {
                     firstStarted.complete(Unit)
                     CompletableDeferred<Unit>().await()
-                    intent("first")
+                    order("first")
                 }
             }
         }
@@ -122,7 +135,7 @@ class GooglePayControllerUpdateOrderTest {
             }
         }
         secondStarted.await()
-        assertTrue(first.await().exceptionOrNull() is CancellationException)
+        assertTrue(first.await().exceptionOrNull() is UpdateOrderSuperseded)
         assertFalse(controller.isInteractionEnabled)
 
         releaseSecond.complete(Unit)
@@ -131,132 +144,107 @@ class GooglePayControllerUpdateOrderTest {
     }
 
     @Test
-    fun initialBindFailureReportsResultOnce() = runBlocking {
+    fun initialBindFailureReportsResultOncePerStreak() = runBlocking {
         var results = 0
         val controller = controller { results++ }
-        installSession(controller, failingClient())
+        backend.failAll = true
 
-        try {
-            controller.updateOrder(intent("missing"))
-            fail("Expected bind to throw")
-        } catch (_: Exception) {
+        repeat(2) {
+            try {
+                controller.bind(order("missing"))
+                fail("Expected bind to throw")
+            } catch (_: PaymentError) {
+            }
         }
 
         assertEquals(1, results)
         assertEquals(PaymentError.GENERIC_NETWORK, controller.bindError)
+        assertTrue(events.none { it is GooglePayEvent.UpdateFailed })
     }
 
     @Test
-    fun laterBindFailureKeepsTheOrderAndSkipsResult() = runBlocking {
+    fun laterBindFailureLocksTheStaleOrderAndEmitsUpdateFailed() = runBlocking {
         var results = 0
         val controller = controller { results++ }
-        val bound = intent("bound")
-        bind(controller, bound)
-        installSession(controller, failingClient())
+        controller.bind(order("bound"))
+        backend.fail(order("next"))
 
         try {
-            controller.updateOrder(intent("next"))
+            controller.bind(order("next"))
             fail("Expected bind to throw")
-        } catch (_: Exception) {
+        } catch (_: PaymentError) {
         }
 
         assertEquals(0, results)
         assertNull(controller.bindError)
+        assertTrue(controller.isStaleOrder)
+        assertFalse(controller.isInteractionEnabled)
+        assertEquals(order("bound"), controller.boundIntent)
+        assertEquals(1, events.count { it is GooglePayEvent.UpdateFailed })
     }
 
     @Test
-    fun sameIntentDuringCreationDoesNotCancelIt() = runBlocking {
+    fun surfaceRebindOfTheBoundIntentDoesNotCancelCreation() = runBlocking {
         val controller = controller()
-        val bound = intent("bound")
-        bind(controller, bound)
+        val bound = order("bound")
+        controller.bind(bound)
         val started = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
-        var created = false
 
         val creation = async {
             runCatching {
                 controller.updateOrder {
                     started.complete(Unit)
                     release.await()
-                    created = true
-                    bound
+                    order("next")
                 }
             }
         }
         started.await()
-        controller.updateOrder(bound)
+        controller.rebindFromSurface(bound) { events += it }
         assertFalse(creation.isCompleted)
 
         release.complete(Unit)
-        assertNull(creation.await().exceptionOrNull())
-        assertTrue(created)
+        assertEquals(order("next"), creation.await().getOrThrow())
+    }
+
+    @Test
+    fun supersededLoadNeverReplacesTheBoundOrder() = runBlocking {
+        val controller = controller()
+        val bound = order("bound")
+        val stale = order("stale")
+        controller.bind(bound)
+        backend.hold(stale)
+
+        val first = async { runCatching { controller.updateOrder { stale } } }
+        backend.awaitLoading(stale)
+        controller.updateOrder { bound }
+        backend.release(stale)
+
+        assertTrue(first.await().exceptionOrNull() is UpdateOrderSuperseded)
+        assertEquals(bound, controller.boundIntent)
+        assertTrue(controller.session.isBound(bound))
+        assertTrue(controller.isInteractionEnabled)
     }
 
     private fun controller(
         onResult: (PaymentResult) -> Unit = {},
-    ) = GooglePayController(
-        configuration = PaymentConfig(publicKey = "pk_test_x"),
-        activity = activity,
-        onResult = onResult,
-    )
-
-    private fun intent(suffix: String) = PaymentIntent(
-        OrderPayload("payload-$suffix"),
-        OrderChecksum("checksum-$suffix"),
-    )
-
-    private fun setProperty(
-        target: Any,
-        namePrefix: String,
-        parameterType: Class<*>,
-        value: Any,
-    ) {
-        target.javaClass.declaredMethods.single {
-            it.name.startsWith(namePrefix) &&
-                it.parameterTypes.contentEquals(arrayOf(parameterType))
-        }.apply {
-            isAccessible = true
-            invoke(target, value)
-        }
-    }
-
-    private fun bind(controller: GooglePayController, order: PaymentIntent) {
-        controller.javaClass.getDeclaredField("boundIntent").apply {
-            isAccessible = true
-            set(controller, order)
-        }
-        setProperty(
-            controller,
-            "setAvailability",
-            GooglePayAvailability::class.java,
-            GooglePayAvailability(available = true, ready = true, allowedPaymentMethodsJson = "[]"),
+    ): GooglePayController {
+        val configuration = PaymentConfig(
+            publicKey = "pk_test_x",
+            paymentMethods = PaymentMethodsConfig(googlePay = GooglePayConfig(enabled = true)),
         )
-    }
-
-    private fun installSession(controller: GooglePayController, client: OkHttpClient) {
-        val session = PaymentSession(
-            configuration = PaymentConfig(publicKey = "pk_test_x"),
-            intent = intent("session"),
-            context = activity,
-            http = HttpClient(client),
+        val controller = GooglePayController(
+            configuration = configuration,
+            activity = activity,
+            onResult = onResult,
         )
-        controller.javaClass.getDeclaredField("session").apply {
-            isAccessible = true
-            set(controller, session)
-        }
+        controller.session = backend.session(activity, configuration)
+        return controller
     }
 
-    private fun failingClient(): OkHttpClient = OkHttpClient.Builder()
-        .addInterceptor { chain ->
-            Response.Builder()
-                .request(chain.request())
-                .protocol(Protocol.HTTP_1_1)
-                .code(500)
-                .message("fail")
-                .body("""{"message":"nope"}""".toResponseBody())
-                .build()
-        }
-        .build()
+    private suspend fun GooglePayController.bind(order: PaymentIntent) =
+        updateOrder(order) { events += it }
 
     private object ExpectedFailure : RuntimeException()
 }

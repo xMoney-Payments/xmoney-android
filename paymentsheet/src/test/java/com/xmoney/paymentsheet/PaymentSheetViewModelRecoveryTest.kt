@@ -9,7 +9,9 @@ import com.xmoney.payments.model.OrderPayload
 import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.paymentsheet.internal.PaymentSheetViewModel
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -40,6 +42,20 @@ class PaymentSheetViewModelRecoveryTest {
 
         val restored = viewModel(SavedStateHandle(mapOf(PaymentSheetViewModel.KEY_PENDING to saved)))
         assertEquals(pending, restored.pendingToRecover)
+    }
+
+    @Test
+    fun readyIsEmittedOncePerPresentation() {
+        val viewModel = viewModel(SavedStateHandle())
+        val events = mutableListOf<PaymentSheetEvent>()
+        viewModel.onEvent = { events += it }
+        assertFalse(viewModel.surfaceReady)
+
+        viewModel.markSurfaceReady()
+        viewModel.markSurfaceReady()
+
+        assertTrue(viewModel.surfaceReady)
+        assertEquals(listOf<PaymentSheetEvent>(PaymentSheetEvent.Ready), events)
     }
 
     @Test

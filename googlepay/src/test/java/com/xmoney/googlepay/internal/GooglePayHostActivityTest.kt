@@ -1,9 +1,11 @@
 package com.xmoney.googlepay.internal
 
 import android.app.Application
+import android.os.Looper
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
+import com.xmoney.googlepay.FakeBackend
 import com.xmoney.googlepay.GooglePayEvent
 import com.xmoney.payments.config.GooglePayConfig
 import com.xmoney.payments.config.PaymentConfig
@@ -11,25 +13,15 @@ import com.xmoney.payments.config.PaymentMethodsConfig
 import com.xmoney.payments.engine.DigitalWalletAuthorizing
 import com.xmoney.payments.engine.DigitalWalletFactory
 import com.xmoney.payments.engine.EngineResult
-import com.xmoney.payments.engine.PaymentSession
-import com.xmoney.payments.engine.SheetState
 import com.xmoney.payments.model.OrderChecksum
 import com.xmoney.payments.model.OrderPayload
-import com.xmoney.payments.model.OrderPayloadInfo
 import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.payments.model.PaymentResult
-import com.xmoney.payments.network.HttpClient
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
+import com.xmoney.payments.model.UpdateOrderSuperseded
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
-import okhttp3.OkHttpClient
-import okhttp3.Protocol
-import okhttp3.Response
-import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -40,123 +32,154 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.android.controller.ActivityController
 
 @RunWith(RobolectricTestRunner::class)
 class GooglePayHostActivityTest {
     private val app: Application = RuntimeEnvironment.getApplication()
+    private val backend = FakeBackend()
+    private val events = mutableListOf<GooglePayEvent>()
+    private val results = mutableListOf<PaymentResult>()
 
     @After
     fun tearDown() {
-        GooglePayHostActivity.newSession = null
+        GooglePayHostActivity.sessionFactory = null
         DigitalWalletFactory.makeGooglePay = null
         DigitalWalletFactory.decorateSheetState = null
     }
 
     @Test
-    fun initialFailureFinishesWithOneFailedResult() {
-        val results = mutableListOf<PaymentResult>()
-        val done = CountDownLatch(1)
-        val host = launchHost(failingSession()) { result ->
-            results += result
-            done.countDown()
-        }
+    fun initialFailureFinishesWithOneFailedResultAndNoReady() {
+        backend.failAll = true
+        val host = launchHost().get()
 
-        assertTrue(done.await(5, TimeUnit.SECONDS))
+        pumpUntil { results.isNotEmpty() }
         assertTrue(host.isFinishing)
         assertEquals(1, results.size)
         assertTrue(results.single() is PaymentResult.Failed)
+        assertTrue(events.none { it == GooglePayEvent.Ready })
     }
 
     @Test
-    fun readyFiresOnceAndSameIntentDoesNotCancelCreation() = runBlocking {
-        val readyCount = AtomicInteger(0)
-        val ready = CountDownLatch(1)
-        val host = launchHost(preboundSession(), onEvent = { event ->
-            if (event is GooglePayEvent.Ready) {
-                readyCount.incrementAndGet()
-                ready.countDown()
-            }
-        })
-        assertTrue("Ready was not delivered; finishing=${host.isFinishing}", ready.await(2, TimeUnit.SECONDS))
+    fun readyFiresOnceAndMerchantCallWithTheBoundIntentSupersedesCreation() = runBlocking {
+        val host = launchReadyHost()
 
         val started = CompletableDeferred<Unit>()
-        val release = CompletableDeferred<Unit>()
-        val order = intent()
         val creation = async {
             runCatching {
-                host.updateOrder {
+                host.updateOrder(null) {
                     started.complete(Unit)
-                    release.await()
-                    order
+                    CompletableDeferred<Unit>().await()
+                    intent("next")
                 }
             }
         }
         started.await()
-        host.updateOrder(order)
-        assertFalse(creation.isCompleted)
-        assertEquals(1, readyCount.get())
+        host.updateOrder(intent(), null)
 
-        release.complete(Unit)
-        assertTrue(creation.await().isSuccess)
-        assertEquals(1, readyCount.get())
+        assertTrue(creation.await().exceptionOrNull() is UpdateOrderSuperseded)
+        assertEquals(1, events.count { it == GooglePayEvent.Ready })
         host.finish()
     }
 
     @Test
-    fun newerClosureCancelsThePreviousOne() = runBlocking {
-        val ready = CountDownLatch(1)
-        val host = launchHost(preboundSession(), onEvent = {
-            if (it is GooglePayEvent.Ready) ready.countDown()
-        })
-        assertTrue("Ready was not delivered; finishing=${host.isFinishing}", ready.await(2, TimeUnit.SECONDS))
+    fun createOrderReturnsTheBoundIntentWithoutASecondReady() = runBlocking {
+        val host = launchReadyHost()
+
+        val returned = host.updateOrder(null) { intent("next") }
+
+        assertEquals(intent("next"), returned)
+        assertEquals(1, events.count { it == GooglePayEvent.Ready })
+        host.finish()
+    }
+
+    @Test
+    fun newerClosureSupersedesThePreviousOne() = runBlocking {
+        val host = launchReadyHost()
 
         val started = CompletableDeferred<Unit>()
         val first = async {
             runCatching {
-                host.updateOrder {
+                host.updateOrder(null) {
                     started.complete(Unit)
                     CompletableDeferred<Unit>().await()
-                    intent()
+                    intent("first")
                 }
             }
         }
         started.await()
         val second = async {
             runCatching {
-                host.updateOrder { throw ExpectedFailure }
+                host.updateOrder(null) { throw ExpectedFailure }
             }
         }
-        assertTrue(first.await().exceptionOrNull() is kotlinx.coroutines.CancellationException)
+        assertTrue(first.await().exceptionOrNull() is UpdateOrderSuperseded)
         assertTrue(second.await().exceptionOrNull() === ExpectedFailure)
         host.finish()
     }
 
     @Test
-    fun differentIntentDuringPaymentThrows() = runBlocking {
-        val ready = CountDownLatch(1)
-        val host = launchHost(preboundSession(), onEvent = {
-            if (it is GooglePayEvent.Ready) ready.countDown()
-        })
-        assertTrue("Ready was not delivered; finishing=${host.isFinishing}", ready.await(2, TimeUnit.SECONDS))
-        host.javaClass.getDeclaredField("isProcessing").apply {
-            isAccessible = true
-            set(host, true)
-        }
+    fun laterBindFailureLocksTheStaleOrderAndEmitsUpdateFailed() = runBlocking {
+        val host = launchReadyHost()
+        backend.fail(intent("next"))
 
         try {
-            host.updateOrder(intent("other"))
-            fail("Expected PaymentError.Payment")
-        } catch (error: PaymentError.Payment) {
-            assertEquals("Payment in progress", error.message)
+            host.updateOrder(intent("next"), null)
+            fail("Expected bind to throw")
+        } catch (_: PaymentError) {
         }
+
+        assertTrue(host.isStaleOrder)
+        assertFalse(host.isFinishing)
+        assertTrue(results.isEmpty())
+        assertEquals(1, events.count { it is GooglePayEvent.UpdateFailed })
+
+        backend.succeed(intent("next"))
+        host.updateOrder(intent("next"), null)
+        assertFalse(host.isStaleOrder)
+        assertEquals(1, events.count { it == GooglePayEvent.Ready })
         host.finish()
     }
 
-    private fun launchHost(
-        session: (PaymentConfig, PaymentIntent, android.content.Context) -> PaymentSession,
-        onEvent: (GooglePayEvent) -> Unit = {},
-        onResult: (PaymentResult) -> Unit = {},
-    ): GooglePayHostActivity {
+    @Test
+    fun differentIntentDuringPaymentThrowsPaymentInProgress() = runBlocking {
+        val host = launchReadyHost()
+        host.setProcessingForTest(true)
+
+        try {
+            host.updateOrder(intent("other"), null)
+            fail("Expected PaymentError.PaymentInProgress")
+        } catch (_: PaymentError.PaymentInProgress) {
+        }
+        host.updateOrder(intent(), null)
+        host.setProcessingForTest(false)
+        host.finish()
+    }
+
+    @Test
+    fun recreatedHostDoesNotEmitReadyAgain() {
+        val controller = launchHost()
+        pumpUntil { events.contains(GooglePayEvent.Ready) }
+
+        controller.recreate()
+        shadowOf(Looper.getMainLooper()).idle()
+        Thread.sleep(200)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertFalse(controller.get().isFinishing)
+        assertEquals(1, events.count { it == GooglePayEvent.Ready })
+        controller.get().finish()
+    }
+
+    private fun launchReadyHost(): GooglePayHostActivity {
+        val host = launchHost().get()
+        pumpUntil { events.contains(GooglePayEvent.Ready) || host.isFinishing }
+        assertFalse("host finished: $results", host.isFinishing)
+        return host
+    }
+
+    private fun launchHost(): ActivityController<GooglePayHostActivity> {
         val requestId = "host-${System.nanoTime()}"
         val order = intent()
         val config = PaymentConfig(
@@ -165,85 +188,37 @@ class GooglePayHostActivityTest {
         ).resolve(order)
         GooglePaySessionRegistry.register(
             requestId,
-            GooglePaySessionRegistry.Session(onEvent = onEvent, onResult = onResult, config = config),
+            GooglePaySessionRegistry.Session(
+                onEvent = { events += it },
+                onResult = { results += it },
+                config = config,
+            ),
         )
-        GooglePayHostActivity.newSession = { paymentConfig, paymentIntent, context ->
+        GooglePayHostActivity.sessionFactory = { paymentConfig, paymentIntent, context ->
             DigitalWalletFactory.makeGooglePay = { _, _, _ -> FakeWallet() }
             DigitalWalletFactory.decorateSheetState = { _, state, _ ->
                 state.copy(googlePayAllowedPaymentMethods = "[]", googlePayReady = true)
             }
-            session(paymentConfig, paymentIntent, context)
+            backend.session(context, paymentConfig, paymentIntent)
         }
-        val created = Robolectric.buildActivity(
+        return Robolectric.buildActivity(
             GooglePayHostActivity::class.java,
             GooglePayHostActivity.createIntent(app, requestId, config),
-        ).setup().get()
-        return created
+        ).setup()
     }
 
-    private fun preboundSession(): (PaymentConfig, PaymentIntent, android.content.Context) -> PaymentSession =
-        { config, order, context ->
-            val session = PaymentSession(
-                configuration = PaymentConfig(
-                    publicKey = config.publicKey,
-                    card = config.card,
-                    paymentMethods = config.paymentMethods,
-                    options = config.options,
-                ),
-                intent = order,
-                context = context,
-                http = HttpClient(OkHttpClient()),
-            )
-            val loaded = SheetState(
-                sessionToken = "sess-1",
-                orderInfo = OrderPayloadInfo(
-                    cardTransactionMode = null,
-                    isVerifyCard = false,
-                    amount = 10.0,
-                    currency = "EUR",
-                    externalOrderId = null,
-                    isRecurring = false,
-                ),
-                savedCards = emptyList(),
-                googlePayAvailable = true,
-                googlePayAllowedPaymentMethods = "[]",
-                googlePayReady = true,
-            )
-            session.javaClass.getDeclaredField("state").apply {
-                isAccessible = true
-                set(session, loaded)
-            }
-            session.javaClass.getDeclaredField("boundKey").apply {
-                isAccessible = true
-                set(session, PaymentSession.orderKey(order))
-            }
-            session
+    /** Runs main-looper work until [condition] holds; network loads finish on IO threads meanwhile. */
+    private fun pumpUntil(condition: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + 5_000
+        while (!condition()) {
+            check(System.currentTimeMillis() < deadline) { "condition not met; events=$events results=$results" }
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(5)
         }
-
-    private fun failingSession(): (PaymentConfig, PaymentIntent, android.content.Context) -> PaymentSession =
-        { config, order, context ->
-            val client = OkHttpClient.Builder().addInterceptor { chain ->
-                Response.Builder()
-                    .request(chain.request())
-                    .protocol(Protocol.HTTP_1_1)
-                    .code(500)
-                    .message("fail")
-                    .body("""{"message":"nope"}""".toResponseBody())
-                    .build()
-            }.build()
-            PaymentSession(
-                configuration = PaymentConfig(
-                    publicKey = config.publicKey,
-                    paymentMethods = config.paymentMethods,
-                ),
-                intent = order,
-                context = context,
-                http = HttpClient(client),
-            )
-        }
+    }
 
     private fun intent(suffix: String = "order") = PaymentIntent(
-        OrderPayload("e30="),
+        OrderPayload("e30=$suffix"),
         OrderChecksum("checksum-$suffix"),
     )
 

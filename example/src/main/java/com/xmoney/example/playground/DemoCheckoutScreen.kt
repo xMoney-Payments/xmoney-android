@@ -303,18 +303,16 @@ fun DemoCheckoutScreen(
         try {
             // Pay is locked from here, including the debounce and the server
             // call, until the new order is bound. Keep the mounted Element /
-            // wallet button; their updateOrder on the new intent is then a no-op.
-            var next: PaymentIntent? = null
+            // wallet button; their bind of the returned intent is then a no-op.
             val create: suspend () -> PaymentIntent = {
                 delay(300)
-                createOrder().also { next = it }
+                createOrder()
             }
-            if (mode == IntegrationMode.Embedded) {
+            pendingOrder = if (mode == IntegrationMode.Embedded) {
                 embedded.updateOrder(createOrder = create)
             } else {
                 googlePay.updateOrder(createOrder = create)
             }
-            pendingOrder = next
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

@@ -77,28 +77,29 @@ Interim events (`Ready`, `Processing`) do not replace `onResult`. Use `Ready` to
 
 ## Surface lifecycle contract
 
-- `Ready` is emitted once per mounted checkout surface, after its initial layout
-  and wallet-button draw (or the documented draw timeout). Remounting creates a
-  new surface; later `updateOrder` calls on the same surface do not emit `Ready`.
-- `updateOrder` completion is the suspend return. Gate merchant controls with
-  `isInteractionEnabled`; rebinding the already-bound intent is a no-op, while a
-  different intent during payment fails with `PaymentError.Payment`.
-- Declarative Element / wallet hosts retain a newer intent received during a
-  payment and bind it after processing ends.
-- Initial bind failures on Element and Compose Google Pay deliver `onResult(Failed)`, replace SDK loading with an SDK-authored failure state within two seconds, and throw to direct callers. A later bind failure throws only: the previous order stays payable and `onResult` is not called. Activity Google Pay finishes the host on an initial load failure.
-- Rebinding the already-bound intent returns immediately and does not cancel an in-flight order creation.
-- `updateOrder { createOrder() }` locks interaction before merchant order
-  creation. A newer call cooperatively cancels the previous creation task;
-  merchant order endpoints must remain idempotent.
+Shared with the iOS SDK:
+
+1. **Ready.** Fires once per mounted surface, when the form or wallet button first draws, or after the 2-second fallback. A wallet that is known to be unavailable counts as a settled state, not an error, so Ready still fires. It never fires on a failure screen. If a later retry replaces the failure screen with a form, Ready fires then. Order updates never emit it.
+2. **Initial failure.** The surface shows a themed, localized failure state. `Failed` is delivered once per failure streak, and direct callers get the error thrown. Re-renders must not retry.
+3. **Later bind failure** (an intent is already bound, and binding a new intent fails). Pay stays locked on the stale order (`isInteractionEnabled == false`) until a successful bind. The surface emits `UpdateFailed(error)` and the error is thrown to direct callers. `onResult` is not called.
+4. **createOrder closure failure.** The previous order stays bound and payable. The error is thrown; no `UpdateFailed` event is emitted.
+5. **Supersession.** A newer merchant call always wins, even if it passes the already-bound intent; it cancels any in-flight creation or bind. A rebind from the SDK's own surface (SwiftUI or Compose host) with the already-bound intent is a no-op and cancels nothing. A superseded call throws the platform cancellation error: `CancellationError` on iOS, `UpdateOrderSuperseded`, a subclass of `CancellationException`, on Android.
+6. **During a charge.** The same intent is a no-op. A different intent throws "payment in progress", detected with a typed check rather than a string match. The declarative host keeps the intent and retries it once `Processing(false)` arrives.
+7. **Processing events are never dropped** because a newer update is pending.
+8. **`updateOrder(createOrder:)`** locks Pay immediately, runs the closure on the main thread, propagates the caller's cancellation, and returns the bound intent.
+9. **Session bind is two-phase** (load, then commit). A superseded load never changes the session.
+10. **Loader accessibility.** The coin has a localized "Loading" label and is announced politely. Covered form controls are hidden from accessibility.
+
+On Android, "payment in progress" is `PaymentError.PaymentInProgress`, and `UpdateOrderSuperseded` is caught by `runCatching { }` and `catch (e: Exception)` — rethrow it, or check for it, before treating an update as failed.
 
 ## Surface behavior
 
 | Surface | Ready | Initial failure | Later update failure | Same intent while paying |
 | --- | --- | --- | --- | --- |
-| Payment Element | After the form and, when offered, the Google Pay button have pre-drawn, or after two seconds | Failure text, `onResult(Failed)`, and `Ready` | Throws; the previous order stays payable | No-op, and an in-flight order creation keeps running |
-| Payment Sheet | After the first draw of that presentation | `onResult(Failed)` and the sheet closes | No `updateOrder` | No `updateOrder` |
-| Compose Google Pay | After the button pre-draws, or immediately when Google Pay is unavailable | Error text, `onResult(Failed)`, and `Ready` | Throws; the previous order stays payable | No-op, and an in-flight order creation keeps running |
-| Activity Google Pay | Only after the initial `present()` bind | `onResult(Failed)` and the host finishes | Throws; the host stays on the previous order | No-op, and an in-flight order creation keeps running |
+| Payment Element | After the form and, when offered, the Google Pay button have pre-drawn, or after two seconds | Localized failure text and `onResult(Failed)`, no `Ready` | `UpdateFailed`, throws; Pay locked on the stale order | No-op |
+| Payment Sheet | After the first draw of that presentation, kept across activity recreation | `onResult(Failed)` and the sheet closes | No `updateOrder` | No `updateOrder` |
+| Compose Google Pay | After the button pre-draws, or as soon as Google Pay is unavailable for a loaded order | Localized failure text and `onResult(Failed)`, no `Ready` | `UpdateFailed`, throws; button locked on the stale order | No-op |
+| Activity Google Pay | After the first successful bind of that presentation | `onResult(Failed)` and the host finishes, no `Ready` | `UpdateFailed`, throws; wallet locked on the stale order | No-op |
 
 ## Order lifecycle
 
@@ -196,16 +197,16 @@ embedded.updateOrder(
 )
 ```
 
-When the shopper changes the cart, pass the server call instead. Pay is locked from the call, including while your server creates the order, so a fast Pay tap cannot charge the previous order. If the lambda throws, the previous order stays bound and payable, and `onResult` is not called:
+When the shopper changes the cart, pass the server call instead and use the intent it returns. Pay is locked from the call, including while your server creates the order, so a fast Pay tap cannot charge the previous order. If the lambda throws, the previous order stays bound and payable, and `onResult` is not called. If the new order fails to bind, Pay stays locked and `EmbeddedEvent.UpdateFailed` is emitted:
 
 ```kotlin
-embedded.updateOrder {
+intent = embedded.updateOrder {
     val (payload, checksum) = backend.createOrder(cart)
     PaymentIntent(OrderPayload(payload), OrderChecksum(checksum))
 }
 ```
 
-Compose `PaymentElement` / `GooglePayButton` call `updateOrder` when `intent` changes. Keep the surface mounted; do not set the intent to `null` or swap the form for a loader. Pay stays locked (`isInteractionEnabled`) until `updateOrder` returns. `Ready` is emitted once per mounted surface, for the first draw, and not again on `updateOrder`. Gate a merchant-owned Pay button with `embedded.isInteractionEnabled`. Direct `EmbeddedPaymentController.updateOrder()` does not emit `Ready`.
+Compose `PaymentElement` / `GooglePayButton` bind `intent` when it changes; passing the intent an `updateOrder` call already bound is a no-op. An intent passed during a charge is bound when the charge ends. Keep the surface mounted; do not set the intent to `null` or swap the form for a loader. Pay stays locked (`isInteractionEnabled`) until the bind finishes. The `modifier` applies to the container that holds both the coin and the form. `Ready` is emitted once per mounted surface, for the first draw, and not again on `updateOrder`. Gate a merchant-owned Pay button with `embedded.isInteractionEnabled`. Direct `EmbeddedPaymentController.updateOrder()` does not emit `Ready`.
 
 Copy-paste sample: [`UpdateOrderSampleActivity.kt`](example/src/main/java/com/xmoney/example/samples/UpdateOrderSampleActivity.kt)
 
@@ -296,7 +297,7 @@ googlePay.updateOrder { backend.createOrder(cart) }
 googlePay.dismiss()
 ```
 
-`updateOrder` rebinds a new signed `PaymentIntent` on the open host without dismissing it. Its suspend return is completion; the Activity host emits `Ready` only for the initial `present()` bind. The closure overload disables the wallet before server order creation. A newer update cooperatively cancels the in-flight one. It throws if no host is open, or if a different order is requested while a charge is in flight; the already-bound intent is a no-op. A second `present()` while this instance’s host is open is a no-op — use `updateOrder()`, or `dismiss()` then `present()`.
+`updateOrder` rebinds a new signed `PaymentIntent` on the open host without dismissing it. Its suspend return is completion; the closure overload returns the bound intent. The Activity host emits `Ready` once, after its first successful bind. The closure overload disables the wallet before server order creation. A newer update supersedes the in-flight one (`UpdateOrderSuperseded`). An `onEvent` passed here replaces the listener from `present()`. It throws if no host is open, or if a different order is requested while a charge is in flight; the already-bound intent is a no-op. A second `present()` while this instance’s host is open is a no-op — use `updateOrder()`, or `dismiss()` then `present()`.
 
 Pre-auth dismiss delivers `PaymentResult.Canceled` and does **not** consume. Present or tap again with the same intent.
 

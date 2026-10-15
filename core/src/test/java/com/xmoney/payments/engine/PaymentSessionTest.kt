@@ -71,6 +71,27 @@ class PaymentSessionTest {
     }
 
     @Test
+    fun loadWithoutCommitLeavesTheBoundOrder() = runBlocking {
+        enqueueToken()
+        val session = makeSession()
+        session.bind(intent, activity)
+        val next = PaymentIntent(OrderPayload("e30="), OrderChecksum("cs-next"))
+        server.enqueue(MockResponse().setBody("""{"token":"sess-2"}"""))
+        server.enqueue(MockResponse().setBody("{}"))
+
+        val candidate = session.load(next, activity)
+
+        assertEquals("sess-2", candidate.state.sessionToken)
+        assertEquals("sess-1", session.state?.sessionToken)
+        assertTrue(session.isBound(intent))
+        assertFalse(session.isBound(next))
+
+        session.commit(candidate)
+        assertEquals("sess-2", session.state?.sessionToken)
+        assertTrue(session.isBound(next))
+    }
+
+    @Test
     fun cancelledBindDoesNotCommit() = runBlocking {
         server.enqueue(
             MockResponse()
