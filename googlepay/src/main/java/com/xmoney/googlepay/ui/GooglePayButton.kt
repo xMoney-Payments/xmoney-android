@@ -9,6 +9,7 @@ import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -61,16 +62,19 @@ fun GooglePayButton(
             .clipToBounds(),
     ) {
         if (!useFallback) {
-            PayButton(
-                onClick = onClick,
-                allowedPaymentMethods = allowedPaymentMethods,
-                modifier = Modifier.fillMaxSize(),
-                theme = buttonTheme,
-                type = buttonType,
-                radius = radius,
-                enabled = enabled,
-                onError = { useFallback = true },
-            )
+            // PayButton reads theme, type and radius only when its view is created.
+            key(buttonTheme, buttonType, radius) {
+                PayButton(
+                    onClick = onClick,
+                    allowedPaymentMethods = allowedPaymentMethods,
+                    modifier = Modifier.fillMaxSize(),
+                    theme = buttonTheme,
+                    type = buttonType,
+                    radius = radius,
+                    enabled = enabled,
+                    onError = { useFallback = true },
+                )
+            }
         } else {
             val gpColor = if (buttonTheme == ButtonTheme.Light) Color.White else Color.Black
             Button(

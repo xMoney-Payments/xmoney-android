@@ -68,6 +68,7 @@ Android-specific breaking changes:
 ### Fixed
 
 - `PaymentElement` and the Compose `GooglePayButton` now unlock Pay when the host switches back to the bound intent after a failed update.
+- The Google Pay button now follows a live change of wallet color, type or radius, such as a switch to dark mode, instead of keeping the look it was created with.
 - An approval in the bank app is no longer reported as a failure after a dropped status check.
 - The bank-app hand-off works on Android 11 and later.
 - A load error on the return page no longer fails the payment.
