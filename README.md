@@ -27,16 +27,16 @@ paymentsheet ──► paymentelement ──► payments-core
 
 ## Installation
 
-Latest release: **`1.0.0`** ([Maven Central](https://central.sonatype.com/search?q=g:com.xmoney))
+Latest release: **`1.1.0`** ([Maven Central](https://central.sonatype.com/search?q=g:com.xmoney))
 
 ```kotlin
 dependencies {
     // Drop-in sheet (includes Element + Google Pay at runtime)
-    implementation("com.xmoney:paymentsheet:1.0.0")
+    implementation("com.xmoney:paymentsheet:1.1.0")
 
     // Or pick surfaces:
-    // implementation("com.xmoney:paymentelement:1.0.0")
-    // implementation("com.xmoney:googlepay:1.0.0")   // required for wallet in Embedded
+    // implementation("com.xmoney:paymentelement:1.1.0")
+    // implementation("com.xmoney:googlepay:1.1.0")   // required for wallet in Embedded
 }
 ```
 
