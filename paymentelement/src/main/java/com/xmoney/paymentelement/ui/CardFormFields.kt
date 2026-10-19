@@ -45,6 +45,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.xmoney.paymentelement.R
 import com.xmoney.paymentelement.theme.CheckoutTheme
 import com.xmoney.payments.config.Strings
@@ -323,6 +324,49 @@ internal fun SaveCardCheckbox(
             fontSize = 14f,
             fontWeight = FontWeight.SemiBold,
         )
+    }
+}
+
+@Composable
+internal fun SavedCardNotice(
+    theme: CheckoutTheme,
+    title: String,
+    body: String,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp)
+            .padding(horizontal = 2.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Image(
+            painter = painterResource(R.drawable.xmoney_ic_info),
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            colorFilter = ColorFilter.tint(theme.primaryText),
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            SheetText(
+                title,
+                theme = theme,
+                fontSize = 14f,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.14).sp,
+                lineHeight = 16f,
+            )
+            SheetText(
+                body,
+                theme = theme,
+                color = theme.secondaryText,
+                fontSize = 14f,
+                lineHeight = 19.6f,
+            )
+        }
     }
 }
 

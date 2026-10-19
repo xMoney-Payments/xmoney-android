@@ -19,6 +19,7 @@ object OrderPayloadDecoder {
             currency = null,
             externalOrderId = null,
             isRecurring = false,
+            isSaveCardRequired = false,
         )
 
     private fun decodeMap(orderPayload: String): Map<String, Any?>? {

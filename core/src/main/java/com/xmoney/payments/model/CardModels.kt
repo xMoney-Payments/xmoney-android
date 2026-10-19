@@ -76,6 +76,7 @@ data class OrderInput(
             currency = order?.currency,
             externalOrderId = order?.orderId,
             isRecurring = order?.type == "recurring",
+            isSaveCardRequired = saveCard,
         )
     }
 
@@ -119,6 +120,7 @@ data class OrderPayloadInfo(
     val currency: String?,
     val externalOrderId: String?,
     val isRecurring: Boolean,
+    val isSaveCardRequired: Boolean = false,
 )
 
 data class SavedCard(

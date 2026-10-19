@@ -255,5 +255,15 @@ class ApiResponseModelsTest {
         assertEquals("EUR", info.currency)
         assertEquals("order-1786545845128", info.externalOrderId)
         assertFalse(info.isRecurring)
+        assertTrue(info.isSaveCardRequired)
+    }
+
+    @Test
+    fun orderInput_saveCardAbsent_isNotRequired() {
+        val map = HttpClient.jsonToMap(
+            JSONObject("""{"cardTransactionMode":"auth","order":{"type":"purchase"}}"""),
+        )
+        val info = OrderInput.fromApiMap(map).toInfo()
+        assertFalse(info.isSaveCardRequired)
     }
 }

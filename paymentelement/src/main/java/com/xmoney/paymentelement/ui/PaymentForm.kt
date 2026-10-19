@@ -305,7 +305,10 @@ fun PaymentForm(
                                 config = config,
                                 theme = theme,
                                 showHolderName = true,
-                                showSaveOptIn = config.card.savedCards.optInVisible && !state.orderInfo.isVerifyCard,
+                                showSaveOptIn = config.card.savedCards.optInVisible &&
+                                    !state.orderInfo.isVerifyCard &&
+                                    !state.orderInfo.isSaveCardRequired,
+                                showSaveNotice = state.orderInfo.isSaveCardRequired,
                                 sectionLabel = if (config.card.inputs.isSpaced) {
                                     null
                                 } else {
@@ -325,7 +328,10 @@ fun PaymentForm(
                         config = config,
                         theme = theme,
                         showHolderName = true,
-                        showSaveOptIn = config.card.savedCards.optInVisible && !state.orderInfo.isVerifyCard,
+                        showSaveOptIn = config.card.savedCards.optInVisible &&
+                            !state.orderInfo.isVerifyCard &&
+                            !state.orderInfo.isSaveCardRequired,
+                        showSaveNotice = state.orderInfo.isSaveCardRequired,
                         sectionLabel = if (config.card.inputs.isSpaced) {
                             null
                         } else {
