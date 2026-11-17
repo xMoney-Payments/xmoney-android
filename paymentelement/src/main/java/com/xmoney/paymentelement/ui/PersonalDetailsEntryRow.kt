@@ -40,17 +40,21 @@ internal fun PersonalDetailsEntryRow(
     topPadding: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(theme.paymentContainerRadius)
+    val shape = RoundedCornerShape(16.dp)
     val showErrorBorder = showError && !completed
-    val borderColor = if (showErrorBorder) theme.errorBorder else theme.containerBorder
-    val borderWidth = theme.borderWidth
-    Column(modifier = modifier.fillMaxWidth().padding(top = topPadding, bottom = 24.dp)) {
+    Column(modifier = modifier.fillMaxWidth().padding(top = topPadding, bottom = 12.dp)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(shape)
                 .background(theme.componentBackground)
-                .border(borderWidth, borderColor, shape)
+                .then(
+                    if (showErrorBorder) {
+                        Modifier.border(1.dp, theme.errorText, shape)
+                    } else {
+                        Modifier
+                    },
+                )
                 .pressScaleClickable(enabled = enabled, onClick = onClick)
                 .padding(6.dp)
                 .padding(12.dp),
@@ -105,7 +109,11 @@ internal fun PersonalDetailsEntryRow(
             ErrorBadgeMessage(
                 Strings.text("personalDetails.completeDetails", locale),
                 theme,
-                topPadding = 4.dp,
+                topPadding = 8.dp,
+                horizontalPadding = 4.dp,
+                badgeColor = theme.errorText,
+                bangWeight = FontWeight.Medium,
+                messageSize = 12f,
             )
         }
     }
@@ -118,14 +126,14 @@ private fun CompletedMark(theme: CheckoutTheme) {
             modifier = Modifier
                 .size(width = 48.dp, height = 34.dp)
                 .clip(RoundedCornerShape(9.dp))
-                .background(theme.neutralChip),
+                .background(theme.accentIconBackground),
             contentAlignment = Alignment.Center,
         ) {
             Image(
                 painter = painterResource(R.drawable.xmoney_ic_person),
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
-                colorFilter = ColorFilter.tint(theme.mutedIcon),
+                colorFilter = ColorFilter.tint(theme.metaText),
             )
         }
         Box(

@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import com.xmoney.payments.config.CustomerDetailsConfig
 import com.xmoney.payments.config.ResolvedPaymentConfig
+import com.xmoney.payments.customerdetails.CustomerDetailsInput
 import com.xmoney.payments.customerdetails.CustomerDetailsVisibility
 import com.xmoney.payments.engine.SheetState
 import com.xmoney.payments.model.CardInput
@@ -68,6 +69,26 @@ class PaymentFormCustomerDetailsTest {
     }
 
     @Test
+    fun personalDetailsPageOpensWithDefaultsAndNoErrors() {
+        compose.setContent {
+            PaymentForm(
+                config = config(),
+                state = sheetState().copy(
+                    customerDetailsDefaults = CustomerDetailsInput(email = "not-an-email"),
+                ),
+                isProcessing = false,
+                onPayCard = { _, _ -> },
+                onSelectSaved = { _, _ -> },
+                onGooglePay = {},
+            )
+        }
+
+        compose.onNodeWithText("Enter your personal details").performClick()
+        compose.onNodeWithText("not-an-email").assertIsDisplayed()
+        assertEquals(0, compose.onAllNodesWithText("Please enter a valid email address.").fetchSemanticsNodes().size)
+    }
+
+    @Test
     fun backFromPersonalDetailsReturnsToTheCardForm() {
         var paid: CardInput? = null
         compose.setContent {
@@ -88,7 +109,7 @@ class PaymentFormCustomerDetailsTest {
 
         compose.onNodeWithText("Enter your personal details").assertIsDisplayed()
         assertEquals(0, compose.onAllNodesWithText("Contact info").fetchSemanticsNodes().size)
-        compose.onNodeWithText("Pay").assertIsDisplayed()
+        compose.onNodeWithText("Enter card details").assertIsDisplayed()
         assertNull(paid)
     }
 

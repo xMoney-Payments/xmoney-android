@@ -63,14 +63,14 @@ internal fun CardForm(
     sectionLabel: String? = null,
     saveCardLabel: String? = null,
     showErrors: Boolean = false,
-    contentTopPadding: Dp = 10.dp,
+    contentTopPadding: Dp = 12.dp,
     onChange: (CardInput, Boolean) -> Unit,
 ) {
     var number by remember { mutableStateOf("") }
     var expiry by remember { mutableStateOf("") }
     var cvv by remember { mutableStateOf("") }
     var holder by remember { mutableStateOf("") }
-    var save by remember { mutableStateOf(false) }
+    var save by remember { mutableStateOf(true) }
     var brand by remember { mutableStateOf<String?>(null) }
     val blurred = remember { mutableStateMapOf<CardField, Boolean>() }
     val focused = remember { mutableStateMapOf<CardField, Boolean>() }
@@ -161,10 +161,9 @@ internal fun CardForm(
     val borderColor = when {
         hasVisibleError -> theme.errorBorder
         anyFocused -> theme.primary
-        else -> theme.fieldBorder
+        else -> Color.Transparent
     }
-    val borderWidth = theme.fieldStrokeWidth(hasVisibleError)
-    val firstVisibleError = errorDisplayOrder.firstOrNull { shouldShowError(it) }
+    val borderWidth = if (hasVisibleError || anyFocused) theme.fieldStrokeWidth(hasVisibleError) else 0.dp
     val holderIsLast = showHolderName && !holderFirst
     val spacedInputs = config.card.inputs.isSpaced
     val locale = config.options.locale
@@ -185,16 +184,16 @@ internal fun CardForm(
     }
 
     Column(
-        modifier = Modifier.padding(top = contentTopPadding, bottom = 4.dp),
+        modifier = Modifier.padding(top = contentTopPadding),
     ) {
         if (!sectionLabel.isNullOrBlank()) {
             SheetText(
                 sectionLabel,
                 theme = theme,
-                color = theme.primaryText.copy(alpha = SecondaryMetaAlpha),
-                fontSize = 13f,
+                color = theme.sectionLabel,
+                fontSize = 14f,
                 fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(start = 2.dp, bottom = 9.dp),
+                modifier = Modifier.padding(bottom = 8.dp),
             )
         }
 
@@ -333,7 +332,7 @@ internal fun CardForm(
                             Image(
                                 painter = painterResource(R.drawable.xmoney_ic_cvv),
                                 contentDescription = null,
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier.size(24.dp),
                                 colorFilter = ColorFilter.tint(theme.mutedIcon),
                             )
                         },
@@ -362,15 +361,12 @@ internal fun CardForm(
                 }
             }
         }
-        }
-
         if (!spacedInputs) {
-            firstVisibleError?.let { field ->
-                ErrorBadgeMessage(
-                    message = displayedErrors[field]!!.localizedMessage(locale),
-                    theme = theme,
-                )
+            errorDisplayOrder.forEach { field ->
+                val message = fieldErrorMessage(field) ?: return@forEach
+                ErrorBadgeMessage(message = message, theme = theme)
             }
+        }
         }
 
         if (showSaveOptIn) {

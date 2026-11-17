@@ -10,11 +10,14 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -26,7 +29,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.xmoney.paymentelement.theme.CheckoutTheme
 import com.xmoney.payments.config.ResolvedPaymentConfig
 import com.xmoney.payments.config.Strings
@@ -70,15 +72,16 @@ internal fun PaymentMethodsContainer(
         label = "savedListExpanded",
     ) { expanded ->
         if (expanded) {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            PaymentMethodsFrame(theme) {
                 SavedCardsListHeader(
                     theme = theme,
                     locale = config.options.locale,
+                    count = null,
                     isEditing = isEditing,
                     enabled = enabled,
                     onToggleEdit = onToggleEdit,
                 )
-                PaymentMethodsFrame(theme) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     SavedCardsExpandedList(
                         config = config,
                         theme = theme,
@@ -99,20 +102,23 @@ internal fun PaymentMethodsContainer(
             }
         } else {
             PaymentMethodsFrame(theme) {
+                SavedCardsListHeader(
+                    theme = theme,
+                    locale = config.options.locale,
+                    count = cards.size,
+                    isEditing = false,
+                    enabled = enabled,
+                    onToggleEdit = {},
+                )
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(PaymentContainerInset),
-                    ) {
-                        SavedCardsSummaryRow(
-                            theme = theme,
-                            locale = config.options.locale,
-                            subtitle = savedCardsSummarySubtitle(cards),
-                            enabled = enabled,
-                            onClick = onExpandSavedCards,
-                        )
-                    }
+                    SavedCardsSummaryRow(
+                        theme = theme,
+                        locale = config.options.locale,
+                        subtitle = cards.firstOrNull()?.let { savedCardMeta(it, config.options.locale) }.orEmpty(),
+                        card = cards.firstOrNull(),
+                        enabled = enabled,
+                        onClick = onExpandSavedCards,
+                    )
                     if (selectedMethod == PaymentMethod.NewCard) {
                         NewCardBlock(theme = theme) {
                             UseOtherCardRow(
@@ -120,8 +126,6 @@ internal fun PaymentMethodsContainer(
                                 locale = config.options.locale,
                                 selected = true,
                                 enabled = false,
-                                showTopBorder = false,
-                                horizontalContentPadding = PaymentRowContentPadding,
                                 onClick = {},
                             )
                             Column(
@@ -153,7 +157,8 @@ private fun PaymentMethodsFrame(
                 theme.containerBorderWidth,
                 theme.containerBorder,
                 RoundedCornerShape(theme.paymentContainerRadius),
-            ),
+            )
+            .padding(PaymentContainerInset),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         content()
@@ -164,35 +169,60 @@ private fun PaymentMethodsFrame(
 private fun SavedCardsListHeader(
     theme: CheckoutTheme,
     locale: String,
+    count: Int?,
     isEditing: Boolean,
     enabled: Boolean,
     onToggleEdit: () -> Unit,
 ) {
+    val title = if (count == null) {
+        Strings.text("sheet.savedCards", locale)
+    } else {
+        "${Strings.text("sheet.savedCards", locale)} · $count"
+    }
+    val expanded = count == null
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
+            .then(
+                if (expanded) {
+                    Modifier
+                        .height(SavedCardsHeaderHeight)
+                        .padding(horizontal = 12.dp)
+                } else {
+                    Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 2.dp)
+                },
+            ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         SheetText(
-            Strings.text("sheet.savedCards", locale),
+            title,
             theme = theme,
-            color = theme.primaryText.copy(alpha = SecondaryMetaAlpha),
-            fontSize = 13f,
+            color = if (isEditing) theme.sectionLabel else theme.metaText,
+            fontSize = 14f,
             fontWeight = FontWeight.SemiBold,
         )
-        SheetText(
-            Strings.text(if (isEditing) "sheet.done" else "sheet.edit", locale),
-            theme = theme,
-            color = theme.primary,
-            fontSize = 13f,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = (-0.01).sp,
-            modifier = Modifier.pressScaleClickable(enabled = enabled, onClick = onToggleEdit),
-        )
+        if (expanded) {
+            Box(
+                modifier = Modifier
+                    .sizeIn(minWidth = SavedCardsHeaderHeight)
+                    .height(SavedCardsHeaderHeight)
+                    .pressScaleClickable(enabled = enabled, onClick = onToggleEdit),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                SheetText(
+                    Strings.text(if (isEditing) "sheet.done" else "sheet.edit", locale),
+                    theme = theme,
+                    color = theme.primary,
+                    fontSize = 14f,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
     }
 }
+
+private val SavedCardsHeaderHeight = 44.dp
 
 @Composable
 private fun SavedCardsExpandedList(
@@ -211,11 +241,7 @@ private fun SavedCardsExpandedList(
     onConfirmDelete: (SavedCard) -> Unit,
     onCancelDelete: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(PaymentContainerInset),
-    ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         val cardListScrollState = rememberScrollState()
         val density = LocalDensity.current
         val extra = if (pendingDeleteId != null) SavedCardConfirmPanelHeight else 0.dp
@@ -250,14 +276,15 @@ private fun SavedCardsExpandedList(
                 )
             }
         }
-        UseOtherCardRow(
-            theme = theme,
-            locale = config.options.locale,
-            selected = selectedMethod == PaymentMethod.NewCard,
-            enabled = enabled,
-            showTopBorder = true,
-            onClick = onSelectNewCard,
-        )
+        if (!isEditing) {
+            UseOtherCardRow(
+                theme = theme,
+                locale = config.options.locale,
+                selected = selectedMethod == PaymentMethod.NewCard,
+                enabled = enabled,
+                onClick = onSelectNewCard,
+            )
+        }
     }
 }
 
@@ -266,25 +293,15 @@ internal fun NewCardBlock(
     theme: CheckoutTheme,
     content: @Composable () -> Unit,
 ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(
-                    RoundedCornerShape(
-                        topStart = 15.dp,
-                        topEnd = 15.dp,
-                        bottomStart = theme.paymentContainerRadius,
-                        bottomEnd = theme.paymentContainerRadius,
-                    ),
-                )
-                .background(theme.selectedBackground)
-                .padding(
-                    start = PaymentContainerInset,
-                    end = PaymentContainerInset,
-                    bottom = PaymentContainerInset,
-                ),
-            verticalArrangement = Arrangement.spacedBy(0.dp),
-        ) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(SelectedPanelRadius))
+            .background(theme.selectedBackground),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
+    ) {
         content()
     }
 }
+
+internal val SelectedPanelRadius = 12.dp

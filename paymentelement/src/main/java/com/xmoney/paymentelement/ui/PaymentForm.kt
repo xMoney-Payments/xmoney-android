@@ -35,7 +35,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -69,8 +68,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -85,6 +84,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.text.input.ImeAction
@@ -114,7 +114,7 @@ fun PaymentForm(
     onGooglePay: () -> Unit,
     modifier: Modifier = Modifier,
     header: @Composable (() -> Unit)? = null,
-    personalDetailsHeader: @Composable ((onBack: () -> Unit) -> Unit)? = null,
+    personalDetailsHeader: @Composable ((onBack: () -> Unit, title: String) -> Unit)? = null,
     isOrderConsumed: Boolean = false,
     isUpdatingOrder: Boolean = false,
     onBindSubmit: ((() -> Unit) -> Unit)? = null,
@@ -147,7 +147,11 @@ fun PaymentForm(
     var savedInput by rememberSaveable(
         state.customerDetailsVisibility,
         stateSaver = CustomerDetailsInputSaver,
-    ) { mutableStateOf(CustomerDetailsInput()) }
+    ) {
+        mutableStateOf(
+            if (config.customerDetails.card) state.customerDetailsDefaults else CustomerDetailsInput(),
+        )
+    }
     var savedCompleted by rememberSaveable(state.customerDetailsVisibility) { mutableStateOf(false) }
     val detailsState = remember(state.customerDetailsVisibility, config.card.validationMode) {
         PersonalDetailsFormState(state.customerDetailsVisibility, config.card.validationMode).apply {
@@ -159,6 +163,7 @@ fun PaymentForm(
         savedCompleted = detailsState.completed
     }
     var showingDetails by rememberSaveable { mutableStateOf(false) }
+    var detailsPicker by remember { mutableStateOf<DetailsPicker?>(null) }
     var detailsAttempted by remember { mutableStateOf(false) }
     var detailsScrollNonce by remember { mutableIntStateOf(0) }
     val detailsErrorRequester = remember { BringIntoViewRequester() }
@@ -207,6 +212,12 @@ fun PaymentForm(
             pendingDeleteId = null
         }
     }
+    val showCrypto = config.paymentMethods.showCryptoOption
+    LaunchedEffect(showCrypto) {
+        if (!showCrypto && selectedMethod == PaymentMethod.Crypto) {
+            selectedMethod = if (hasSavedCards) PaymentMethod.SavedCard else PaymentMethod.NewCard
+        }
+    }
 
     val detailsTransition = updateTransition(targetState = showingDetails, label = "personalDetails")
     val cardAlpha by detailsTransition.animateFloat(
@@ -234,7 +245,9 @@ fun PaymentForm(
         (showingDetails && cardAlpha <= PageAlphaHidden)
     val detailsOnScreenState = rememberUpdatedState(detailsOnScreen)
 
-    val paySelected: () -> Unit = {
+    val paySelected: () -> Unit = paySelected@{
+        // Crypto is a UI preview until it is wired to the backend.
+        if (selectedMethod == PaymentMethod.Crypto) return@paySelected
         val detailsReady = !needsDetails || detailsState.completed
         if (needsDetails && !detailsReady) {
             detailsAttempted = true
@@ -277,14 +290,27 @@ fun PaymentForm(
     }
 
     val focusManager = LocalFocusManager.current
+    val closePicker = {
+        detailsPicker?.onDismiss?.invoke()
+        detailsPicker = null
+    }
     val leaveDetails = {
+        detailsPicker = null
         detailsState.onLeave()
         showingDetails = false
     }
     LaunchedEffect(showingDetails) {
+        if (!showingDetails) detailsPicker = null
         if (showingDetails) focusManager.clearFocus(force = true)
     }
-    BackHandler(enabled = showingDetails && interactionEnabled, onBack = leaveDetails)
+    BackHandler(
+        enabled = showingDetails && detailsPicker != null && interactionEnabled,
+        onBack = closePicker,
+    )
+    BackHandler(
+        enabled = showingDetails && detailsPicker == null && interactionEnabled,
+        onBack = leaveDetails,
+    )
 
     Column(
         modifier = modifier
@@ -296,9 +322,7 @@ fun PaymentForm(
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = horizontalPadding),
+            modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             Box(
@@ -320,6 +344,8 @@ fun PaymentForm(
                     header?.invoke()
                     Column(
                         modifier = Modifier.padding(
+                            start = horizontalPadding,
+                            end = horizontalPadding,
                             top = topPadding,
                             bottom = bottomPadding,
                         ),
@@ -333,6 +359,9 @@ fun PaymentForm(
                     )
                 }
                 if (!walletMethods.isNullOrBlank() && walletFactory != null && walletShown) {
+                    val walletShape = RoundedCornerShape(
+                        (config.paymentMethods.googlePay.appearance.radius ?: 26f).dp,
+                    )
                     val walletArgs = WalletButtonArgs(
                         allowedPaymentMethods = walletMethods,
                         appearance = config.paymentMethods.googlePay.appearance,
@@ -351,14 +380,25 @@ fun PaymentForm(
                         onRelease = { walletHolder.view = null },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp)
-                            .clipToBounds(),
+                            .height(52.dp)
+                            .then(
+                                if (isDark) {
+                                    Modifier
+                                } else {
+                                    Modifier.shadow(
+                                        elevation = 9.dp,
+                                        shape = walletShape,
+                                        ambientColor = WalletShadowColor,
+                                        spotColor = WalletShadowColor,
+                                    )
+                                },
+                            )
+                            .clip(walletShape),
                     )
                     OrDivider(theme, config.options.locale)
                 }
 
-                if (needsDetails) {
-                    val walletAbove = !walletMethods.isNullOrBlank() && walletFactory != null && walletShown
+                if (needsDetails && !isEditingSavedCards) {
                     PersonalDetailsEntryRow(
                         theme = theme,
                         locale = config.options.locale,
@@ -369,12 +409,25 @@ fun PaymentForm(
                             focusManager.clearFocus(force = true)
                             showingDetails = true
                         },
-                        topPadding = if (walletAbove) 24.dp - SheetOrDividerVerticalMargin else 0.dp,
+                        topPadding = 0.dp,
                         modifier = Modifier.bringIntoViewRequester(detailsErrorRequester),
                     )
                 }
 
-                if (hasSavedCards) {
+                if (hasSavedCards && selectedMethod == PaymentMethod.Crypto) {
+                    PayWithCardPanel(
+                        theme = theme,
+                        locale = config.options.locale,
+                        selected = false,
+                        enabled = interactionEnabled,
+                        onSelect = {
+                            selectedSavedId = selectedSavedId ?: state.savedCards.firstOrNull()?.id
+                            savedListExpanded = true
+                            selectedMethod = PaymentMethod.SavedCard
+                        },
+                        cardFormContent = {},
+                    )
+                } else if (hasSavedCards) {
                     PaymentMethodsContainer(
                         config = config,
                         theme = theme,
@@ -428,6 +481,7 @@ fun PaymentForm(
                                 config = config,
                                 theme = theme,
                                 showHolderName = true,
+                                holderFirst = true,
                                 showSaveOptIn = config.card.savedCards.optInVisible && !state.orderInfo.isVerifyCard,
                                 sectionLabel = if (config.card.inputs.isSpaced) {
                                     null
@@ -444,22 +498,56 @@ fun PaymentForm(
                         },
                     )
                 } else {
-                    CardForm(
-                        config = config,
+                    val standaloneCardForm: @Composable () -> Unit = {
+                        CardForm(
+                            config = config,
+                            theme = theme,
+                            showHolderName = true,
+                            holderFirst = true,
+                            showSaveOptIn = config.card.savedCards.optInVisible && !state.orderInfo.isVerifyCard,
+                            sectionLabel = if (config.card.inputs.isSpaced) {
+                                null
+                            } else {
+                                Strings.text("sheet.cardDetails", config.options.locale)
+                            },
+                            saveCardLabel = Strings.text("sheet.saveCardShort", config.options.locale),
+                            showErrors = showCardErrors,
+                            contentTopPadding = 0.dp,
+                            onChange = { input, valid ->
+                                cardInput = input
+                                cardFormValid = valid
+                            },
+                        )
+                    }
+                    if (showCrypto) {
+                        PayWithCardPanel(
+                            theme = theme,
+                            locale = config.options.locale,
+                            selected = selectedMethod == PaymentMethod.NewCard,
+                            enabled = interactionEnabled,
+                            onSelect = {
+                                selectedMethod = PaymentMethod.NewCard
+                                showCardErrors = false
+                            },
+                            cardFormContent = standaloneCardForm,
+                        )
+                    } else {
+                        standaloneCardForm()
+                    }
+                }
+
+                if (showCrypto && !isEditingSavedCards) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    CryptoOptionPanel(
                         theme = theme,
-                        showHolderName = true,
-                        showSaveOptIn = config.card.savedCards.optInVisible && !state.orderInfo.isVerifyCard,
-                        sectionLabel = if (config.card.inputs.isSpaced) {
-                            null
-                        } else {
-                            Strings.text("sheet.cardDetails", config.options.locale)
-                        },
-                        saveCardLabel = Strings.text("sheet.saveCardShort", config.options.locale),
-                        showErrors = showCardErrors,
-                        contentTopPadding = 0.dp,
-                        onChange = { input, valid ->
-                            cardInput = input
-                            cardFormValid = valid
+                        locale = config.options.locale,
+                        selected = selectedMethod == PaymentMethod.Crypto,
+                        enabled = interactionEnabled,
+                        onSelect = {
+                            focusManager.clearFocus(force = true)
+                            selectedMethod = PaymentMethod.Crypto
+                            isEditingSavedCards = false
+                            pendingDeleteId = null
                         },
                     )
                 }
@@ -471,8 +559,21 @@ fun PaymentForm(
                         config = config,
                         state = detailsState,
                         enabled = interactionEnabled,
+                        embedded = embedded,
                         fillBackground = !embedded,
+                        picker = detailsPicker,
+                        onOpenPicker = { detailsPicker = it },
+                        onClosePicker = closePicker,
+                        onSelectPicker = { value ->
+                            val picker = detailsPicker
+                            if (picker != null) {
+                                picker.onSelect(value)
+                                picker.onDismiss()
+                            }
+                            detailsPicker = null
+                        },
                         personalDetailsHeader = personalDetailsHeader,
+                        horizontalPadding = horizontalPadding,
                         onBack = leaveDetails,
                         modifier = Modifier.pageLayer(
                             ownsHeight = true,
@@ -483,12 +584,14 @@ fun PaymentForm(
             }
         }
 
+        if (detailsPicker == null || embedded) {
         PaymentFormFooter(
             theme = theme,
             config = config,
             state = state,
             isProcessing = isProcessing,
             interactionEnabled = interactionEnabled,
+            promptForCard = !detailsOnScreen && selectedMethod == PaymentMethod.NewCard && !cardFormValid,
             onSubmit = {
                 if (detailsOnScreenState.value) continueDetails() else paySelected()
             },
@@ -496,9 +599,16 @@ fun PaymentForm(
             compact = embedded,
             showSubmitButton = !embedded || config.card.submitButton.visible,
             continueMode = detailsOnScreen,
+            cryptoMode = selectedMethod == PaymentMethod.Crypto,
         )
+        }
     }
 }
+
+/** Platform shadows scale spot alpha to ~0.19, which matches the Figma 18% wallet shadow. */
+private val WalletShadowColor = Color(0xFF16141A)
+
+private val PersonalDetailsHeaderStartPadding = 6.dp
 
 private const val PageFadeOutMs = 120
 private const val PageFadeInMs = 180
@@ -530,30 +640,95 @@ private fun PersonalDetailsLayer(
     config: ResolvedPaymentConfig,
     state: PersonalDetailsFormState,
     enabled: Boolean,
+    embedded: Boolean,
     fillBackground: Boolean,
-    personalDetailsHeader: @Composable ((onBack: () -> Unit) -> Unit)?,
+    picker: DetailsPicker?,
+    onOpenPicker: (DetailsPicker) -> Unit,
+    onClosePicker: () -> Unit,
+    onSelectPicker: (String) -> Unit,
+    personalDetailsHeader: @Composable ((onBack: () -> Unit, title: String) -> Unit)?,
+    horizontalPadding: Dp,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val sheetPicker = picker?.takeIf { !embedded }
+    val headerTitle = sheetPicker?.title ?: Strings.text("personalDetails.enterDetails", config.options.locale)
+    val headerBack = if (sheetPicker != null) onClosePicker else onBack
+    val listHeight = (LocalConfiguration.current.screenHeightDp * 0.9f).dp - 200.dp
     Column(
         modifier = modifier
             .fillMaxWidth()
             .then(if (fillBackground) Modifier.background(theme.background) else Modifier),
     ) {
-        if (personalDetailsHeader != null) {
-            personalDetailsHeader(onBack)
+        if (sheetPicker != null) {
+            PickerSheetHandle(theme)
+            SelectionListHeader(
+                title = sheetPicker.title,
+                theme = theme,
+                locale = config.options.locale,
+                enabled = enabled,
+                startPadding = PersonalDetailsHeaderStartPadding,
+                onClose = headerBack,
+            )
+        } else if (personalDetailsHeader != null) {
+            personalDetailsHeader(headerBack, headerTitle)
         } else {
             PersonalDetailsPageHeader(
                 theme = theme,
                 locale = config.options.locale,
                 enabled = enabled,
+                startPadding = if (embedded) 0.dp else PersonalDetailsHeaderStartPadding,
                 onBack = onBack,
             )
         }
-        PersonalDetailsForm(
-            state = state,
-            config = config,
-            theme = theme,
+        if (picker == null || embedded) {
+            PersonalDetailsForm(
+                state = state,
+                config = config,
+                theme = theme,
+                onOpenPicker = onOpenPicker,
+                modifier = Modifier.padding(horizontal = horizontalPadding),
+            )
+        }
+        if (sheetPicker != null) {
+            SelectionList(
+                title = sheetPicker.title,
+                options = sheetPicker.options,
+                selected = sheetPicker.selected,
+                theme = theme,
+                modifier = Modifier
+                    .padding(horizontal = horizontalPadding)
+                    .padding(top = 16.dp)
+                    .height(listHeight.coerceAtLeast(280.dp)),
+                onSelect = onSelectPicker,
+            )
+        }
+        if (embedded && picker != null) {
+            SelectionListSheet(
+                picker = picker,
+                theme = theme,
+                locale = config.options.locale,
+                enabled = enabled,
+                onSelect = onSelectPicker,
+                onDismiss = onClosePicker,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PickerSheetHandle(theme: CheckoutTheme) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp, bottom = 2.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 38.dp, height = 4.dp)
+                .clip(RoundedCornerShape(9999.dp))
+                .background(theme.sheetHandle),
         )
     }
 }
@@ -564,20 +739,20 @@ fun PersonalDetailsPageHeader(
     theme: CheckoutTheme,
     locale: String,
     enabled: Boolean,
+    title: String = Strings.text("personalDetails.enterDetails", locale),
+    startPadding: Dp = PersonalDetailsHeaderStartPadding,
     onBack: () -> Unit,
 ) {
     val backLabel = Strings.text("personalDetails.back", locale)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 16.dp),
+            .padding(start = startPadding, top = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(theme.neutralChip)
+                .size(44.dp)
                 .clickable(enabled = enabled, onClick = onBack)
                 .semantics {
                     contentDescription = backLabel
@@ -589,14 +764,14 @@ fun PersonalDetailsPageHeader(
                 painter = painterResource(R.drawable.xmoney_ic_chevron_down),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(width = 13.dp, height = 8.dp)
+                    .size(width = 20.dp, height = 12.dp)
                     .rotate(90f)
                     .clearAndSetSemantics { },
                 colorFilter = ColorFilter.tint(theme.primaryText),
             )
         }
         SheetText(
-            Strings.text("personalDetails.enterDetails", locale),
+            title,
             theme = theme,
             fontSize = 21f,
             fontWeight = FontWeight.SemiBold,
@@ -618,24 +793,31 @@ private fun PaymentFormFooter(
     state: SheetState,
     isProcessing: Boolean,
     interactionEnabled: Boolean,
+    promptForCard: Boolean = false,
     onSubmit: () -> Unit,
     horizontalPadding: Dp = SheetContentHorizontalPadding,
     compact: Boolean = false,
     showSubmitButton: Boolean = true,
     continueMode: Boolean = false,
+    cryptoMode: Boolean = false,
 ) {
+    val detailsFooter = continueMode
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .then(
-                if (compact) Modifier else Modifier.topHairline(theme.footerBorder),
-            )
-            .padding(horizontal = horizontalPadding)
+            .padding(horizontal = if (detailsFooter) 16.dp else horizontalPadding)
             .padding(
-                top = if (compact) 8.dp else SheetFooterTopPadding,
-                bottom = if (compact) 0.dp else SheetFooterBottomPadding,
+                top = when {
+                    detailsFooter -> 16.dp
+                    else -> SheetFooterTopPadding
+                },
+                bottom = when {
+                    detailsFooter -> 16.dp
+                    compact -> 0.dp
+                    else -> SheetFooterBottomPadding
+                },
             ),
-        verticalArrangement = Arrangement.spacedBy(SheetFooterContentSpacing),
+        verticalArrangement = Arrangement.spacedBy(if (detailsFooter) 12.dp else SheetFooterContentSpacing),
     ) {
         if (showSubmitButton) {
             val amount = Strings.formatAmount(
@@ -643,10 +825,11 @@ private fun PaymentFormFooter(
                 state.orderInfo.currency,
                 config.options.locale,
             )
-            val payTitle = if (continueMode) {
-                Strings.text("personalDetails.continue", config.options.locale)
-            } else {
-                Strings.submitButtonTitle(config.card.submitButton.type.value, config.options.locale, amount)
+            val payTitle = when {
+                continueMode -> Strings.text("personalDetails.continue", config.options.locale)
+                cryptoMode -> Strings.text("button.continue", config.options.locale)
+                promptForCard -> Strings.text("sheet.enterCardDetails", config.options.locale)
+                else -> Strings.submitButtonTitle(config.card.submitButton.type.value, config.options.locale, amount)
             }
 
             SubmitButton(
@@ -654,6 +837,7 @@ private fun PaymentFormFooter(
                 title = payTitle,
                 locale = config.options.locale,
                 enabled = interactionEnabled,
+                dimmed = promptForCard && interactionEnabled && !isProcessing,
                 isProcessing = isProcessing,
                 onClick = onSubmit,
             )
@@ -668,7 +852,7 @@ private fun OrDivider(theme: CheckoutTheme, locale: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = SheetOrDividerVerticalMargin),
+            .padding(top = 24.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -676,9 +860,9 @@ private fun OrDivider(theme: CheckoutTheme, locale: String) {
         SheetText(
             Strings.text("sheet.or", locale),
             theme = theme,
-            color = theme.secondaryText.copy(alpha = 0.4f),
-            fontSize = 13f,
-            fontWeight = FontWeight.Medium,
+            color = theme.sectionLabel,
+            fontSize = 14f,
+            fontWeight = FontWeight.Normal,
         )
         Divider(modifier = Modifier.weight(1f), color = theme.orDivider)
     }

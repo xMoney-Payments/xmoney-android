@@ -31,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,6 +66,8 @@ import com.xmoney.paymentelement.EmbeddedPaymentController
 import com.xmoney.paymentelement.PaymentElement
 import com.xmoney.paymentelement.rememberEmbeddedPayment
 import com.xmoney.payments.config.CustomerDetailsConfig
+import com.xmoney.payments.config.CustomerDetailsDefaults
+import com.xmoney.payments.config.CustomerDetailsFields
 import com.xmoney.payments.config.CardConfig
 import com.xmoney.payments.config.CardGrouping
 import com.xmoney.payments.config.CardHolderName
@@ -107,14 +110,30 @@ fun DemoCheckoutScreen(
     var selectedGrouping by remember { mutableStateOf(playgroundGroupingOptions.first()) }
     var submitVisible by remember { mutableStateOf(true) }
     var googlePayEnabled by remember { mutableStateOf(true) }
+    var cryptoEnabled by remember { mutableStateOf(false) }
     var savedCardsEnabled by remember { mutableStateOf(true) }
     var saveCardOptInVisible by remember { mutableStateOf(true) }
     var cardHolderVerificationEnabled by remember { mutableStateOf(false) }
     var customerDetailsCard by remember { mutableStateOf(false) }
     var customerDetailsGooglePay by remember { mutableStateOf(false) }
+    var customerDetailsFieldsOverride by remember { mutableStateOf(false) }
+    var customerDetailsFullName by remember { mutableStateOf(true) }
+    var customerDetailsEmail by remember { mutableStateOf(true) }
+    var customerDetailsPhone by remember { mutableStateOf(false) }
+    var customerDetailsAddress by remember { mutableStateOf(true) }
+    var customerDetailsPrefill by remember { mutableStateOf(false) }
+    var defaultsRevision by remember { mutableIntStateOf(0) }
+    var defaultFullName by remember { mutableStateOf("Jane Doe") }
+    var defaultEmail by remember { mutableStateOf("jane@example.com") }
+    var defaultPhone by remember { mutableStateOf("+14155550100") }
+    var defaultCountry by remember { mutableStateOf("US") }
+    var defaultRegion by remember { mutableStateOf("CA") }
+    var defaultCity by remember { mutableStateOf("San Francisco") }
+    var defaultPostalCode by remember { mutableStateOf("94105") }
+    var defaultAddress by remember { mutableStateOf("1 Market St") }
     var walletColor by remember { mutableStateOf(playgroundWalletColorOptions.first()) }
     var walletType by remember { mutableStateOf(playgroundWalletTypeOptions.first()) }
-    var walletRadius by remember { mutableFloatStateOf(28f) }
+    var walletRadius by remember { mutableFloatStateOf(26f) }
     var mode by remember { mutableStateOf(IntegrationMode.PaymentSheet) }
     var amountMinor by remember { mutableLongStateOf(SAMPLE_AMOUNT_MINOR) }
 
@@ -138,12 +157,20 @@ fun DemoCheckoutScreen(
     val appearance = appearanceState.toAppearanceConfig()
     val structuralKey = listOf(
         googlePayEnabled,
+        cryptoEnabled,
         savedCardsEnabled,
         saveCardOptInVisible,
         selectedGrouping.value,
         cardHolderVerificationEnabled,
         customerDetailsCard,
         customerDetailsGooglePay,
+        customerDetailsFieldsOverride,
+        customerDetailsFullName,
+        customerDetailsEmail,
+        customerDetailsPhone,
+        customerDetailsAddress,
+        customerDetailsPrefill,
+        defaultsRevision,
         selectedButtonType.value,
         selectedValidation.value,
         submitVisible,
@@ -157,11 +184,27 @@ fun DemoCheckoutScreen(
         selectedGrouping,
         submitVisible,
         googlePayEnabled,
+        cryptoEnabled,
         savedCardsEnabled,
         saveCardOptInVisible,
         cardHolderVerificationEnabled,
         customerDetailsCard,
         customerDetailsGooglePay,
+        customerDetailsFieldsOverride,
+        customerDetailsFullName,
+        customerDetailsEmail,
+        customerDetailsPhone,
+        customerDetailsAddress,
+        customerDetailsPrefill,
+        defaultsRevision,
+        defaultFullName,
+        defaultEmail,
+        defaultPhone,
+        defaultCountry,
+        defaultRegion,
+        defaultCity,
+        defaultPostalCode,
+        defaultAddress,
         sdkStyle,
         wallet,
     ) {
@@ -172,6 +215,7 @@ fun DemoCheckoutScreen(
                     enabled = googlePayEnabled,
                     appearance = wallet,
                 ),
+                showCryptoOption = cryptoEnabled,
             ),
             card = CardConfig(
                 savedCards = SavedCardsConfig(
@@ -204,6 +248,30 @@ fun DemoCheckoutScreen(
             customerDetails = CustomerDetailsConfig(
                 card = customerDetailsCard,
                 googlePay = customerDetailsGooglePay,
+                fields = if (customerDetailsFieldsOverride) {
+                    CustomerDetailsFields(
+                        fullName = customerDetailsFullName,
+                        email = customerDetailsEmail,
+                        phone = customerDetailsPhone,
+                        address = customerDetailsAddress,
+                    )
+                } else {
+                    null
+                },
+                defaultValues = if (customerDetailsPrefill) {
+                    CustomerDetailsDefaults(
+                        fullName = defaultFullName,
+                        email = defaultEmail,
+                        phone = defaultPhone,
+                        country = defaultCountry,
+                        region = defaultRegion,
+                        city = defaultCity,
+                        postalCode = defaultPostalCode,
+                        address = defaultAddress,
+                    )
+                } else {
+                    null
+                },
             ),
             options = OptionsConfig(
                 locale = selectedLocale.value,
@@ -455,6 +523,13 @@ fun DemoCheckoutScreen(
                     enabled = mode == IntegrationMode.Embedded,
                 )
                 ExampleSwitchRow(
+                    title = "Crypto",
+                    subtitle = "paymentMethods.showCryptoOption · UI preview only",
+                    checked = cryptoEnabled,
+                    onCheckedChange = { cryptoEnabled = it },
+                    showDivider = true,
+                )
+                ExampleSwitchRow(
                     title = "Saved cards",
                     subtitle = "card.savedCards.enabled · load and offer stored cards",
                     checked = savedCardsEnabled,
@@ -476,6 +551,70 @@ fun DemoCheckoutScreen(
                     onCheckedChange = { customerDetailsCard = it },
                     showDivider = true,
                 )
+                ExampleSwitchRow(
+                    title = "Custom field list",
+                    subtitle = "customerDetails.fields replaces the account list",
+                    checked = customerDetailsFieldsOverride,
+                    onCheckedChange = { customerDetailsFieldsOverride = it },
+                    showDivider = true,
+                )
+                ExampleSwitchRow(
+                    title = "Name",
+                    subtitle = "fields.fullName",
+                    checked = customerDetailsFullName,
+                    onCheckedChange = { customerDetailsFullName = it },
+                    showDivider = true,
+                    enabled = customerDetailsFieldsOverride,
+                )
+                ExampleSwitchRow(
+                    title = "Email",
+                    subtitle = "fields.email",
+                    checked = customerDetailsEmail,
+                    onCheckedChange = { customerDetailsEmail = it },
+                    showDivider = true,
+                    enabled = customerDetailsFieldsOverride,
+                )
+                ExampleSwitchRow(
+                    title = "Phone",
+                    subtitle = "fields.phone",
+                    checked = customerDetailsPhone,
+                    onCheckedChange = { customerDetailsPhone = it },
+                    showDivider = true,
+                    enabled = customerDetailsFieldsOverride,
+                )
+                ExampleSwitchRow(
+                    title = "Address",
+                    subtitle = "fields.address",
+                    checked = customerDetailsAddress,
+                    onCheckedChange = { customerDetailsAddress = it },
+                    showDivider = true,
+                    enabled = customerDetailsFieldsOverride,
+                )
+                ExampleSwitchRow(
+                    title = "Prefill card form",
+                    subtitle = "customerDetails.defaultValues · Google Pay ignores this",
+                    checked = customerDetailsPrefill,
+                    onCheckedChange = { customerDetailsPrefill = it },
+                    showDivider = true,
+                )
+                if (customerDetailsPrefill) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        PlaygroundDefaultField("Full name", defaultFullName) { defaultFullName = it }
+                        PlaygroundDefaultField("Email", defaultEmail) { defaultEmail = it }
+                        PlaygroundDefaultField("Phone", defaultPhone) { defaultPhone = it }
+                        PlaygroundDefaultField("Country", defaultCountry) { defaultCountry = it }
+                        PlaygroundDefaultField("Region", defaultRegion) { defaultRegion = it }
+                        PlaygroundDefaultField("City", defaultCity) { defaultCity = it }
+                        PlaygroundDefaultField("Postal code", defaultPostalCode) { defaultPostalCode = it }
+                        PlaygroundDefaultField("Address", defaultAddress) { defaultAddress = it }
+                        TextButton(onClick = { defaultsRevision += 1 }) {
+                            Text("Apply prefill")
+                        }
+                    }
+                }
                 ExampleSwitchRow(
                     title = "Card holder verification",
                     subtitle = "Validate name via account-validation before pay",

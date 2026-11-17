@@ -156,7 +156,7 @@ The sheet keeps its loading coin up until the form and, when offered, the Google
 
 ### Customer details
 
-`customerDetails` asks the shopper for the fields your account requires. If that list cannot be loaded, checkout continues without the form.
+`customerDetails` asks the shopper for the fields your account requires. If that list cannot be loaded, checkout continues without the form. Pass `fields` to choose the blocks yourself; that replaces the account list, and a flag you leave off is not collected. `defaultValues` prefills the card form. Blank text and values that are not in the country, region, or phone lists are ignored. Google Pay does not use them.
 
 ```kotlin
 PaymentConfig(
@@ -164,6 +164,13 @@ PaymentConfig(
     customerDetails = CustomerDetailsConfig(
         card = true,       // entry row above the card form
         googlePay = true,  // billing contact from the Google Pay sheet
+        fields = CustomerDetailsFields(fullName = true, email = true, address = true),
+        defaultValues = CustomerDetailsDefaults(
+            fullName = "Jane Doe",
+            email = "jane@example.com",
+            country = "US",
+            region = "CA",
+        ),
     ),
 )
 ```

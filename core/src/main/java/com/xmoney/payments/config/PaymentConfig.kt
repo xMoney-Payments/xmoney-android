@@ -26,15 +26,46 @@ data class PaymentConfig(
 
 /**
  * Which payment methods collect customer details.
- * The field list itself comes from `/inline-checkout/fields`.
+ * The field list comes from `/inline-checkout/fields`, unless [fields] is set.
+ * That override replaces the server list and is not merged with it.
+ * [defaultValues] prefills the card form only.
  */
 @Parcelize
 data class CustomerDetailsConfig(
     val card: Boolean = false,
     val googlePay: Boolean = false,
+    /** Replaces `/inline-checkout/fields` when set. A flag left off is not collected. */
+    val fields: CustomerDetailsFields? = null,
+    /** Prefills the card form. Google Pay does not use these values. */
+    val defaultValues: CustomerDetailsDefaults? = null,
 ) : Parcelable {
     val anyEnabled: Boolean get() = card || googlePay
 }
+
+/** Which blocks to collect. Missing flags are off. */
+@Parcelize
+data class CustomerDetailsFields(
+    val fullName: Boolean = false,
+    val email: Boolean = false,
+    val phone: Boolean = false,
+    val address: Boolean = false,
+) : Parcelable
+
+/**
+ * Values written into the card form before the shopper edits it.
+ * Blank text and values that are not in the country, region, or phone lists are ignored.
+ */
+@Parcelize
+data class CustomerDetailsDefaults(
+    val fullName: String? = null,
+    val email: String? = null,
+    val phone: String? = null,
+    val country: String? = null,
+    val region: String? = null,
+    val city: String? = null,
+    val postalCode: String? = null,
+    val address: String? = null,
+) : Parcelable
 
 @Parcelize
 data class SavedCardsConfig(
@@ -148,6 +179,8 @@ data class GooglePayConfig(
 @Parcelize
 data class PaymentMethodsConfig(
     val googlePay: GooglePayConfig = GooglePayConfig(),
+    /** Shows the "Pay with crypto" option. Preview only: selecting it does not start a payment yet. */
+    val showCryptoOption: Boolean = false,
 ) : Parcelable
 
 @Parcelize

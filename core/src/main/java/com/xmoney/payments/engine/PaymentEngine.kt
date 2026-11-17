@@ -2,6 +2,8 @@ package com.xmoney.payments.engine
 
 import com.xmoney.payments.config.PaymentEnvironment
 import com.xmoney.payments.config.ResolvedPaymentConfig
+import com.xmoney.payments.customerdetails.CustomerDetailsInput
+import com.xmoney.payments.customerdetails.CustomerDetailsResolver
 import com.xmoney.payments.customerdetails.CustomerDetailsVisibility
 import com.xmoney.payments.model.CardHolderVerificationResult
 import com.xmoney.payments.model.CardInput
@@ -52,6 +54,8 @@ data class SheetState(
     val googlePayReady: Boolean = false,
     val nameCheckValidationEnabled: Boolean = false,
     val customerDetailsVisibility: CustomerDetailsVisibility = CustomerDetailsVisibility.Inactive,
+    /** Card-form prefill. Empty when no defaults apply. Google Pay does not read this. */
+    val customerDetailsDefaults: CustomerDetailsInput = CustomerDetailsInput(),
 )
 
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
@@ -115,21 +119,20 @@ class PaymentEngine(
                 null
             }
         }
-        val fieldsTask = async {
-            if (config.customerDetails.anyEnabled) inlineFields.getFields(sessionToken) else emptyList()
-        }
+        val fieldsTask = async { customerDetailFields(sessionToken) }
 
         val siteConfig = configTask.await()
         nameCheckValidationEnabled = siteConfig.nameCheckValidationEnabled
         walletTask.await()
         val visibility = CustomerDetailsVisibility.resolve(fieldsTask.await())
         customerDetailsVisibility = visibility
-        if (config.customerDetails.anyEnabled && !visibility.isActive) {
+        if (config.customerDetails.fields == null && config.customerDetails.anyEnabled && !visibility.isActive) {
             Log.w(
                 "customer-details",
                 "[customer-details] Collection is enabled but /inline-checkout/fields returned no requested fields.",
             )
         }
+        val defaults = CustomerDetailsResolver.resolve(config.customerDetails.defaultValues, visibility)
 
         SheetState(
             sessionToken = sessionToken,
@@ -138,7 +141,24 @@ class PaymentEngine(
             googlePayAvailable = config.paymentMethods.googlePay.enabled && googlePayConfigured,
             nameCheckValidationEnabled = nameCheckValidationEnabled,
             customerDetailsVisibility = visibility,
+            customerDetailsDefaults = defaults,
         )
+    }
+
+    private suspend fun customerDetailFields(sessionToken: String): List<String> {
+        val override = config.customerDetails.fields
+        if (override != null) {
+            val fields = CustomerDetailsResolver.inlineCheckoutFields(override)
+            if (fields.isEmpty()) {
+                Log.w(
+                    "customer-details",
+                    "[customer-details] customerDetails.fields has every field disabled.",
+                )
+            }
+            return fields
+        }
+        if (!config.customerDetails.anyEnabled) return emptyList()
+        return inlineFields.getFields(sessionToken)
     }
 
     suspend fun refreshSavedCards(): List<SavedCard> =

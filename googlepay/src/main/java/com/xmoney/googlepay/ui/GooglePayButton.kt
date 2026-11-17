@@ -28,7 +28,7 @@ import com.xmoney.payments.config.WalletButtonColor
 import com.xmoney.payments.config.WalletButtonType
 import java.util.concurrent.atomic.AtomicBoolean
 
-internal val GooglePayButtonHeight = 56.dp
+internal val GooglePayButtonHeight = 52.dp
 
 @androidx.annotation.RestrictTo(androidx.annotation.RestrictTo.Scope.LIBRARY_GROUP)
 @Composable
@@ -45,7 +45,7 @@ fun GooglePayButton(
     val currentOnDrawn by rememberUpdatedState(onDrawn)
     val drawReported = remember { AtomicBoolean(false) }
     val hostView = LocalView.current
-    val radius = (appearance.radius ?: 28f).dp
+    val radius = (appearance.radius ?: 26f).dp
     val buttonTheme = resolveButtonTheme(appearance.color, isDarkBackground)
     val buttonType = resolveButtonType(appearance.type)
 

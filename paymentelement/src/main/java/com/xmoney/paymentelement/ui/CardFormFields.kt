@@ -46,11 +46,14 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import com.xmoney.paymentelement.R
 import com.xmoney.paymentelement.theme.CheckoutTheme
 import com.xmoney.payments.config.Strings
 
 internal enum class CardField { HOLDER, NUMBER, EXPIRY, CVV }
+
+internal val CardFieldHorizontalPadding = 14.dp
 
 @Composable
 internal fun FieldLabel(
@@ -61,7 +64,7 @@ internal fun FieldLabel(
         text,
         theme = theme,
         fontSize = 14f,
-        fontWeight = FontWeight.Medium,
+        fontWeight = FontWeight.SemiBold,
         color = theme.primaryText,
         modifier = Modifier.padding(bottom = 6.dp),
     )
@@ -77,7 +80,7 @@ internal fun FieldErrorText(
         message,
         theme = theme,
         color = theme.errorText,
-        fontSize = 12.5f,
+        fontSize = 12f,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(top = 6.dp),
     )
@@ -217,7 +220,7 @@ internal fun LabeledCardFields(
                             Image(
                                 painter = painterResource(R.drawable.xmoney_ic_cvv),
                                 contentDescription = null,
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier.size(24.dp),
                                 colorFilter = ColorFilter.tint(theme.mutedIcon),
                             )
                         },
@@ -257,9 +260,13 @@ internal fun ErrorBadgeMessage(
     message: String,
     theme: CheckoutTheme,
     topPadding: Dp = 8.dp,
+    horizontalPadding: Dp = 2.dp,
+    badgeColor: Color = theme.errorText,
+    bangWeight: FontWeight = FontWeight.Medium,
+    messageSize: Float = 12f,
 ) {
     Row(
-        modifier = Modifier.padding(start = 2.dp, end = 2.dp, top = topPadding),
+        modifier = Modifier.padding(start = horizontalPadding, end = horizontalPadding, top = topPadding),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -267,16 +274,23 @@ internal fun ErrorBadgeMessage(
             modifier = Modifier
                 .size(15.dp)
                 .clip(CircleShape)
-                .background(theme.errorBorder),
+                .background(badgeColor),
             contentAlignment = Alignment.Center,
         ) {
-            SheetText("!", theme = theme, color = Color.White, fontSize = 10f, fontWeight = FontWeight.Bold)
+            SheetText(
+                "!",
+                theme = theme,
+                color = Color.White,
+                fontSize = 10f,
+                fontWeight = bangWeight,
+                lineHeight = null,
+            )
         }
         SheetText(
             message,
             theme = theme,
             color = theme.errorText,
-            fontSize = 12.5f,
+            fontSize = messageSize,
             fontWeight = FontWeight.SemiBold,
         )
     }
@@ -287,16 +301,16 @@ internal fun SaveCardCheckbox(
     theme: CheckoutTheme,
     checked: Boolean,
     label: String,
+    horizontalPadding: Dp = 0.dp,
     onToggle: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onToggle() }
-            .padding(top = 6.dp)
-            .padding(horizontal = 2.dp, vertical = 12.dp),
+            .padding(horizontal = horizontalPadding, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(11.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(
             modifier = Modifier
@@ -340,6 +354,11 @@ internal fun ContainedFieldRow(
     fieldHeight: Dp,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    horizontalPadding: Dp = CardFieldHorizontalPadding,
+    valueColor: Color = theme.primaryText,
+    placeholderColor: Color = theme.sectionLabel,
+    valueWeight: FontWeight = FontWeight.Normal,
+    placeholderWeight: FontWeight = FontWeight.Normal,
     trailing: @Composable (() -> Unit)? = null,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     imeAction: ImeAction = ImeAction.Default,
@@ -364,7 +383,7 @@ internal fun ContainedFieldRow(
         modifier = modifier
             .fillMaxWidth()
             .height(fieldHeight)
-            .padding(horizontal = 14.dp),
+            .padding(horizontal = horizontalPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BasicTextField(
@@ -372,10 +391,11 @@ internal fun ContainedFieldRow(
             onValueChange = onValueChange,
             singleLine = true,
             textStyle = TextStyle(
-                color = theme.componentText,
+                color = valueColor,
                 fontSize = theme.scaledSp(18f),
-                fontWeight = FontWeight.Medium,
+                fontWeight = valueWeight,
                 fontFamily = theme.fontFamily,
+                letterSpacing = (-0.01).em,
             ),
             visualTransformation = visualTransformation,
             keyboardOptions = KeyboardOptions(
@@ -403,9 +423,10 @@ internal fun ContainedFieldRow(
                         SheetText(
                             placeholder,
                             theme = theme,
-                            color = theme.placeholderText,
+                            color = placeholderColor,
                             fontSize = 18f,
-                            fontWeight = FontWeight.Medium,
+                            fontWeight = placeholderWeight,
+                            letterSpacing = (-0.01).em,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth(),
@@ -416,7 +437,7 @@ internal fun ContainedFieldRow(
             },
         )
         trailing?.let {
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(10.dp))
             it()
         }
     }
