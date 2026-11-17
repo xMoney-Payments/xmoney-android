@@ -100,12 +100,7 @@ class GooglePayHostActivity : FragmentActivity(), GooglePayCloseTarget, GooglePa
             return
         }
 
-        paymentConfig = PaymentConfig(
-            publicKey = config.publicKey,
-            card = config.card,
-            paymentMethods = config.paymentMethods,
-            options = config.options,
-        )
+        paymentConfig = config.toPaymentConfig()
         val initialIntent = PaymentIntent(
             OrderPayload(config.orderPayload),
             OrderChecksum(config.orderChecksum),

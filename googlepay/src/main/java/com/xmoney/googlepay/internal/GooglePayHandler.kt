@@ -7,6 +7,9 @@ import com.google.android.gms.wallet.PaymentDataRequest
 import com.google.android.gms.wallet.PaymentsClient
 import com.google.android.gms.wallet.Wallet
 import com.google.android.gms.wallet.WalletConstants
+import com.xmoney.payments.customerdetails.CustomerDetails
+import com.xmoney.payments.customerdetails.GooglePayBillingParameters
+import com.xmoney.payments.customerdetails.WalletContact
 import com.xmoney.payments.model.OrderPayloadInfo
 import com.xmoney.payments.model.WalletParams
 import com.xmoney.payments.model.PaymentError
@@ -37,19 +40,28 @@ class GooglePayHandler(activity: Activity, private val env: PaymentEnvironment) 
         }
     }
 
-    fun loadPaymentDataRequest(params: WalletParams, orderInfo: OrderPayloadInfo): PaymentDataRequest =
-        PaymentDataRequest.fromJson(buildPaymentDataRequestJson(params, orderInfo).toString())
+    fun loadPaymentDataRequest(
+        params: WalletParams,
+        orderInfo: OrderPayloadInfo,
+        billing: GooglePayBillingParameters = GooglePayBillingParameters.None,
+    ): PaymentDataRequest =
+        PaymentDataRequest.fromJson(
+            buildPaymentDataRequestJson(params, orderInfo, billing).toString(),
+        )
 
     val paymentsClient: PaymentsClient get() = client
 
     fun allowedPaymentMethodsJson(params: WalletParams): String =
         isReadyToPayRequest(params).getJSONArray("allowedPaymentMethods").toString()
 
-    internal fun buildPaymentDataRequestJson(params: WalletParams, orderInfo: OrderPayloadInfo): JSONObject =
-        paymentDataRequest(params).apply {
-            put("merchantInfo", merchantInfoJson(params))
-            put("transactionInfo", transactionInfoJson(params, orderInfo))
-        }
+    internal fun buildPaymentDataRequestJson(
+        params: WalletParams,
+        orderInfo: OrderPayloadInfo,
+        billing: GooglePayBillingParameters = GooglePayBillingParameters.None,
+    ): JSONObject = paymentDataRequest(params, billing).apply {
+        put("merchantInfo", merchantInfoJson(params))
+        put("transactionInfo", transactionInfoJson(params, orderInfo))
+    }
 
     private fun isReadyToPayRequest(params: WalletParams): JSONObject =
         JSONObject()
@@ -57,11 +69,13 @@ class GooglePayHandler(activity: Activity, private val env: PaymentEnvironment) 
             .put("apiVersionMinor", 0)
             .put("allowedPaymentMethods", JSONArray().put(cardPaymentMethodParameters(params)))
 
-    private fun paymentDataRequest(params: WalletParams): JSONObject =
-        JSONObject()
+    private fun paymentDataRequest(params: WalletParams, billing: GooglePayBillingParameters): JSONObject {
+        val request = JSONObject()
             .put("apiVersion", 2)
             .put("apiVersionMinor", 0)
-            .put("allowedPaymentMethods", JSONArray().put(cardPaymentMethodWithTokenization(params)))
+            .put("allowedPaymentMethods", JSONArray().put(cardPaymentMethodWithTokenization(params, billing)))
+        return applyEmailRequired(request, billing)
+    }
 
     private fun merchantInfoJson(params: WalletParams): JSONObject {
         val info = JSONObject().put("merchantName", params.merchantName ?: "Merchant")
@@ -72,20 +86,16 @@ class GooglePayHandler(activity: Activity, private val env: PaymentEnvironment) 
     private fun transactionInfoJson(params: WalletParams, orderInfo: OrderPayloadInfo): JSONObject =
         transactionInfo(params, orderInfo)
 
-    private fun cardPaymentMethodParameters(params: WalletParams): JSONObject {
-        val allowedNetworks = allowedNetworksJson(params)
-        return JSONObject()
-            .put("type", "CARD")
-            .put(
-                "parameters",
-                JSONObject()
-                    .put("allowedAuthMethods", JSONArray(allowedAuthMethods(env.isLive)))
-                    .put("allowedCardNetworks", allowedNetworks)
-            )
-    }
+    private fun cardPaymentMethodParameters(
+        params: WalletParams,
+        billing: GooglePayBillingParameters = GooglePayBillingParameters.None,
+    ): JSONObject = cardPaymentMethodJson(params, env.isLive, billing)
 
-    private fun cardPaymentMethodWithTokenization(params: WalletParams): JSONObject =
-        cardPaymentMethodParameters(params).put(
+    private fun cardPaymentMethodWithTokenization(
+        params: WalletParams,
+        billing: GooglePayBillingParameters,
+    ): JSONObject =
+        cardPaymentMethodParameters(params, billing).put(
             "tokenizationSpecification",
             JSONObject()
                 .put("type", "PAYMENT_GATEWAY")
@@ -113,11 +123,49 @@ class GooglePayHandler(activity: Activity, private val env: PaymentEnvironment) 
             return requireWalletToken(token)
         }
 
+        fun billingContact(paymentDataJson: String): WalletContact? =
+            runCatching { WalletContact.fromGooglePay(JSONObject(paymentDataJson)) }.getOrNull()
+
+        fun billingContact(paymentData: PaymentData): WalletContact? =
+            billingContact(paymentData.toJson())
+
         fun requireWalletToken(token: String): String {
             if (token.isBlank()) {
                 throw PaymentError.GooglePay(PaymentError.EMPTY_GOOGLE_PAY_TOKEN)
             }
             return token
+        }
+
+        internal fun applyEmailRequired(request: JSONObject, billing: GooglePayBillingParameters): JSONObject {
+            if (billing.emailRequired) request.put("emailRequired", true)
+            return request
+        }
+
+        internal fun cardPaymentMethodJson(
+            params: WalletParams,
+            isLive: Boolean,
+            billing: GooglePayBillingParameters = GooglePayBillingParameters.None,
+        ): JSONObject {
+            val networks = JSONArray(
+                (params.supportedNetworks.takeIf { it.isNotEmpty() } ?: listOf("VISA", "MASTERCARD"))
+                    .map { it.uppercase() },
+            )
+            val parameters = JSONObject()
+                .put("allowedAuthMethods", JSONArray(allowedAuthMethods(isLive)))
+                .put("allowedCardNetworks", networks)
+            if (billing.billingAddressRequired || billing.phoneNumberRequired) {
+                parameters
+                    .put("billingAddressRequired", billing.billingAddressRequired)
+                    .put(
+                        "billingAddressParameters",
+                        JSONObject()
+                            .put("format", billing.billingAddressFormat)
+                            .put("phoneNumberRequired", billing.phoneNumberRequired),
+                    )
+            }
+            return JSONObject()
+                .put("type", "CARD")
+                .put("parameters", parameters)
         }
 
         /**

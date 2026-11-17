@@ -19,10 +19,11 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -32,19 +33,19 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.xmoney.payments.config.ResolvedPaymentConfig
 import com.xmoney.payments.config.Strings
 import com.xmoney.payments.engine.SheetState
 import com.xmoney.payments.model.CardInput
 import com.xmoney.payments.model.SavedCard
+import com.xmoney.paymentelement.R
 import com.xmoney.paymentelement.theme.CheckoutTheme
 import com.xmoney.paymentelement.ui.PaymentForm
+import com.xmoney.paymentelement.ui.PersonalDetailsPageHeader
 import com.xmoney.paymentelement.ui.UIHelpers
 
 @Composable
@@ -52,8 +53,9 @@ internal fun PaymentSheetContent(
     config: ResolvedPaymentConfig,
     state: SheetState,
     isProcessing: Boolean,
-    onPayCard: (CardInput) -> Unit,
-    onSelectSaved: (SavedCard) -> Unit,
+    onPayCard: (CardInput, Map<String, String>?) -> Unit,
+    onSelectSaved: (SavedCard, Map<String, String>?) -> Unit,
+    onPayCrypto: (Map<String, String>?) -> Unit,
     onDeleteSaved: suspend (SavedCard) -> Unit,
     onGooglePay: () -> Unit,
     onCancel: () -> Unit,
@@ -72,6 +74,7 @@ internal fun PaymentSheetContent(
         isProcessing = isProcessing,
         onPayCard = onPayCard,
         onSelectSaved = onSelectSaved,
+        onPayCrypto = onPayCrypto,
         onDeleteSaved = onDeleteSaved,
         onGooglePay = onGooglePay,
         surfaceEpoch = surfaceEpoch,
@@ -90,6 +93,16 @@ internal fun PaymentSheetContent(
                 locale = config.options.locale,
                 enabled = !isProcessing,
                 onCancel = onCancel,
+            )
+        },
+        personalDetailsHeader = { onBack, title ->
+            SheetHandle(theme)
+            PersonalDetailsPageHeader(
+                theme = theme,
+                locale = config.options.locale,
+                enabled = !isProcessing,
+                title = title,
+                onBack = onBack,
             )
         },
     )
@@ -124,14 +137,12 @@ private fun SheetHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 6.dp),
+            .padding(start = 6.dp, top = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(theme.neutralChip)
+                .size(44.dp)
                 .clickable(enabled = enabled) { onCancel() }
                 .semantics {
                     contentDescription = closeLabel
@@ -139,13 +150,11 @@ private fun SheetHeader(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = "✕",
-                color = theme.primaryText,
-                fontSize = theme.scaledSp(14f),
-                fontWeight = FontWeight.Normal,
-                fontFamily = theme.fontFamily,
-                modifier = Modifier.clearAndSetSemantics { },
+            Image(
+                painter = painterResource(R.drawable.xmoney_ic_close),
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                colorFilter = ColorFilter.tint(theme.primaryText),
             )
         }
         Spacer(Modifier.weight(1f))

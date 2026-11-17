@@ -192,6 +192,28 @@ internal fun PlaygroundDropdown(
 }
 
 @Composable
+internal fun PlaygroundDefaultField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        singleLine = true,
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = ExampleColors.Purple,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+            focusedContainerColor = MaterialTheme.colorScheme.surface,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+        ),
+        shape = RoundedCornerShape(ExampleRadii.inner),
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
 internal fun PlaygroundColorRow(
     title: String,
     apiName: String,

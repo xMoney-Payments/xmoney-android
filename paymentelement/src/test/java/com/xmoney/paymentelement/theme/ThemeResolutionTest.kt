@@ -52,9 +52,8 @@ class ThemeResolutionTest {
             mapOf("colors" to mapOf("primary" to primaryHex)),
             isDark = false,
         )
-        val primary = requireColor(primaryHex)
-        assertEquals(primary.copy(alpha = 0x0F / 255f), theme.selectedBackground)
-        assertEquals(primary.copy(alpha = 0x1F / 255f), theme.accentIconBackground)
+        assertEquals(Color(0xFFF7F6FF), theme.selectedBackground)
+        assertEquals(Color(0xFFECE5FF), theme.accentIconBackground)
     }
 
     @Test
@@ -194,7 +193,7 @@ class ThemeResolutionTest {
     @Test
     fun containerBorderDefaultsWhenOmitted() {
         val light = resolveAppearance(emptyMap(), isDark = false)
-        assertEquals(Color(0x1716141A), light.containerBorder)
+        assertEquals(Color.Transparent, light.containerBorder)
 
         val dark = resolveAppearance(emptyMap(), isDark = true)
         assertEquals(Color(0xFFF7F6F9).copy(alpha = 0x17 / 255f), dark.containerBorder)
@@ -222,10 +221,11 @@ class ThemeResolutionTest {
         val ink = Color(0xFF16141A)
         assertEquals(Color(0x5216141A), theme.mutedIcon)
         assertEquals(Color(0x2916141A), theme.unselectedRing)
-        assertEquals(Color(0x1A16141A), theme.fieldBorder)
-        assertEquals(Color(0x1416141A), theme.fieldDivider)
-        assertEquals(ink.copy(alpha = 0x1F / 255f), theme.sheetHandle)
-        assertEquals(ink.copy(alpha = 0x1A / 255f), theme.orDivider)
+        assertEquals(Color(0xFFE3E1E8), theme.fieldBorder)
+        assertEquals(Color(0xFFE3E1E8), theme.fieldDivider)
+        assertEquals(Color(0xFFE3E1E8), theme.sheetHandle)
+        assertEquals(Color(0xFFE3E1E8), theme.orDivider)
+        assertEquals(Color(0xFFF7F6FF), theme.background)
         assertEquals(ink.copy(alpha = 0x0F / 255f), theme.footerBorder)
         assertEquals(null, theme.visaMarkTint)
     }

@@ -72,6 +72,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.xmoney.payments.validation.CardFieldValidators
 import com.xmoney.payments.validation.CardFieldValidators.localizedMessage
@@ -83,24 +84,34 @@ import com.xmoney.payments.config.ResolvedPaymentConfig
 import com.xmoney.payments.config.ValidationMode
 import androidx.compose.runtime.LaunchedEffect
 
-internal enum class PaymentMethod { SavedCard, NewCard }
+internal enum class PaymentMethod { SavedCard, NewCard, Crypto }
 
 internal val PaymentRowContentPadding = 12.dp
+internal val PaymentRowRadius = 12.dp
 internal val PaymentContainerInset = 6.dp
-internal val NewCardFormHorizontalPadding = 10.dp
+internal val NewCardFormHorizontalPadding = 12.dp
 internal val SavedCardRowHeight = 64.dp
-internal val SavedCardConfirmPanelHeight = 91.dp
+internal val SavedCardConfirmPanelHeight = 102.dp
 internal const val MaxVisibleSavedCards = 3
-internal val SheetContentHorizontalPadding = 22.dp
+internal val SheetContentHorizontalPadding = 16.dp
 internal val SheetContentTopPadding = 16.dp
-internal val SheetContentBottomPadding = 16.dp
-internal val SheetOrDividerVerticalMargin = 18.dp
+internal val SheetContentBottomPadding = 0.dp
+internal val SheetOrDividerVerticalMargin = 12.dp
 internal val SheetFooterTopPadding = 12.dp
-internal val SheetFooterBottomPadding = 26.dp
-internal val SheetFooterContentSpacing = 10.dp
+internal val SheetFooterBottomPadding = 16.dp
+internal val SheetFooterContentSpacing = 12.dp
 internal const val SecondaryMetaAlpha = 0.45f
 internal const val PressScale = 0.98f
 internal const val SheetInDurationMs = 300
+
+internal val SheetTracking = (-0.01).em
+
+/** Line heights from the Figma type scale; other sizes keep the font's natural height. */
+internal fun sheetLineHeight(fontSize: Float): Float? = when (fontSize) {
+    10f, 12f, 14f -> 16f
+    16f, 18f -> 24f
+    else -> null
+}
 
 internal fun Modifier.topHairline(color: Color, width: Dp = 1.dp): Modifier = drawBehind {
     val stroke = width.toPx()
@@ -122,8 +133,8 @@ internal fun SheetText(
     fontWeight: FontWeight = FontWeight.Normal,
     fontFamily: FontFamily = theme.fontFamily,
     textAlign: TextAlign? = null,
-    letterSpacing: TextUnit = TextUnit.Unspecified,
-    lineHeight: Float? = null,
+    letterSpacing: TextUnit = SheetTracking,
+    lineHeight: Float? = sheetLineHeight(fontSize),
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
 ) {
@@ -174,25 +185,26 @@ internal fun SubmitButton(
     locale: String,
     enabled: Boolean,
     isProcessing: Boolean,
+    dimmed: Boolean = false,
     onClick: () -> Unit,
 ) {
     val background = theme.primaryButtonBackground
     val shape = RoundedCornerShape(theme.primaryButtonBorderRadius)
-    val showShadow = enabled && !isProcessing
+    val showShadow = enabled && !isProcessing && !dimmed
     Button(
         onClick = onClick,
         enabled = enabled && !isProcessing,
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
-            .alpha(if (!enabled && !isProcessing) 0.5f else 1f)
+            .alpha(if (dimmed || (!enabled && !isProcessing)) 0.4f else 1f)
             .then(
                 if (showShadow) {
                     Modifier.shadow(
-                        elevation = 8.dp,
+                        elevation = 12.dp,
                         shape = shape,
-                        ambientColor = theme.primary.copy(alpha = 0.30f),
-                        spotColor = theme.primary.copy(alpha = 0.30f),
+                        ambientColor = theme.primary,
+                        spotColor = theme.primary,
                     )
                 } else {
                     Modifier
@@ -222,9 +234,10 @@ internal fun SubmitButton(
                 title,
                 theme = theme,
                 color = theme.primaryButtonText,
-                fontWeight = FontWeight.Bold,
-                fontSize = 16f,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 18f,
                 fontFamily = theme.primaryButtonFontFamily,
+                maxLines = 1,
             )
         }
     }
@@ -235,12 +248,12 @@ internal fun PoweredByFooter(theme: CheckoutTheme, locale: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Bottom,
     ) {
         SheetText(
             Strings.text("sheet.poweredBy", locale),
             theme = theme,
-            color = theme.secondaryText.copy(alpha = 0.3f),
+            color = theme.metaText,
             fontSize = 12f,
             fontWeight = FontWeight.Medium,
         )
@@ -248,8 +261,8 @@ internal fun PoweredByFooter(theme: CheckoutTheme, locale: String) {
         Image(
             painter = painterResource(R.drawable.xmoney_ic_wordmark),
             contentDescription = "xMoney",
-            modifier = Modifier.height(13.dp),
-            colorFilter = ColorFilter.tint(theme.secondaryText.copy(alpha = 0.42f)),
+            modifier = Modifier.size(width = 56.dp, height = 14.dp),
+            colorFilter = ColorFilter.tint(theme.metaText),
         )
     }
 }

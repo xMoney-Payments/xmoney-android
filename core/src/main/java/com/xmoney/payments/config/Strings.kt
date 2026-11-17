@@ -59,6 +59,11 @@ object Strings {
         "sheet.enterCardDetails" to "Enter card details",
         "sheet.visaOrMastercard" to "Visa or Mastercard",
         "sheet.saveCardShort" to "Save card for next time",
+        "sheet.payWithCard" to "Pay with card",
+        "sheet.payWithCrypto" to "Pay with crypto",
+        "sheet.cryptoSubtitle" to "Secure crypto payment",
+        "sheet.cryptoRedirectNotice" to "You'll be redirected to a secure page to complete your payment.",
+        "button.continue" to "Continue",
         "sheet.delete" to "Delete",
         "sheet.edit" to "Edit",
         "sheet.done" to "Done",
@@ -111,7 +116,7 @@ object Strings {
         "button.subscribe" to "Subscribe for {{amount}}",
         "button.topUp" to "Top up {{amount}}",
         "button.deposit" to "Deposit {{amount}}",
-    )
+    ) + PersonalDetailsStrings.en
 
     private val el = mapOf(
         "sheet.title" to "Πληρωμή",
@@ -127,6 +132,12 @@ object Strings {
         "sheet.enterCardDetails" to "Εισαγάγετε στοιχεία κάρτας",
         "sheet.visaOrMastercard" to "Visa ή Mastercard",
         "sheet.saveCardShort" to "Αποθήκευση κάρτας για επόμενη φορά",
+        "sheet.payWithCard" to "Πληρωμή με κάρτα",
+        "sheet.payWithCrypto" to "Πληρωμή με κρυπτονόμισμα",
+        "sheet.cryptoSubtitle" to "Ασφαλής πληρωμή με κρυπτονόμισμα",
+        "sheet.cryptoRedirectNotice" to "Θα ανακατευθυνθείτε σε μια ασφαλή σελίδα για να ολοκληρώσετε την πληρωμή σας.",
+        "button.continue" to "Συνέχεια",
+        "sheet.visaOrMastercard" to "Visa ή Mastercard",
         "sheet.delete" to "Διαγραφή",
         "sheet.edit" to "Επεξεργασία",
         "sheet.done" to "Τέλος",
@@ -179,7 +190,7 @@ object Strings {
         "button.subscribe" to "Συνδρομή {{amount}}",
         "button.topUp" to "Φόρτιση {{amount}}",
         "button.deposit" to "Κατάθεση {{amount}}",
-    )
+    ) + PersonalDetailsStrings.el
 
     private val ro = mapOf(
         "sheet.title" to "Plată",
@@ -195,6 +206,12 @@ object Strings {
         "sheet.enterCardDetails" to "Introduceți detaliile cardului",
         "sheet.visaOrMastercard" to "Visa sau Mastercard",
         "sheet.saveCardShort" to "Salvează cardul pentru data viitoare",
+        "sheet.payWithCard" to "Plătește cu cardul",
+        "sheet.payWithCrypto" to "Plătește cu cripto",
+        "sheet.cryptoSubtitle" to "Plată cripto securizată",
+        "sheet.cryptoRedirectNotice" to "Vei fi redirecționat către o pagină securizată pentru a finaliza plata.",
+        "button.continue" to "Continuă",
+        "sheet.visaOrMastercard" to "Visa sau Mastercard",
         "sheet.delete" to "Șterge",
         "sheet.edit" to "Editează",
         "sheet.done" to "Gata",
@@ -247,7 +264,7 @@ object Strings {
         "button.subscribe" to "Abonare {{amount}}",
         "button.topUp" to "Alimentează {{amount}}",
         "button.deposit" to "Depune {{amount}}",
-    )
+    ) + PersonalDetailsStrings.ro
 
     private val bg = mapOf(
         "sheet.title" to "Плащане",
@@ -263,6 +280,12 @@ object Strings {
         "sheet.enterCardDetails" to "Въведете данни за картата",
         "sheet.visaOrMastercard" to "Visa или Mastercard",
         "sheet.saveCardShort" to "Запази картата за следващия път",
+        "sheet.payWithCard" to "Плати с карта",
+        "sheet.payWithCrypto" to "Плати с крипто",
+        "sheet.cryptoSubtitle" to "Сигурно крипто плащане",
+        "sheet.cryptoRedirectNotice" to "Ще бъдете пренасочени към защитена страница, за да завършите плащането си.",
+        "button.continue" to "Продължи",
+        "sheet.visaOrMastercard" to "Visa или Mastercard",
         "sheet.delete" to "Изтрий",
         "sheet.edit" to "Редактирай",
         "sheet.done" to "Готово",
@@ -315,7 +338,7 @@ object Strings {
         "button.subscribe" to "Абонирай се за {{amount}}",
         "button.topUp" to "Зареди {{amount}}",
         "button.deposit" to "Депозирай {{amount}}",
-    )
+    ) + PersonalDetailsStrings.bg
 
     private val hu = mapOf(
         "sheet.title" to "Fizetés",
@@ -331,6 +354,12 @@ object Strings {
         "sheet.enterCardDetails" to "Adja meg a kártyaadatokat",
         "sheet.visaOrMastercard" to "Visa vagy Mastercard",
         "sheet.saveCardShort" to "Kártya mentése a következő alkalomra",
+        "sheet.payWithCard" to "Fizetés kártyával",
+        "sheet.payWithCrypto" to "Fizetés kriptóval",
+        "sheet.cryptoSubtitle" to "Biztonságos kriptofizetés",
+        "sheet.cryptoRedirectNotice" to "Egy biztonságos oldalra irányítunk át a fizetés befejezéséhez.",
+        "button.continue" to "Tovább",
+        "sheet.visaOrMastercard" to "Visa vagy Mastercard",
         "sheet.delete" to "Törlés",
         "sheet.edit" to "Szerkesztés",
         "sheet.done" to "Kész",
@@ -383,7 +412,7 @@ object Strings {
         "button.subscribe" to "Előfizetés {{amount}} összegre",
         "button.topUp" to "Feltöltés {{amount}}",
         "button.deposit" to "Befizetés {{amount}}",
-    )
+    ) + PersonalDetailsStrings.hu
 
     private val pl = mapOf(
         "sheet.title" to "Płatność",
@@ -399,6 +428,12 @@ object Strings {
         "sheet.enterCardDetails" to "Wprowadź dane karty",
         "sheet.visaOrMastercard" to "Visa lub Mastercard",
         "sheet.saveCardShort" to "Zapisz kartę na następnym razem",
+        "sheet.payWithCard" to "Zapłać kartą",
+        "sheet.payWithCrypto" to "Zapłać kryptowalutą",
+        "sheet.cryptoSubtitle" to "Bezpieczna płatność kryptowalutą",
+        "sheet.cryptoRedirectNotice" to "Zostaniesz przekierowany na bezpieczną stronę, aby dokończyć płatność.",
+        "button.continue" to "Dalej",
+        "sheet.visaOrMastercard" to "Visa lub Mastercard",
         "sheet.delete" to "Usuń",
         "sheet.edit" to "Edytuj",
         "sheet.done" to "Gotowe",
@@ -451,7 +486,7 @@ object Strings {
         "button.subscribe" to "Subskrybuj za {{amount}}",
         "button.topUp" to "Doładuj {{amount}}",
         "button.deposit" to "Wpłać {{amount}}",
-    )
+    ) + PersonalDetailsStrings.pl
 
     private val bundles = mapOf(
         "en-US" to en,

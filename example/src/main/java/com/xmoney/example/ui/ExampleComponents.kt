@@ -80,7 +80,10 @@ import com.xmoney.example.theme.LocalBrandAccentText
 import com.xmoney.example.theme.LocalBrandOnAccent
 import com.xmoney.example.theme.LocalExampleSemantics
 import com.xmoney.payments.model.PaymentResult
+import com.xmoney.payments.model.TransactionCustomer
 import com.xmoney.paymentelement.R as PaymentElementR
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 enum class ExampleButtonVariant { Primary, Secondary }
 
@@ -319,6 +322,16 @@ private fun resultRows(result: PaymentResult, fallbackAmount: String?): List<Res
                 }
                 name?.let { add(ResultRow("Customer", it)) }
                 customer?.email?.takeIf { it.isNotBlank() }?.let { add(ResultRow("Email", it)) }
+                customer?.identifier?.takeIf { it.isNotBlank() }?.let {
+                    add(ResultRow("Identifier", it))
+                }
+                customer?.phone?.takeIf { it.isNotBlank() }?.let { add(ResultRow("Phone", it)) }
+                customer?.country?.takeIf { it.isNotBlank() }?.let { add(ResultRow("Country", it)) }
+                customer?.city?.takeIf { it.isNotBlank() }?.let { add(ResultRow("City", it)) }
+                customer?.let(::customerAddress)?.let { add(ResultRow("Address", it)) }
+                customer?.creationDate?.takeIf { it.isNotBlank() }?.let {
+                    add(ResultRow("Date", formatCustomerDate(it)))
+                }
             }
         }
         is PaymentResult.Failed -> buildList {
@@ -331,6 +344,34 @@ private fun resultRows(result: PaymentResult, fallbackAmount: String?): List<Res
             ResultRow("Message", "No charge was made."),
         )
     }
+}
+
+private fun customerAddress(customer: TransactionCustomer): String? {
+    val joined = listOfNotNull(
+        customer.address?.takeIf { it.isNotBlank() },
+        customer.state?.takeIf { it.isNotBlank() },
+        customer.zipCode?.takeIf { it.isNotBlank() },
+    ).joinToString(", ")
+    return joined.ifBlank { null }
+}
+
+private fun formatCustomerDate(raw: String): String {
+    val trimmed = raw.trim()
+    val normalized = trimmed
+        .replace(Regex("([+-]\\d{2}):(\\d{2})$"), "$1$2")
+        .let { if (it.endsWith("Z")) it.dropLast(1) + "+0000" else it }
+    val parsed = parseCustomerDate(normalized, "yyyy-MM-dd'T'HH:mm:ss.SSSZ")
+        ?: parseCustomerDate(normalized, "yyyy-MM-dd'T'HH:mm:ssZ")
+        ?: parseCustomerDate(trimmed, "yyyy-MM-dd'T'HH:mm:ss")
+        ?: return trimmed
+    return SimpleDateFormat("MMM d, yyyy, h:mm a", Locale.US).format(parsed)
+}
+
+private fun parseCustomerDate(value: String, pattern: String): java.util.Date? {
+    val format = SimpleDateFormat(pattern, Locale.US).apply { isLenient = false }
+    val position = java.text.ParsePosition(0)
+    val date = format.parse(value, position) ?: return null
+    return date.takeIf { position.index == value.length }
 }
 
 private fun formatAmount(amount: String?, currency: String?, fallback: String?): String? {

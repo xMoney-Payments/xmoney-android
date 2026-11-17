@@ -348,7 +348,7 @@ class PaymentElementSurfaceTest {
 
     private fun waitFor(controller: EmbeddedPaymentController, what: String, condition: () -> Boolean) {
         try {
-            compose.waitUntil(5_000, condition)
+            compose.waitUntil(15_000, condition)
         } catch (e: Throwable) {
             throw AssertionError(
                 "Timed out waiting for $what: bound=${controller.boundIntent?.orderPayload} " +

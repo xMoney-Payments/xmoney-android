@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- `PaymentConfig.customerDetails.fields` replaces the account field list. Leave it unset to keep using `/inline-checkout/fields`. A flag left off is not collected.
+- `PaymentConfig.customerDetails.defaultValues` prefills the card form. Blank text and values that are not in the country, region, or phone lists are ignored. Google Pay does not use them.
+
 ## [1.1.0] - 2026-10-16
 
 ### Added
@@ -17,6 +22,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `PaymentError.PaymentInProgress` (a `PaymentError.Payment`) is thrown when `updateOrder` asks for a different order during a charge.
 - `UpdateOrderSuperseded`, a `CancellationException`, is thrown by an `updateOrder` call that a newer call replaced.
 - The loading coin is announced as "Loading" by TalkBack, in the configured locale.
+- `PaymentConfig.customerDetails` collects shopper details for card payments and Google Pay. Which fields appear comes from your account. Card and saved-card Pay stay blocked until the details page is valid. Google Pay requests the billing contact and sends it with the payment.
 
 ### Changed
 

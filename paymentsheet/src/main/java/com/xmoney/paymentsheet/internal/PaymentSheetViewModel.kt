@@ -13,7 +13,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.CreationExtras
-import com.xmoney.payments.config.PaymentConfig
 import com.xmoney.payments.config.ResolvedPaymentConfig
 import com.xmoney.payments.engine.PaymentSession
 import com.xmoney.payments.engine.PendingPayment
@@ -83,12 +82,7 @@ class PaymentSheetViewModel(
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
             val handle = extras.createSavedStateHandle()
-            val paymentConfig = PaymentConfig(
-                publicKey = config.publicKey,
-                card = config.card,
-                paymentMethods = config.paymentMethods,
-                options = config.options,
-            )
+            val paymentConfig = config.toPaymentConfig()
             val intent = PaymentIntent(
                 OrderPayload(config.orderPayload),
                 OrderChecksum(config.orderChecksum),

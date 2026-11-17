@@ -54,7 +54,7 @@ internal fun VisaMastercardMarks(
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         CardBrandIcon(brand = "visa", theme = theme, size = size)
         CardBrandIcon(brand = "mastercard", theme = theme, size = size)
@@ -79,13 +79,13 @@ private fun brandIconSpec(brand: String?, size: CardBrandIconSize): BrandIconSpe
             drawableRes = R.drawable.xmoney_ic_visa,
             height = when (size) {
                 CardBrandIconSize.FieldTrailing -> 11.dp
-                CardBrandIconSize.SavedCardRow -> 10.dp
-                CardBrandIconSize.UseOtherCardPair -> 9.dp
+                CardBrandIconSize.SavedCardRow -> 10.725.dp
+                CardBrandIconSize.UseOtherCardPair -> 9.75.dp
             },
             width = when (size) {
                 CardBrandIconSize.FieldTrailing -> 34.dp
-                CardBrandIconSize.SavedCardRow -> 31.dp
-                CardBrandIconSize.UseOtherCardPair -> 28.dp
+                CardBrandIconSize.SavedCardRow -> 33.dp
+                CardBrandIconSize.UseOtherCardPair -> 30.dp
             },
             contentDescription = "Visa",
         )
@@ -93,13 +93,13 @@ private fun brandIconSpec(brand: String?, size: CardBrandIconSize): BrandIconSpe
             drawableRes = R.drawable.xmoney_ic_mastercard,
             height = when (size) {
                 CardBrandIconSize.FieldTrailing -> 19.dp
-                CardBrandIconSize.SavedCardRow -> 18.dp
-                CardBrandIconSize.UseOtherCardPair -> 15.dp
+                CardBrandIconSize.SavedCardRow -> 18.95.dp
+                CardBrandIconSize.UseOtherCardPair -> 16.42.dp
             },
             width = when (size) {
                 CardBrandIconSize.FieldTrailing -> 30.dp
-                CardBrandIconSize.SavedCardRow -> 29.dp
-                CardBrandIconSize.UseOtherCardPair -> 24.dp
+                CardBrandIconSize.SavedCardRow -> 30.dp
+                CardBrandIconSize.UseOtherCardPair -> 26.dp
             },
             contentDescription = "Mastercard",
         )

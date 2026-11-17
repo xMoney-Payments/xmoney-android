@@ -10,6 +10,7 @@ object SdkConstants {
 
     const val SESSION_TOKEN_PATH = "api/v1/inline-checkout/session-token"
     const val CONFIG_PATH = "api/v1/inline-checkout/config"
+    const val INLINE_CHECKOUT_FIELDS_PATH = "api/v1/inline-checkout/fields"
     const val CARDS_PATH = "api/v1/inline-checkout/cards"
     const val TRANSACTIONS_PATH = "api/v1/inline-checkout/transactions"
     const val ACCOUNT_VALIDATION_PATH = "api/v1/account-validation"
