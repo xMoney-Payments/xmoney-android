@@ -152,6 +152,12 @@ class PaymentSession(
     ): EngineResult =
         submit(didAuthorize = true) { engine.submitSavedCard(cardId, presenter, customerDetails) }
 
+    suspend fun submitCrypto(
+        presenter: ThreeDSPresenter,
+        customerDetails: Map<String, String>? = null,
+    ): EngineResult =
+        submit(didAuthorize = true) { engine.submitCrypto(presenter, customerDetails) }
+
     /** Reports the result of a payment whose screen was destroyed, instead of taking a second payment. */
     suspend fun recover(pending: PendingPayment): EngineResult {
         activeOperation?.takeIf { it.isCancelled }?.join()

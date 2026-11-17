@@ -126,7 +126,7 @@ internal fun PayWithCardPanel(
     }
 }
 
-/** "Pay with crypto" option. UI preview only; selecting it shows the redirect notice. */
+/** "Pay with crypto" option. Selecting it shows the redirect notice. */
 @Composable
 internal fun CryptoOptionPanel(
     theme: CheckoutTheme,

@@ -123,6 +123,7 @@ fun PaymentElement(
                     isOrderConsumed = controller.isOrderConsumed,
                     onPayCard = { input, details -> controller.payWithCard(input, details) },
                     onSelectSaved = { card, details -> controller.paySavedCard(card, details) },
+                    onPayCrypto = { details -> controller.payWithCrypto(details) },
                     onDeleteSaved = { controller.deleteSavedCard(it) },
                     onGooglePay = { controller.startGooglePay() },
                     onBindSubmit = { controller.bindSubmitHandler(it) },

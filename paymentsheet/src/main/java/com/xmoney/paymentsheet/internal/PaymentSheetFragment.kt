@@ -235,6 +235,7 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
                                 isProcessing = isProcessing,
                                 onPayCard = { input, details -> payWithCard(input, details) },
                                 onSelectSaved = { card, details -> paySavedCard(card, details) },
+                                onPayCrypto = { details -> payWithCrypto(details) },
                                 onDeleteSaved = { deleteSavedCard(it) },
                                 onGooglePay = { startGooglePay() },
                                 onCancel = { requestClose() },
@@ -321,6 +322,9 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
 
     private fun paySavedCard(card: SavedCard, customerDetails: Map<String, String>? = null) =
         runSubmission { session.submitSavedCard(card.id, threeDSHostController, customerDetails) }
+
+    private fun payWithCrypto(customerDetails: Map<String, String>? = null) =
+        runSubmission { session.submitCrypto(threeDSHostController, customerDetails) }
 
     private suspend fun deleteSavedCard(card: SavedCard) {
         val updated = session.deleteSavedCard(card.id)

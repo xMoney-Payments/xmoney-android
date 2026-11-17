@@ -215,6 +215,14 @@ class PaymentEngine(
         return submit(fields, presenter)
     }
 
+    suspend fun submitCrypto(
+        presenter: ThreeDSPresenter,
+        customerDetails: Map<String, String>? = null,
+    ): EngineResult {
+        val fields = payment.cryptoFields(config.orderPayload, config.orderChecksum, customerDetails)
+        return submit(fields, presenter)
+    }
+
     suspend fun walletParams(walletType: String): WalletParams {
         cachedWalletParams[walletType]?.let { return it }
         val params = wallets.getParams(walletType, sessionToken)

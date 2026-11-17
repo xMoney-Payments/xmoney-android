@@ -74,6 +74,20 @@ class PaymentService(
         return fields
     }
 
+    fun cryptoFields(
+        orderPayload: String,
+        orderChecksum: String,
+        customerDetails: Map<String, String>? = null,
+    ): Map<String, String> {
+        val fields = HashMap<String, String>()
+        fields["jsonRequest"] = orderPayload
+        fields["checksum"] = orderChecksum
+        fields["transactionType"] = "crypto"
+        appendCustomerDetails(fields, customerDetails)
+        fields.putAll(DeviceMetadata.fields(context))
+        return fields
+    }
+
     private fun appendCustomerDetails(fields: MutableMap<String, String>, customerDetails: Map<String, String>?) {
         if (customerDetails.isNullOrEmpty()) return
         fields["customerDetails"] = JSONObject(customerDetails).toString()

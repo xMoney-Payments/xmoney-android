@@ -524,7 +524,7 @@ fun DemoCheckoutScreen(
                 )
                 ExampleSwitchRow(
                     title = "Crypto",
-                    subtitle = "paymentMethods.showCryptoOption · UI preview only",
+                    subtitle = "paymentMethods.showCryptoOption",
                     checked = cryptoEnabled,
                     onCheckedChange = { cryptoEnabled = it },
                     showDivider = true,

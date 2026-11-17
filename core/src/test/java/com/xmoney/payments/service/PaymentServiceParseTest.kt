@@ -219,6 +219,43 @@ class PaymentServiceParseTest {
     }
 
     @Test
+    fun parseTreatsCryptoRedirectAsNeeds3DS() {
+        val map = HttpClient.jsonToMap(
+            JSONObject(
+                """
+                {
+                  "code": 201,
+                  "message": "Created",
+                  "data": {
+                    "orderId": 201342,
+                    "transactionId": 728772,
+                    "is3d": 1,
+                    "isRedirect": true,
+                    "redirect": {
+                      "url": "https://pm-redirects.stripe.com/authorize/acct_1UYPf73UukRSbFJH/pa_nonce_Ve3VdjdMuWVqEj5CX1AoeRId4qufr1c",
+                      "formMethod": "GET",
+                      "params": {}
+                    },
+                    "customerId": 63393
+                  }
+                }
+                """.trimIndent(),
+            ),
+        )
+        val parsed = service.parse(ConfirmPaymentResponse.fromApiMap(map))
+        val submission = parsed.submission
+        assertTrue(submission is PaymentSubmissionResult.Needs3DS)
+        submission as PaymentSubmissionResult.Needs3DS
+        assertEquals(
+            "https://pm-redirects.stripe.com/authorize/acct_1UYPf73UukRSbFJH/pa_nonce_Ve3VdjdMuWVqEj5CX1AoeRId4qufr1c",
+            submission.url,
+        )
+        assertEquals("GET", submission.formMethod)
+        assertTrue(submission.params.isEmpty())
+        assertEquals("728772", parsed.transactionId)
+    }
+
+    @Test
     fun parseAcceptsString201CodeAsNeeds3DS() {
         val map = HttpClient.jsonToMap(
             JSONObject(

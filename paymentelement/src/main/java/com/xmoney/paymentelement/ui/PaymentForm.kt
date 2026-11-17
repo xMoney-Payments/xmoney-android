@@ -110,6 +110,7 @@ fun PaymentForm(
     isProcessing: Boolean,
     onPayCard: (CardInput, Map<String, String>?) -> Unit,
     onSelectSaved: (SavedCard, Map<String, String>?) -> Unit,
+    onPayCrypto: (Map<String, String>?) -> Unit = {},
     onDeleteSaved: suspend (SavedCard) -> Unit = {},
     onGooglePay: () -> Unit,
     modifier: Modifier = Modifier,
@@ -246,12 +247,14 @@ fun PaymentForm(
     val detailsOnScreenState = rememberUpdatedState(detailsOnScreen)
 
     val paySelected: () -> Unit = paySelected@{
-        // Crypto is a UI preview until it is wired to the backend.
-        if (selectedMethod == PaymentMethod.Crypto) return@paySelected
         val detailsReady = !needsDetails || detailsState.completed
         if (needsDetails && !detailsReady) {
             detailsAttempted = true
             detailsScrollNonce += 1
+        }
+        if (selectedMethod == PaymentMethod.Crypto) {
+            if (detailsReady) onPayCrypto(detailsState.payload())
+            return@paySelected
         }
         val useNewCard = !hasSavedCards || selectedMethod == PaymentMethod.NewCard
         if (useNewCard) {

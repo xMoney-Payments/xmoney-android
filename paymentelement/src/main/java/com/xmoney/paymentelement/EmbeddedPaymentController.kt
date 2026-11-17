@@ -397,6 +397,12 @@ class EmbeddedPaymentController(
         runSubmission { session.submitSavedCard(card.id, presenter, customerDetails) }
     }
 
+    internal fun payWithCrypto(customerDetails: Map<String, String>? = null) {
+        if (!isInteractionEnabled) return
+        val presenter = threeDS ?: return
+        runSubmission { session.submitCrypto(presenter, customerDetails) }
+    }
+
     suspend fun deleteSavedCard(card: SavedCard) {
         if (!isInteractionEnabled) return
         sheetState = session.deleteSavedCard(card.id)

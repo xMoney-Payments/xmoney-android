@@ -46,6 +46,19 @@ class PaymentServiceCustomerDetailsTest {
     }
 
     @Test
+    fun cryptoFieldsSendCryptoTransactionTypeWithoutCardFields() {
+        val fields = service.cryptoFields("payload", "checksum", details)
+        assertEquals("payload", fields["jsonRequest"])
+        assertEquals("checksum", fields["checksum"])
+        assertEquals("crypto", fields["transactionType"])
+        assertFalse(fields.containsKey("transactionOption"))
+        assertEquals("a@b.co", JSONObject(fields["customerDetails"]).getString("email"))
+        assertFalse(fields.containsKey("cardNumber"))
+        assertFalse(fields.containsKey("cardId"))
+        assertFalse(fields.containsKey("digitalWalletType"))
+    }
+
+    @Test
     fun omitsCustomerDetailsWhenEmpty() {
         val fields = service.savedCardFields("card_1", "payload", "checksum", emptyMap())
         assertFalse(fields.containsKey("customerDetails"))

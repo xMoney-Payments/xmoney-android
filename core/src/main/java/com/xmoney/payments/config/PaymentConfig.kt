@@ -179,7 +179,7 @@ data class GooglePayConfig(
 @Parcelize
 data class PaymentMethodsConfig(
     val googlePay: GooglePayConfig = GooglePayConfig(),
-    /** Shows the "Pay with crypto" option. Preview only: selecting it does not start a payment yet. */
+    /** Shows the "Pay with crypto" option. Continue redirects the shopper to a secure page to complete the payment. */
     val showCryptoOption: Boolean = false,
 ) : Parcelable
 
