@@ -22,8 +22,8 @@ android {
         applicationId = "com.xmoney.example"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         buildConfigField(
             "String",
@@ -79,7 +79,7 @@ val useMavenSdk = providers.gradleProperty("useMavenSdk")
     .map { it.isEmpty() || it.equals("true", ignoreCase = true) }
     .orElse(false)
     .get()
-val publishedSdkVersion = "1.0.0"
+val publishedSdkVersion = "1.1.0"
 
 dependencies {
     if (useMavenSdk) {
