@@ -158,7 +158,7 @@ The sheet keeps its loading coin up until the form and, when offered, the Google
 
 ### Customer details
 
-`customerDetails` asks the shopper for the fields your account requires. If that list cannot be loaded and `customerDetails.card` is on, checkout shows the load failure and Pay stays disabled. Pass `fields` to choose the blocks yourself; that replaces the account list, and a flag you leave off is not collected. `defaultValues` prefills the card form. Blank text and values that are not in the country, region, or phone lists are ignored. Crypto Continue uses that same card form. Google Pay does not use them. The save-card checkbox starts unchecked.
+`customerDetails` asks the shopper for the fields your account requires. Pass `fields` to replace that list; a flag left off is not collected. If the account list cannot be loaded and `customerDetails.card` is on, Pay stays disabled. `defaultValues` prefills the card form. Blank text and values that are not in the country, region, or phone lists are ignored. Google Pay does not use them.
 
 ```kotlin
 PaymentConfig(
@@ -177,7 +177,7 @@ PaymentConfig(
 )
 ```
 
-Card, saved-card, and crypto Continue stay blocked while `customerDetails.card` is on and the field list is active, until those fields are valid. They are not blocked when `customerDetails.card` is off. `confirm()` runs that check. Google Pay does not block: it requests the billing contact and sends it with the payment. Typed name, email, phone, and address are kept in the host Activity's saved state so rotation and process death do not clear them. Card number and CVC are not saved.
+Card, saved-card, and crypto Pay stay blocked until those fields are valid when `customerDetails.card` is on. Google Pay requests the billing contact and sends it with the payment. Typed name, email, phone, and address are kept in the host Activity's saved state so rotation and process death do not clear them. Card number and CVC are not saved.
 
 While idle, the sheet can be dragged closed. Drag, back, and scrim lock while a charge is in flight. `dismiss()` waits for an in-flight charge; idle close still cancels. A second `present()` while idle replaces the open sheet (the previous present completes with `Canceled`); while a charge is in flight the second `present()` is a no-op. Do not treat that `Canceled` as “leave checkout” if you immediately presented again.
 
@@ -345,7 +345,7 @@ Copy-paste sample: [`GooglePaySampleActivity.kt`](example/src/main/java/com/xmon
 
 ## Crypto
 
-Pay with crypto is part of Payment Sheet and Payment Element. It is off until you enable it. There is no separate artifact and no button appearance to set.
+Off until `paymentMethods.crypto.enabled`. There is no separate artifact.
 
 ```kotlin
 paymentMethods = PaymentMethodsConfig(
@@ -353,9 +353,7 @@ paymentMethods = PaymentMethodsConfig(
 )
 ```
 
-The shopper sees “Pay with crypto” and “Secure crypto payment”. Selecting it shows “You’ll be redirected to a secure page to complete your payment.” and the button title becomes Continue. Continue does not collect card fields. If `customerDetails.card` is on, Continue stays blocked until those fields are valid, and they are sent with the payment.
-
-Continue opens the hosted page in the same WebView as a 3DS challenge. The SDK polls until the payment completes and delivers the same `PaymentResult`. Closing that page after Continue has started consumes the order. `confirm()` submits crypto when that row is selected. Google Pay still uses its own button.
+Continue opens the hosted page in the same WebView as a 3DS challenge and polls to the same `PaymentResult`. It sends customer details when `customerDetails.card` is on. Closing the page after Continue has started consumes the order.
 
 ## Configuration
 
@@ -403,15 +401,7 @@ PaymentConfig(
 
 Pay uses current field validity, not an empty errors map. Cardholder name is always collected.
 
-**Appearance** — colors resolve in order: the built-in theme, then your seeds, then colors the SDK derives, then `overrides`. An override is painted as sent. A debug build logs a contrast problem and does not change the color.
-
-Set `brandColor`, `accentColor`, `backgroundColor`, and `neutralTint`. Each accepts one hex color or a light/dark pair. The pay button uses `brandColor` as sent. Links, the focus ring, and radios are adjusted so they stay readable when the SDK derives them. Other unset text, borders, and button states are derived. `overrides` replace one role each: `onBrandColor`, `textColor` (primary text on the sheet and on cards), `linkColor`, `borderColor`, `componentColor`, `selectedColor`, and `secondaryButtonColor`. Saved-card meta, section labels, the "or" label, the powered-by line, and placeholders follow `neutralTint` and `backgroundColor`.
-
-`borders.width` is the idle field stroke, from 0 to 4, default 1. Error and focus stay at least 1.5. When `borderColor` is set, the methods container uses the same width. `0` removes that stroke. A later stroke role is another field on `borders`.
-
-`typography.fontFamily` is resolved with `Typeface.create`, so it finds system families only. A font bundled in `res/font` is not found. Medium, semibold, and bold all use that family's bold face. A missing name keeps the built-in payment face and logs once on a debuggable build. The system font scale sets the size. There is no per-label font size. Later weight and heading fields belong on `typography`.
-
-`shape.corners` is sharp, default, rounded, or a number from 0 to 24. The default methods container radius is 24. `shape.pillButtons` keeps the pay button fully round. The sheet corner stays 32. `colorScheme` is automatic, light, or dark. On a mounted Element, call `updateAppearance` / `updateWalletAppearance`. Unknown keys, including a flat `fontFamily`, `borderWidth`, `corners`, or `pillButtons`, are ignored. Add a new field inside the group that owns it. An empty group is today's checkout. See [`exampleAppearance()`](example/src/main/java/com/xmoney/example/SampleHelpers.kt).
+**Appearance** — set `brandColor`, `accentColor`, `backgroundColor`, and `neutralTint` (one hex color or a light/dark pair). The pay button uses `brandColor`. Other unset colors are derived. `overrides` (`onBrandColor`, `textColor`, `linkColor`, `borderColor`, `componentColor`, `selectedColor`, `secondaryButtonColor`) are painted as sent. `borders.width` is the idle field stroke, from 0 to 4, default 1. `typography.fontFamily` is resolved with `Typeface.create`, so it finds system families only. `shape.corners` is sharp, default, rounded, or a number from 0 to 24; the methods container defaults to 24. `shape.pillButtons` keeps the pay button fully round. `colorScheme` is automatic, light, or dark. On a mounted Element, call `updateAppearance` / `updateWalletAppearance`. See [`exampleAppearance()`](example/src/main/java/com/xmoney/example/SampleHelpers.kt).
 
 **Cookies** — the 3DS challenge needs WebView cookies. The SDK turns on third-party cookies for its own challenge WebView only and does not call `CookieManager.setAcceptCookie`. If your app turns cookies off app-wide, turn them back on before a payment, or the bank page may fail.
 
