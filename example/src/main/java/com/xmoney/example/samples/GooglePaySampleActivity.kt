@@ -86,8 +86,7 @@ private fun GooglePaySampleScreen(activity: FragmentActivity) {
                 savedCards = SavedCardsConfig(enabled = false),
             ),
             options = OptionsConfig(
-                style = style,
-                appearance = appearance,
+                appearance = appearance.copy(colorScheme = style),
             ),
         )
     }

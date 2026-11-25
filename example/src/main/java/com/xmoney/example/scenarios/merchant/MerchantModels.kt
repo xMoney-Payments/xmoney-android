@@ -4,7 +4,7 @@ import androidx.compose.ui.graphics.Color
 import com.xmoney.example.R
 import com.xmoney.example.exampleAppearance
 import com.xmoney.example.theme.ExampleColors
-import com.xmoney.payments.config.AppearanceConfig
+import com.xmoney.payments.config.Appearance
 
 internal enum class MerchantCatalogStyle { Menu, Plans, Grid }
 
@@ -33,7 +33,7 @@ internal data class MerchantBrand(
     val catalogStyle: MerchantCatalogStyle,
     val paySurface: MerchantPaySurface,
     val products: List<MerchantProduct>,
-    val appearance: AppearanceConfig,
+    val appearance: Appearance,
     val accent: Color,
     val onAccent: Color,
     /** Text-on-surface accent (prices, filled chips). Defaults to [accent]. */

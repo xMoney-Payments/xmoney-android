@@ -14,6 +14,7 @@ import com.xmoney.payments.validation.CardFieldValidators
 import com.xmoney.payments.threeds.ThreeDSUrlAllowlist
 
 import android.content.Context
+import org.json.JSONObject
 @androidx.annotation.RestrictTo(androidx.annotation.RestrictTo.Scope.LIBRARY_GROUP)
 
 class PaymentService(
@@ -21,7 +22,12 @@ class PaymentService(
     private val env: PaymentEnvironment,
     private val context: Context,
 ) {
-    fun cardFields(card: CardInput, orderPayload: String, orderChecksum: String): Map<String, String> {
+    fun cardFields(
+        card: CardInput,
+        orderPayload: String,
+        orderChecksum: String,
+        customerDetails: Map<String, String>? = null,
+    ): Map<String, String> {
         val fields = HashMap<String, String>()
         fields["cardNumber"] = CardFieldValidators.normalizeDigits(card.number)
         fields["cardExpiryMonth"] = card.expiryMonth
@@ -31,15 +37,22 @@ class PaymentService(
         fields["checksum"] = orderChecksum
         if (card.saveCard) fields["saveCard"] = "true"
         card.holderName?.takeIf { it.isNotEmpty() }?.let { fields["cardHolderName"] = it }
+        appendCustomerDetails(fields, customerDetails)
         fields.putAll(DeviceMetadata.fields(context))
         return fields
     }
 
-    fun savedCardFields(cardId: String, orderPayload: String, orderChecksum: String): Map<String, String> {
+    fun savedCardFields(
+        cardId: String,
+        orderPayload: String,
+        orderChecksum: String,
+        customerDetails: Map<String, String>? = null,
+    ): Map<String, String> {
         val fields = HashMap<String, String>()
         fields["jsonRequest"] = orderPayload
         fields["checksum"] = orderChecksum
         fields["cardId"] = cardId
+        appendCustomerDetails(fields, customerDetails)
         fields.putAll(DeviceMetadata.fields(context))
         return fields
     }
@@ -49,14 +62,35 @@ class PaymentService(
         token: String,
         orderPayload: String,
         orderChecksum: String,
+        customerDetails: Map<String, String>? = null,
     ): Map<String, String> {
         val fields = HashMap<String, String>()
         fields["jsonRequest"] = orderPayload
         fields["checksum"] = orderChecksum
         fields["digitalWalletType"] = walletType
         fields["digitalWalletData"] = token
+        appendCustomerDetails(fields, customerDetails)
         fields.putAll(DeviceMetadata.fields(context))
         return fields
+    }
+
+    fun cryptoFields(
+        orderPayload: String,
+        orderChecksum: String,
+        customerDetails: Map<String, String>? = null,
+    ): Map<String, String> {
+        val fields = HashMap<String, String>()
+        fields["jsonRequest"] = orderPayload
+        fields["checksum"] = orderChecksum
+        fields["paymentMethod"] = "crypto"
+        appendCustomerDetails(fields, customerDetails)
+        fields.putAll(DeviceMetadata.fields(context))
+        return fields
+    }
+
+    private fun appendCustomerDetails(fields: MutableMap<String, String>, customerDetails: Map<String, String>?) {
+        if (customerDetails.isNullOrEmpty()) return
+        fields["customerDetails"] = JSONObject(customerDetails).toString()
     }
 
     suspend fun confirmPayment(fields: Map<String, String>): ConfirmPaymentResponse {
@@ -90,6 +124,9 @@ class PaymentService(
 
         if (requiresThreeDS) {
             if (challengeUrl != null) {
+                android.net.Uri.parse(challengeUrl).host?.let { host ->
+                    android.util.Log.i("xmoney-payment", "redirect host=$host")
+                }
                 val useRedirect = !checkoutThreeDS && challengeUrl == data.redirectUrl
                 val submission = if (useRedirect) {
                     PaymentSubmissionResult.Needs3DS(

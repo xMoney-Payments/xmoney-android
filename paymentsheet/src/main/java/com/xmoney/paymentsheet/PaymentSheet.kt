@@ -5,6 +5,7 @@ import com.xmoney.paymentsheet.internal.PaymentSheetRequest
 import com.xmoney.paymentsheet.internal.PaymentSheetRequestParcelable
 
 import androidx.fragment.app.FragmentActivity
+import com.xmoney.payments.config.AppearanceLog
 import com.xmoney.payments.config.PaymentConfig
 import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.payments.model.PaymentResult
@@ -37,6 +38,8 @@ class PaymentSheet(
         onEvent: (PaymentSheetEvent) -> Unit = {},
         onResult: (PaymentResult) -> Unit,
     ) {
+        AppearanceLog.isDebuggable =
+            (activity.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
         GooglePay.register()
         if (!CheckoutSessionRegistry.replaceIdleHost(lastRequestId)) return
         val paymentConfig = configuration.resolve(intent)

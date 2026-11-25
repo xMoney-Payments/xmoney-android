@@ -31,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,7 +39,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -64,6 +64,10 @@ import com.xmoney.paymentelement.EmbeddedEvent
 import com.xmoney.paymentelement.EmbeddedPaymentController
 import com.xmoney.paymentelement.PaymentElement
 import com.xmoney.paymentelement.rememberEmbeddedPayment
+import com.xmoney.payments.config.CryptoConfig
+import com.xmoney.payments.config.CustomerDetailsConfig
+import com.xmoney.payments.config.CustomerDetailsDefaults
+import com.xmoney.payments.config.CustomerDetailsFields
 import com.xmoney.payments.config.CardConfig
 import com.xmoney.payments.config.CardGrouping
 import com.xmoney.payments.config.CardHolderName
@@ -76,7 +80,7 @@ import com.xmoney.payments.config.PaymentMethodsConfig
 import com.xmoney.payments.config.SavedCardsConfig
 import com.xmoney.payments.config.SubmitButtonConfig
 import com.xmoney.payments.config.SubmitButtonType
-import com.xmoney.payments.config.UserInterfaceStyle
+import com.xmoney.payments.config.ColorSchemePreference
 import com.xmoney.payments.config.ValidationMode
 import com.xmoney.payments.config.WalletAppearance
 import com.xmoney.payments.config.WalletButtonColor
@@ -100,18 +104,35 @@ fun DemoCheckoutScreen(
     onCustomizeAppearance: () -> Unit,
 ) {
     var selectedLocale by remember { mutableStateOf(playgroundLocaleOptions.first()) }
-    var selectedStyle by remember { mutableStateOf(playgroundStyleOptions.first()) }
     var selectedButtonType by remember { mutableStateOf(playgroundButtonTypeOptions.first()) }
     var selectedValidation by remember { mutableStateOf(playgroundValidationOptions.first()) }
     var selectedGrouping by remember { mutableStateOf(playgroundGroupingOptions.first()) }
     var submitVisible by remember { mutableStateOf(true) }
     var googlePayEnabled by remember { mutableStateOf(true) }
+    var cryptoEnabled by remember { mutableStateOf(false) }
     var savedCardsEnabled by remember { mutableStateOf(true) }
     var saveCardOptInVisible by remember { mutableStateOf(true) }
     var cardHolderVerificationEnabled by remember { mutableStateOf(false) }
+    var customerDetailsCard by remember { mutableStateOf(false) }
+    var customerDetailsGooglePay by remember { mutableStateOf(false) }
+    var customerDetailsFieldsOverride by remember { mutableStateOf(false) }
+    var customerDetailsFullName by remember { mutableStateOf(true) }
+    var customerDetailsEmail by remember { mutableStateOf(true) }
+    var customerDetailsPhone by remember { mutableStateOf(false) }
+    var customerDetailsAddress by remember { mutableStateOf(true) }
+    var customerDetailsPrefill by remember { mutableStateOf(false) }
+    var defaultsRevision by remember { mutableIntStateOf(0) }
+    var defaultFullName by remember { mutableStateOf("Jane Doe") }
+    var defaultEmail by remember { mutableStateOf("jane@example.com") }
+    var defaultPhone by remember { mutableStateOf("+14155550100") }
+    var defaultCountry by remember { mutableStateOf("US") }
+    var defaultRegion by remember { mutableStateOf("CA") }
+    var defaultCity by remember { mutableStateOf("San Francisco") }
+    var defaultPostalCode by remember { mutableStateOf("94105") }
+    var defaultAddress by remember { mutableStateOf("1 Market St") }
     var walletColor by remember { mutableStateOf(playgroundWalletColorOptions.first()) }
     var walletType by remember { mutableStateOf(playgroundWalletTypeOptions.first()) }
-    var walletRadius by remember { mutableFloatStateOf(28f) }
+    var walletRadius by remember { mutableFloatStateOf(26f) }
     var mode by remember { mutableStateOf(IntegrationMode.PaymentSheet) }
     var amountMinor by remember { mutableLongStateOf(SAMPLE_AMOUNT_MINOR) }
 
@@ -122,7 +143,9 @@ fun DemoCheckoutScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var pendingOrder by remember { mutableStateOf<PaymentIntent?>(null) }
     val scope = rememberCoroutineScope()
-    val sdkStyle = playgroundResolvedStyle(UserInterfaceStyle.from(selectedStyle.value))
+    val selectedStyle = playgroundStyleOptions.option(appearanceState.style)
+    val sdkStyle = playgroundResolvedStyle(ColorSchemePreference.from(appearanceState.style))
+    val styledAppearance = appearanceState.toAppearance().copy(colorScheme = sdkStyle)
     val wallet = WalletAppearance(
         color = when (walletColor.value) {
             "black" -> WalletButtonColor.BLACK
@@ -132,13 +155,22 @@ fun DemoCheckoutScreen(
         radius = walletRadius,
         type = WalletButtonType.from(walletType.value),
     )
-    val appearance = appearanceState.toAppearanceConfig()
     val structuralKey = listOf(
         googlePayEnabled,
+        cryptoEnabled,
         savedCardsEnabled,
         saveCardOptInVisible,
         selectedGrouping.value,
         cardHolderVerificationEnabled,
+        customerDetailsCard,
+        customerDetailsGooglePay,
+        customerDetailsFieldsOverride,
+        customerDetailsFullName,
+        customerDetailsEmail,
+        customerDetailsPhone,
+        customerDetailsAddress,
+        customerDetailsPrefill,
+        defaultsRevision,
         selectedButtonType.value,
         selectedValidation.value,
         submitVisible,
@@ -146,16 +178,33 @@ fun DemoCheckoutScreen(
 
     val configuration = remember(
         selectedLocale,
-        appearanceState.appearanceSignature,
+        styledAppearance,
         selectedButtonType,
         selectedValidation,
         selectedGrouping,
         submitVisible,
         googlePayEnabled,
+        cryptoEnabled,
         savedCardsEnabled,
         saveCardOptInVisible,
         cardHolderVerificationEnabled,
-        sdkStyle,
+        customerDetailsCard,
+        customerDetailsGooglePay,
+        customerDetailsFieldsOverride,
+        customerDetailsFullName,
+        customerDetailsEmail,
+        customerDetailsPhone,
+        customerDetailsAddress,
+        customerDetailsPrefill,
+        defaultsRevision,
+        defaultFullName,
+        defaultEmail,
+        defaultPhone,
+        defaultCountry,
+        defaultRegion,
+        defaultCity,
+        defaultPostalCode,
+        defaultAddress,
         wallet,
     ) {
         PaymentConfig(
@@ -165,6 +214,7 @@ fun DemoCheckoutScreen(
                     enabled = googlePayEnabled,
                     appearance = wallet,
                 ),
+                crypto = CryptoConfig(enabled = cryptoEnabled),
             ),
             card = CardConfig(
                 savedCards = SavedCardsConfig(
@@ -194,10 +244,37 @@ fun DemoCheckoutScreen(
                     type = SubmitButtonType.from(selectedButtonType.value),
                 ),
             ),
+            customerDetails = CustomerDetailsConfig(
+                card = customerDetailsCard,
+                googlePay = customerDetailsGooglePay,
+                fields = if (customerDetailsFieldsOverride) {
+                    CustomerDetailsFields(
+                        fullName = customerDetailsFullName,
+                        email = customerDetailsEmail,
+                        phone = customerDetailsPhone,
+                        address = customerDetailsAddress,
+                    )
+                } else {
+                    null
+                },
+                defaultValues = if (customerDetailsPrefill) {
+                    CustomerDetailsDefaults(
+                        fullName = defaultFullName,
+                        email = defaultEmail,
+                        phone = defaultPhone,
+                        country = defaultCountry,
+                        region = defaultRegion,
+                        city = defaultCity,
+                        postalCode = defaultPostalCode,
+                        address = defaultAddress,
+                    )
+                } else {
+                    null
+                },
+            ),
             options = OptionsConfig(
                 locale = selectedLocale.value,
-                style = sdkStyle,
-                appearance = appearance,
+                appearance = styledAppearance,
             ),
         )
     }
@@ -228,8 +305,7 @@ fun DemoCheckoutScreen(
             onResult = { handleInlineResult(it) },
         )
     }
-    LaunchedEffect(appearance) { embedded.updateAppearance(appearance) }
-    LaunchedEffect(sdkStyle) { embedded.updateStyle(sdkStyle) }
+    LaunchedEffect(styledAppearance) { embedded.updateAppearance(styledAppearance) }
     LaunchedEffect(selectedLocale.value) { embedded.updateLocale(selectedLocale.value) }
     LaunchedEffect(wallet) {
         embedded.updateWalletAppearance(wallet)
@@ -334,83 +410,110 @@ fun DemoCheckoutScreen(
         }
     }
 
+    val scroll = rememberScrollState()
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .navigationBarsPadding(),
         ) {
-            ExampleTopBar(
-                title = "Playground",
-                subtitle = "Every PaymentConfig option, then try Sheet, Google Pay, or Embedded.",
-                onBack = onBack,
+            ExampleTopBar(title = "Playground", onBack = onBack)
+            PlaygroundSegmentedRow(
+                options = IntegrationMode.entries.map { DemoOption(it.label, it.name) },
+                selected = DemoOption(mode.label, mode.name),
+                onSelected = { mode = IntegrationMode.valueOf(it.value) },
+                modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 8.dp),
             )
-
-            PlaygroundSection(
-                title = "Order",
-                caption = "Demo order · live API",
+            Column(
+                modifier = Modifier
+                    .verticalScroll(scroll)
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+            PlaygroundSection(title = "Amount") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = BuildConfig.DESCRIPTION.ifBlank { "Checkout item" },
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.weight(1f),
-                    )
                     Text(
                         text = formatMoney(amountMinor, BuildConfig.CURRENCY),
                         style = MaterialTheme.typography.headlineMedium,
                     )
+                    PlaygroundAmountStepper(
+                        amountMinor = amountMinor,
+                        enabled = lastResult == null,
+                        onAmountChange = { amountMinor = it },
+                    )
                 }
-                PlaygroundAmountStepper(
-                    amountMinor = amountMinor,
-                    enabled = lastResult == null,
-                    onAmountChange = { amountMinor = it },
-                )
             }
 
-            PlaygroundSection(
-                title = "Options",
-                caption = "Locale and UI style for the payment form.",
-            ) {
-                PlaygroundDropdown(
-                    label = "Language",
-                    caption = "options.locale · ${selectedLocale.value}",
-                    options = playgroundLocaleOptions,
-                    selected = selectedLocale,
-                    onSelected = { selectedLocale = it },
-                )
-                PlaygroundLabeledBlock(
-                    label = "Style",
-                    caption = "Auto follows the example theme toggle. Light and Dark force the SDK independently of app chrome.",
-                ) {
+            PlaygroundSection(title = "Theme") {
+                PlaygroundLabeledBlock(label = "Style") {
                     PlaygroundSegmentedRow(
                         options = playgroundStyleOptions,
                         selected = selectedStyle,
-                        onSelected = { selectedStyle = it },
+                        onSelected = { appearanceState.updateStyle(it.value) },
+                    )
+                }
+                PlaygroundPresetSwatches(
+                    selectedPresetId = appearanceState.selectedPresetId,
+                    onPresetSelected = { appearanceState.applyPreset(it) },
+                )
+                TextButton(onClick = onCustomizeAppearance) { Text("Customize") }
+            }
+
+            PlaygroundSection(
+                title = "Payment methods",
+                contentPadding = PaddingValues(0.dp),
+            ) {
+                ExampleSwitchRow(
+                    title = "Google Pay",
+                    subtitle = "",
+                    checked = googlePayEnabled,
+                    onCheckedChange = { googlePayEnabled = it },
+                )
+                ExampleSwitchRow(
+                    title = "Crypto",
+                    subtitle = "",
+                    checked = cryptoEnabled,
+                    onCheckedChange = { cryptoEnabled = it },
+                    showDivider = true,
+                )
+                ExampleSwitchRow(
+                    title = "Saved cards",
+                    subtitle = "",
+                    checked = savedCardsEnabled,
+                    onCheckedChange = { savedCardsEnabled = it },
+                    showDivider = true,
+                )
+                if (savedCardsEnabled) {
+                    ExampleSwitchRow(
+                        title = "Save card",
+                        subtitle = "",
+                        checked = saveCardOptInVisible,
+                        onCheckedChange = { saveCardOptInVisible = it },
+                        showDivider = true,
                     )
                 }
             }
 
             PlaygroundSection(
                 title = "Card",
-                caption = "Card form layout, validation, Pay button, and saved cards.",
                 contentPadding = PaddingValues(0.dp),
             ) {
                 Column(
-                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    PlaygroundLabeledBlock(
-                        label = "Inputs",
-                        caption = "card.inputs.grouping · condensed packs fields; spaced uses separate labels.",
-                    ) {
+                    PlaygroundDropdown(
+                        label = "Language",
+                        options = playgroundLocaleOptions,
+                        selected = selectedLocale,
+                        onSelected = { selectedLocale = it },
+                    )
+                    PlaygroundLabeledBlock(label = "Grouping") {
                         PlaygroundSegmentedRow(
                             options = playgroundGroupingOptions,
                             selected = selectedGrouping,
@@ -419,14 +522,12 @@ fun DemoCheckoutScreen(
                     }
                     PlaygroundDropdown(
                         label = "Validation",
-                        caption = "card.validationMode · when field errors appear.",
                         options = playgroundValidationOptions,
                         selected = selectedValidation,
                         onSelected = { selectedValidation = it },
                     )
                     PlaygroundDropdown(
-                        label = "Submit button",
-                        caption = "card.submitButton.type · localized Pay CTA.",
+                        label = "Pay button",
                         options = playgroundButtonTypeOptions,
                         selected = selectedButtonType,
                         onSelected = { selectedButtonType = it },
@@ -434,33 +535,14 @@ fun DemoCheckoutScreen(
                 }
                 ExampleSwitchRow(
                     title = "Show Pay button",
-                    subtitle = if (mode == IntegrationMode.Embedded) {
-                        "card.submitButton.visible · Embedded only."
-                    } else {
-                        "Sheet always shows the SDK Pay button."
-                    },
+                    subtitle = if (mode == IntegrationMode.Embedded) "" else "Sheet always shows it",
                     checked = if (mode == IntegrationMode.Embedded) submitVisible else true,
                     onCheckedChange = { submitVisible = it },
                     enabled = mode == IntegrationMode.Embedded,
                 )
                 ExampleSwitchRow(
-                    title = "Saved cards",
-                    subtitle = "card.savedCards.enabled · load and offer stored cards",
-                    checked = savedCardsEnabled,
-                    onCheckedChange = { savedCardsEnabled = it },
-                    showDivider = true,
-                )
-                ExampleSwitchRow(
-                    title = "Save card opt-in",
-                    subtitle = "card.savedCards.optInVisible · checkbox to save a new card",
-                    checked = saveCardOptInVisible,
-                    onCheckedChange = { saveCardOptInVisible = it },
-                    showDivider = true,
-                    enabled = savedCardsEnabled,
-                )
-                ExampleSwitchRow(
-                    title = "Card holder verification",
-                    subtitle = "Validate name via account-validation before pay",
+                    title = "Name check",
+                    subtitle = "",
                     checked = cardHolderVerificationEnabled,
                     onCheckedChange = { cardHolderVerificationEnabled = it },
                     showDivider = true,
@@ -468,67 +550,114 @@ fun DemoCheckoutScreen(
             }
 
             PlaygroundSection(
-                title = "Google Pay",
-                caption = "Wallet button and WalletAppearance chrome.",
+                title = "Customer",
                 contentPadding = PaddingValues(0.dp),
             ) {
                 ExampleSwitchRow(
-                    title = "Enabled",
-                    subtitle = "paymentMethods.googlePay.enabled",
-                    checked = googlePayEnabled,
-                    onCheckedChange = { googlePayEnabled = it },
+                    title = "Card details",
+                    subtitle = "",
+                    checked = customerDetailsCard,
+                    onCheckedChange = { customerDetailsCard = it },
                 )
-                Column(
-                    modifier = Modifier
-                        .alpha(if (googlePayEnabled) 1f else 0.45f)
-                        .padding(start = 20.dp, end = 20.dp, bottom = 20.dp, top = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    PlaygroundLabeledBlock(
-                        label = "Button color",
-                        caption = "WalletAppearance.color · Auto follows the form background.",
+                ExampleSwitchRow(
+                    title = "Google Pay details",
+                    subtitle = "",
+                    checked = customerDetailsGooglePay,
+                    onCheckedChange = { customerDetailsGooglePay = it },
+                    showDivider = true,
+                    enabled = googlePayEnabled,
+                )
+                ExampleSwitchRow(
+                    title = "Custom field list",
+                    subtitle = "",
+                    checked = customerDetailsFieldsOverride,
+                    onCheckedChange = { customerDetailsFieldsOverride = it },
+                    showDivider = true,
+                )
+                if (customerDetailsFieldsOverride) {
+                    ExampleSwitchRow(
+                        title = "Name",
+                        subtitle = "",
+                        checked = customerDetailsFullName,
+                        onCheckedChange = { customerDetailsFullName = it },
+                        showDivider = true,
+                    )
+                    ExampleSwitchRow(
+                        title = "Email",
+                        subtitle = "",
+                        checked = customerDetailsEmail,
+                        onCheckedChange = { customerDetailsEmail = it },
+                        showDivider = true,
+                    )
+                    ExampleSwitchRow(
+                        title = "Phone",
+                        subtitle = "",
+                        checked = customerDetailsPhone,
+                        onCheckedChange = { customerDetailsPhone = it },
+                        showDivider = true,
+                    )
+                    ExampleSwitchRow(
+                        title = "Address",
+                        subtitle = "",
+                        checked = customerDetailsAddress,
+                        onCheckedChange = { customerDetailsAddress = it },
+                        showDivider = true,
+                    )
+                }
+                ExampleSwitchRow(
+                    title = "Prefill card form",
+                    subtitle = "",
+                    checked = customerDetailsPrefill,
+                    onCheckedChange = { customerDetailsPrefill = it },
+                    showDivider = true,
+                )
+                if (customerDetailsPrefill) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
+                        PlaygroundDefaultField("Full name", defaultFullName) { defaultFullName = it }
+                        PlaygroundDefaultField("Email", defaultEmail) { defaultEmail = it }
+                        PlaygroundDefaultField("Phone", defaultPhone) { defaultPhone = it }
+                        PlaygroundDefaultField("Country", defaultCountry) { defaultCountry = it }
+                        PlaygroundDefaultField("Region", defaultRegion) { defaultRegion = it }
+                        PlaygroundDefaultField("City", defaultCity) { defaultCity = it }
+                        PlaygroundDefaultField("Postal code", defaultPostalCode) { defaultPostalCode = it }
+                        PlaygroundDefaultField("Address", defaultAddress) { defaultAddress = it }
+                        TextButton(onClick = { defaultsRevision += 1 }) {
+                            Text("Apply prefill")
+                        }
+                    }
+                }
+            }
+
+            if (googlePayEnabled) {
+                PlaygroundSection(title = "Wallet button") {
+                    PlaygroundLabeledBlock(label = "Color") {
                         PlaygroundSegmentedRow(
                             options = playgroundWalletColorOptions,
                             selected = walletColor,
                             onSelected = { walletColor = it },
-                            enabled = googlePayEnabled,
                         )
                     }
                     PlaygroundDropdown(
-                        label = "Button type",
-                        caption = "WalletAppearance.type · official Google Pay label variant.",
+                        label = "Type",
                         options = playgroundWalletTypeOptions,
                         selected = walletType,
                         onSelected = { walletType = it },
-                        enabled = googlePayEnabled,
                     )
                     PlaygroundSliderRow(
-                        label = "Corner radius",
+                        label = "Radius",
                         value = walletRadius,
                         valueRange = 0f..32f,
-                        valueLabel = "${walletRadius.toInt()} dp",
-                        caption = "WalletAppearance.radius · default 28 dp.",
+                        valueLabel = "${walletRadius.toInt()}",
                         onValueChange = { walletRadius = it },
-                        enabled = googlePayEnabled,
                     )
                 }
             }
 
-            PlaygroundSection(
-                title = "Appearance",
-                caption = "SDK visual tokens. Customize field radius, borders, and colors.",
-            ) {
-                ClassicsGallery(
-                    selectedPresetId = appearanceState.selectedPresetId,
-                    onPresetSelected = { appearanceState.applyPreset(it) },
-                    onCustomize = onCustomizeAppearance,
-                )
-            }
-
             PaymentSection(
                 mode = mode,
-                onModeChange = { mode = it },
                 payLabel = payLabel,
                 isLoading = isLoading,
                 pendingOrder = pendingOrder,
@@ -567,6 +696,7 @@ fun DemoCheckoutScreen(
                     )
                 }
             }
+            }
         }
     }
 }
@@ -574,7 +704,6 @@ fun DemoCheckoutScreen(
 @Composable
 private fun PaymentSection(
     mode: IntegrationMode,
-    onModeChange: (IntegrationMode) -> Unit,
     payLabel: String,
     isLoading: Boolean,
     pendingOrder: PaymentIntent?,
@@ -587,17 +716,7 @@ private fun PaymentSection(
     onRetryPrepare: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("Try it", style = MaterialTheme.typography.titleMedium)
-        PlaygroundSegmentedRow(
-            options = IntegrationMode.entries.map { DemoOption(it.label, it.name) },
-            selected = DemoOption(mode.label, mode.name),
-            onSelected = { onModeChange(IntegrationMode.valueOf(it.value)) },
-        )
-        Text(
-            text = modeCaption(mode),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Text("Checkout", style = MaterialTheme.typography.titleMedium)
         AnimatedContent(
             targetState = mode,
             transitionSpec = { fadeIn() togetherWith fadeOut() },
@@ -687,15 +806,6 @@ private fun InlineMethodSurface(
             }
         }
     }
-}
-
-private fun modeCaption(mode: IntegrationMode): String = when (mode) {
-    IntegrationMode.PaymentSheet ->
-        "SDK owns the full checkout UI. Tap Pay to open the payment sheet."
-    IntegrationMode.GooglePay ->
-        "Standalone Google Pay button embedded in your screen."
-    IntegrationMode.Embedded ->
-        "Payment Element in your layout. Toggle methods under Card and Google Pay."
 }
 
 @Composable

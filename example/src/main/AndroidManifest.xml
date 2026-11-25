@@ -11,6 +11,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.XMoneyExample">
         <activity
+            android:name="androidx.activity.ComponentActivity"
+            android:exported="true" />
+        <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"

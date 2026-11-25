@@ -1,6 +1,11 @@
 package com.xmoney.payments.model
 
+import com.xmoney.payments.config.Appearance
+import com.xmoney.payments.config.AppearanceOverrides
+import com.xmoney.payments.config.Borders
+import com.xmoney.payments.config.Shape
 import com.xmoney.payments.config.Strings
+import com.xmoney.payments.config.Typography
 import com.xmoney.payments.validation.CardFieldValidators
 
 import org.json.JSONObject
@@ -97,6 +102,36 @@ class ContractTest {
     }
 
     @Test
+    fun themeResolutionVectors() {
+        val cases = vectors.getJSONArray("themeResolution")
+        assertTrue(cases.length() > 0)
+        for (i in 0 until cases.length()) {
+            val item = cases.getJSONObject(i)
+            val sent = item.getJSONObject("appearance")
+            val appearance = Appearance.from(jsonToMap(sent))
+            val expected = item.getJSONObject("expected")
+            val isDark = item.getBoolean("isDark")
+            if (sent.has("brandColor")) {
+                val resolved = appearance.brandColor!!.srgb(isDark)
+                assertEquals(expected.getString("primary"), resolved.hex.lowercase())
+                if (sent.getString("brandColor").length == 9) {
+                    assertEquals(128.0 / 255.0, resolved.alpha, 0.001)
+                }
+            } else {
+                assertEquals(null, appearance.brandColor)
+            }
+            if (sent.has("backgroundColor")) {
+                assertEquals(
+                    expected.getString("background"),
+                    appearance.backgroundColor!!.srgb(isDark).hex.lowercase(),
+                )
+            } else {
+                assertEquals(null, appearance.backgroundColor)
+            }
+        }
+    }
+
+    @Test
     fun localeVectors() {
         val cases = vectors.getJSONArray("locales")
         for (i in 0 until cases.length()) {
@@ -107,6 +142,30 @@ class ContractTest {
             val text = Strings.text(key, locale)
             assertTrue("locale $locale case $i", text.contains(contains))
         }
+    }
+
+    @Test
+    fun appearanceKeysMatchTheVector() {
+        fun keys(name: String): Set<String> {
+            val array = vectors.getJSONArray(name)
+            return (0 until array.length()).map { array.getString(it) }.toSet()
+        }
+        assertEquals(keys("appearanceKeys"), Appearance.dictionaryKeys)
+        assertEquals(keys("typographyKeys"), Typography.dictionaryKeys)
+        assertEquals(keys("borderKeys"), Borders.dictionaryKeys)
+        assertEquals(keys("shapeKeys"), Shape.dictionaryKeys)
+        assertEquals(keys("overrideKeys"), AppearanceOverrides.dictionaryKeys)
+    }
+
+    private fun jsonToMap(source: JSONObject): Map<String, Any?> {
+        val map = linkedMapOf<String, Any?>()
+        val keys = source.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            val value = source.get(key)
+            map[key] = if (value is JSONObject) jsonToMap(value) else value
+        }
+        return map
     }
 
     private fun loadVectors(): JSONObject {

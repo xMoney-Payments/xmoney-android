@@ -25,6 +25,9 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Test vector copies match
+        run: ./gradlew checkTestVectors --stacktrace
+
       - name: Run unit tests
         run: ./gradlew :core:test :googlepay:test :paymentelement:test :paymentsheet:test :example:testDebugUnitTest --stacktrace
 

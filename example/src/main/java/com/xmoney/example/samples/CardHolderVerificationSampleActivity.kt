@@ -92,7 +92,7 @@ private fun CardHolderSampleScreen(activity: FragmentActivity) {
                     },
                 ),
             ),
-            options = OptionsConfig(style = style, appearance = exampleAppearance()),
+            options = OptionsConfig(appearance = exampleAppearance().copy(colorScheme = style)),
         )
     }
 

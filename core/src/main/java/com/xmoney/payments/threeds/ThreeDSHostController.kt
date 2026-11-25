@@ -19,6 +19,8 @@ class ThreeDSHostController(
     private var activeDialog: ThreeDSDialog? = null
     private var threeDSContinuation: ((ThreeDSChallengeEnd) -> Unit)? = null
     private var onShownCallback: (() -> Unit)? = null
+    /** Shopper left the challenge. The pay button switches before the status check starts. */
+    var onShopperCanceled: (() -> Unit)? = null
     private var lifecycleObserver: LifecycleEventObserver? = null
     private var showCommitted = false
     private var retryCount = 0
@@ -131,6 +133,9 @@ class ThreeDSHostController(
     private fun complete(end: ThreeDSChallengeEnd) {
         val continuation = threeDSContinuation ?: return
         threeDSContinuation = null
+        if (end == ThreeDSChallengeEnd.UserCanceled || end == ThreeDSChallengeEnd.BankAppCanceled) {
+            onShopperCanceled?.invoke()
+        }
         teardown()
         continuation(end)
     }

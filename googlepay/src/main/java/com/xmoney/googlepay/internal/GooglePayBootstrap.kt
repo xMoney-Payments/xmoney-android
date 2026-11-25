@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import com.xmoney.googlepay.ui.GooglePayButton
+import com.xmoney.googlepay.ui.GooglePayButtonHeight
 import com.xmoney.payments.engine.DigitalWalletFactory
 import com.xmoney.payments.engine.WalletButtonFactory
 
@@ -27,7 +28,7 @@ internal object GooglePayBootstrap {
         DigitalWalletFactory.buttonFactory = WalletButtonFactory { context, args ->
             val heightPx = TypedValue.applyDimension(
                 TypedValue.COMPLEX_UNIT_DIP,
-                56f,
+                GooglePayButtonHeight.value,
                 context.resources.displayMetrics,
             ).toInt()
             val argsState = mutableStateOf(args)

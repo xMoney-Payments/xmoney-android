@@ -10,6 +10,7 @@ sealed class PaymentError(
 
     /** `updateOrder` asked for a different order while a charge was in flight. */
     class PaymentInProgress : Payment(PAYMENT_IN_PROGRESS)
+    class InvalidCustomerDetails : Payment(INVALID_CUSTOMER_DETAILS)
     class ThreeDS(message: String = "Missing 3DS URL") : PaymentError("THREE_DS_ERROR", message)
     class PollTimeout(message: String = "Polling timed out") : PaymentError("POLL_TIMEOUT", message)
     class InvalidKey(message: String = "Invalid public key") : PaymentError("INVALID_PUBLIC_KEY", message)
@@ -45,9 +46,11 @@ sealed class PaymentError(
             "Missing amount or currency for Google Pay."
         const val EMPTY_GOOGLE_PAY_TOKEN = "Empty Google Pay token"
         const val PAYMENT_IN_PROGRESS = "Payment in progress"
+        const val INVALID_CUSTOMER_DETAILS = "Customer details are incomplete"
 
         private val sdkAuthoredMessages = setOf(
             PAYMENT_IN_PROGRESS,
+            INVALID_CUSTOMER_DETAILS,
             NAME_CHECK_NOT_ENABLED,
             VERIFICATION_REJECTED,
             "Missing session token",

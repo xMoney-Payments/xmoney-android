@@ -11,6 +11,7 @@ data class PaymentConfig(
     val card: CardConfig = CardConfig(),
     val paymentMethods: PaymentMethodsConfig = PaymentMethodsConfig(),
     val options: OptionsConfig = OptionsConfig(),
+    val customerDetails: CustomerDetailsConfig = CustomerDetailsConfig(),
 ) {
     fun resolve(intent: PaymentIntent): ResolvedPaymentConfig = ResolvedPaymentConfig(
         publicKey = publicKey,
@@ -19,8 +20,52 @@ data class PaymentConfig(
         card = card,
         paymentMethods = paymentMethods,
         options = options,
+        customerDetails = customerDetails,
     )
 }
+
+/**
+ * Which payment methods collect customer details.
+ * The field list comes from `/inline-checkout/fields`, unless [fields] is set.
+ * That override replaces the server list and is not merged with it.
+ * [defaultValues] prefills the card form only.
+ */
+@Parcelize
+data class CustomerDetailsConfig(
+    val card: Boolean = false,
+    val googlePay: Boolean = false,
+    /** Replaces `/inline-checkout/fields` when set. A flag left off is not collected. */
+    val fields: CustomerDetailsFields? = null,
+    /** Prefills the card form. Google Pay does not use these values. */
+    val defaultValues: CustomerDetailsDefaults? = null,
+) : Parcelable {
+    val anyEnabled: Boolean get() = card || googlePay
+}
+
+/** Which blocks to collect. Missing flags are off. */
+@Parcelize
+data class CustomerDetailsFields(
+    val fullName: Boolean = false,
+    val email: Boolean = false,
+    val phone: Boolean = false,
+    val address: Boolean = false,
+) : Parcelable
+
+/**
+ * Values written into the card form before the shopper edits it.
+ * Blank text and values that are not in the country, region, or phone lists are ignored.
+ */
+@Parcelize
+data class CustomerDetailsDefaults(
+    val fullName: String? = null,
+    val email: String? = null,
+    val phone: String? = null,
+    val country: String? = null,
+    val region: String? = null,
+    val city: String? = null,
+    val postalCode: String? = null,
+    val address: String? = null,
+) : Parcelable
 
 @Parcelize
 data class SavedCardsConfig(
@@ -77,18 +122,6 @@ enum class CardGrouping(val value: String) {
     }
 }
 
-enum class UserInterfaceStyle(val value: String) {
-    AUTOMATIC("automatic"),
-    ALWAYS_LIGHT("alwaysLight"),
-    ALWAYS_DARK("alwaysDark"),
-    ;
-
-    companion object {
-        fun from(raw: String?): UserInterfaceStyle =
-            entries.firstOrNull { it.value == raw } ?: AUTOMATIC
-    }
-}
-
 @Parcelize
 data class CardInputsConfig(
     val grouping: CardGrouping = CardGrouping.CONDENSED,
@@ -131,16 +164,22 @@ data class GooglePayConfig(
     val appearance: WalletAppearance = WalletAppearance(),
 ) : Parcelable
 
+/** Shows the "Pay with crypto" option. Continue redirects the shopper to a secure page to complete the payment. */
+@Parcelize
+data class CryptoConfig(
+    val enabled: Boolean = false,
+) : Parcelable
+
 @Parcelize
 data class PaymentMethodsConfig(
     val googlePay: GooglePayConfig = GooglePayConfig(),
+    val crypto: CryptoConfig = CryptoConfig(),
 ) : Parcelable
 
 @Parcelize
 data class OptionsConfig(
     val locale: String = "en-US",
-    val style: UserInterfaceStyle = UserInterfaceStyle.AUTOMATIC,
-    val appearance: AppearanceConfig = AppearanceConfig(),
+    val appearance: Appearance = Appearance(),
 ) : Parcelable
 
 @Parcelize
@@ -151,4 +190,14 @@ data class ResolvedPaymentConfig(
     val card: CardConfig = CardConfig(),
     val paymentMethods: PaymentMethodsConfig = PaymentMethodsConfig(),
     val options: OptionsConfig = OptionsConfig(),
-) : Parcelable
+    val customerDetails: CustomerDetailsConfig = CustomerDetailsConfig(),
+) : Parcelable {
+    /** Session config for a host that only receives the resolved, parcelable config. */
+    fun toPaymentConfig(): PaymentConfig = PaymentConfig(
+        publicKey = publicKey,
+        card = card,
+        paymentMethods = paymentMethods,
+        options = options,
+        customerDetails = customerDetails,
+    )
+}

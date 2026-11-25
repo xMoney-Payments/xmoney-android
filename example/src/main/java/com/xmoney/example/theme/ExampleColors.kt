@@ -4,7 +4,7 @@ import androidx.compose.ui.graphics.Color
 
 /**
  * xMoney onramp tokens (colors_and_type.css). Example-app chrome only —
- * merchants style their own UI; SDK appearance is [com.xmoney.payments.config.AppearanceConfig].
+ * merchants style their own UI; SDK appearance is [com.xmoney.payments.config.Appearance].
  */
 object ExampleColors {
     val Purple = Color(0xFF7C4DFF)

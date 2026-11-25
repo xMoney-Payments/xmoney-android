@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+
 package com.xmoney.paymentelement.ui
 
 import androidx.compose.foundation.Image
@@ -23,17 +25,26 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.AutofillNode
+import androidx.compose.ui.autofill.AutofillType
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalAutofill
+import androidx.compose.ui.platform.LocalAutofillTree
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
@@ -41,15 +52,20 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import com.xmoney.paymentelement.R
 import com.xmoney.paymentelement.theme.CheckoutTheme
 import com.xmoney.payments.config.Strings
 
 internal enum class CardField { HOLDER, NUMBER, EXPIRY, CVV }
+
+internal val CardFieldHorizontalPadding = 12.dp
 
 @Composable
 internal fun FieldLabel(
@@ -60,9 +76,9 @@ internal fun FieldLabel(
         text,
         theme = theme,
         fontSize = 14f,
-        fontWeight = FontWeight.Medium,
+        fontWeight = FontWeight.SemiBold,
         color = theme.primaryText,
-        modifier = Modifier.padding(bottom = 6.dp),
+        modifier = Modifier.padding(bottom = 8.dp),
     )
 }
 
@@ -76,9 +92,9 @@ internal fun FieldErrorText(
         message,
         theme = theme,
         color = theme.errorText,
-        fontSize = 12.5f,
+        fontSize = 12f,
         fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(top = 6.dp),
+        modifier = Modifier.padding(top = 8.dp),
     )
 }
 
@@ -143,6 +159,7 @@ internal fun LabeledCardFields(
                         keyboardType = KeyboardType.Text,
                         imeAction = ImeAction.Next,
                         fieldHeight = fieldHeight,
+                        horizontalPadding = 16.dp,
                         onFocus = { onFocus(CardField.HOLDER) },
                         onBlur = { onBlur(CardField.HOLDER) },
                         onValueChange = onHolderChange,
@@ -162,6 +179,7 @@ internal fun LabeledCardFields(
                     keyboardType = KeyboardType.Number,
                     imeAction = ImeAction.Next,
                     fieldHeight = fieldHeight,
+                    horizontalPadding = 16.dp,
                     visualTransformation = CardNumberVisualTransformation,
                     trailing = {
                         CardBrandIcon(
@@ -194,6 +212,7 @@ internal fun LabeledCardFields(
                         keyboardType = KeyboardType.Number,
                         imeAction = ImeAction.Next,
                         fieldHeight = fieldHeight,
+                        horizontalPadding = 16.dp,
                         visualTransformation = ExpiryVisualTransformation,
                         onFocus = { onFocus(CardField.EXPIRY) },
                         onBlur = { onBlur(CardField.EXPIRY) },
@@ -212,11 +231,12 @@ internal fun LabeledCardFields(
                         keyboardType = KeyboardType.Number,
                         imeAction = if (holderIsLast) ImeAction.Next else ImeAction.Done,
                         fieldHeight = fieldHeight,
+                        horizontalPadding = 16.dp,
                         trailing = {
                             Image(
                                 painter = painterResource(R.drawable.xmoney_ic_cvv),
                                 contentDescription = null,
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier.size(24.dp),
                                 colorFilter = ColorFilter.tint(theme.mutedIcon),
                             )
                         },
@@ -240,6 +260,7 @@ internal fun LabeledCardFields(
                         keyboardType = KeyboardType.Text,
                         imeAction = ImeAction.Done,
                         fieldHeight = fieldHeight,
+                        horizontalPadding = 16.dp,
                         onFocus = { onFocus(CardField.HOLDER) },
                         onBlur = { onBlur(CardField.HOLDER) },
                         onValueChange = onHolderChange,
@@ -252,26 +273,41 @@ internal fun LabeledCardFields(
 }
 
 @Composable
-internal fun ErrorBadgeMessage(message: String, theme: CheckoutTheme) {
+internal fun ErrorBadgeMessage(
+    message: String,
+    theme: CheckoutTheme,
+    topPadding: Dp = 8.dp,
+    horizontalPadding: Dp = 2.dp,
+    badgeColor: Color = theme.errorBadge,
+    bangWeight: FontWeight = FontWeight.Medium,
+    messageSize: Float = 12f,
+) {
     Row(
-        modifier = Modifier.padding(start = 2.dp, end = 2.dp, top = 8.dp),
+        modifier = Modifier.padding(start = horizontalPadding, end = horizontalPadding, top = topPadding),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(
             modifier = Modifier
                 .size(15.dp)
                 .clip(CircleShape)
-                .background(theme.errorBorder),
+                .background(badgeColor),
             contentAlignment = Alignment.Center,
         ) {
-            SheetText("!", theme = theme, color = Color.White, fontSize = 10f, fontWeight = FontWeight.Bold)
+            SheetText(
+                "!",
+                theme = theme,
+                color = Color.White,
+                fontSize = 10f,
+                fontWeight = bangWeight,
+                lineHeight = null,
+            )
         }
         SheetText(
             message,
             theme = theme,
             color = theme.errorText,
-            fontSize = 12.5f,
+            fontSize = messageSize,
             fontWeight = FontWeight.SemiBold,
         )
     }
@@ -282,26 +318,26 @@ internal fun SaveCardCheckbox(
     theme: CheckoutTheme,
     checked: Boolean,
     label: String,
+    horizontalPadding: Dp = 0.dp,
     onToggle: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onToggle() }
-            .padding(top = 6.dp)
-            .padding(horizontal = 2.dp, vertical = 12.dp),
+            .padding(horizontal = horizontalPadding, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(11.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(
             modifier = Modifier
                 .size(22.dp)
-                .clip(RoundedCornerShape(7.dp))
+                .clip(RoundedCornerShape(theme.checkboxRadius))
                 .then(
                     if (checked) {
                         Modifier.background(theme.primary)
                     } else {
-                        Modifier.border(1.5.dp, theme.unselectedRing, RoundedCornerShape(7.dp))
+                        Modifier.border(1.5.dp, theme.radioIdle, RoundedCornerShape(theme.checkboxRadius))
                     },
                 ),
             contentAlignment = Alignment.Center,
@@ -326,6 +362,7 @@ internal fun SaveCardCheckbox(
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun ContainedFieldRow(
     theme: CheckoutTheme,
@@ -335,6 +372,13 @@ internal fun ContainedFieldRow(
     fieldHeight: Dp,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    capitalization: KeyboardCapitalization = KeyboardCapitalization.None,
+    autofillType: AutofillType? = null,
+    horizontalPadding: Dp = CardFieldHorizontalPadding,
+    valueColor: Color = theme.primaryText,
+    placeholderColor: Color = theme.metaText,
+    valueWeight: FontWeight = FontWeight.Normal,
+    placeholderWeight: FontWeight = FontWeight.Normal,
     trailing: @Composable (() -> Unit)? = null,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     imeAction: ImeAction = ImeAction.Default,
@@ -345,12 +389,25 @@ internal fun ContainedFieldRow(
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     val focusManager = LocalFocusManager.current
+    val autofill = LocalAutofill.current
+    val autofillTree = LocalAutofillTree.current
+    val onFill = rememberUpdatedState(onValueChange)
+    val autofillNode = remember(autofillType) {
+        autofillType?.let { type ->
+            AutofillNode(autofillTypes = listOf(type), onFill = { onFill.value(it) })
+        }
+    }
+    if (autofillNode != null) {
+        SideEffect { autofillTree += autofillNode }
+    }
     var hadFocus by remember { mutableStateOf(false) }
     LaunchedEffect(isFocused) {
         if (isFocused) {
             hadFocus = true
+            autofillNode?.let { autofill?.requestAutofillForNode(it) }
             onFocus()
         } else if (hadFocus) {
+            autofillNode?.let { autofill?.cancelAutofillForNode(it) }
             onBlur()
         }
     }
@@ -359,7 +416,7 @@ internal fun ContainedFieldRow(
         modifier = modifier
             .fillMaxWidth()
             .height(fieldHeight)
-            .padding(horizontal = 14.dp),
+            .padding(horizontal = horizontalPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BasicTextField(
@@ -367,13 +424,15 @@ internal fun ContainedFieldRow(
             onValueChange = onValueChange,
             singleLine = true,
             textStyle = TextStyle(
-                color = theme.componentText,
+                color = valueColor,
                 fontSize = theme.scaledSp(18f),
-                fontWeight = FontWeight.Medium,
+                fontWeight = valueWeight,
                 fontFamily = theme.fontFamily,
+                letterSpacing = (-0.01).em,
             ),
             visualTransformation = visualTransformation,
             keyboardOptions = KeyboardOptions(
+                capitalization = capitalization,
                 keyboardType = keyboardType,
                 imeAction = imeAction,
             ),
@@ -385,6 +444,13 @@ internal fun ContainedFieldRow(
             cursorBrush = SolidColor(theme.primary),
             modifier = Modifier
                 .weight(1f)
+                .then(
+                    if (autofillNode != null) {
+                        Modifier.onGloballyPositioned { autofillNode.boundingBox = it.boundsInWindow() }
+                    } else {
+                        Modifier
+                    },
+                )
                 .then(
                     if (contentDescription != null) {
                         Modifier.semantics { this.contentDescription = contentDescription }
@@ -398,9 +464,13 @@ internal fun ContainedFieldRow(
                         SheetText(
                             placeholder,
                             theme = theme,
-                            color = theme.placeholderText,
+                            color = placeholderColor,
                             fontSize = 18f,
-                            fontWeight = FontWeight.Medium,
+                            fontWeight = placeholderWeight,
+                            letterSpacing = (-0.01).em,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                     inner()
@@ -408,7 +478,7 @@ internal fun ContainedFieldRow(
             },
         )
         trailing?.let {
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(10.dp))
             it()
         }
     }

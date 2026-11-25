@@ -10,10 +10,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
-import com.xmoney.payments.config.AppearanceConfig
+import com.xmoney.payments.config.Appearance
+import com.xmoney.payments.config.AppearanceLog
 import com.xmoney.payments.config.PaymentConfig
 import com.xmoney.payments.config.ResolvedPaymentConfig
-import com.xmoney.payments.config.UserInterfaceStyle
 import com.xmoney.payments.config.WalletAppearance
 import com.xmoney.payments.engine.DigitalWalletAuthorizing
 import com.xmoney.payments.engine.DigitalWalletFactory
@@ -27,10 +27,11 @@ import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.model.PaymentIntent
 import com.xmoney.payments.model.PaymentResult
 import com.xmoney.payments.model.SavedCard
-import com.xmoney.payments.threeds.ThreeDSHostController
-import com.xmoney.payments.validation.CardFieldValidators
 import com.xmoney.payments.model.UpdateOrderSuperseded
+import com.xmoney.payments.threeds.ThreeDSHostController
 import com.xmoney.payments.util.onMainThread
+import com.xmoney.payments.validation.CardFieldValidators
+import com.xmoney.payments.customerdetails.CustomerDetailsInput
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
@@ -48,12 +49,19 @@ class EmbeddedPaymentController(
     private val onResult: (PaymentResult) -> Unit,
 ) {
     private var liveConfiguration = configuration
+
+    init {
+        AppearanceLog.isDebuggable =
+            (activity.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    }
     @VisibleForTesting
     internal var session = PaymentSession(liveConfiguration, placeholderIntent(), activity.applicationContext)
 
     var sheetState: SheetState? by mutableStateOf(null)
         private set
     var isProcessing: Boolean by mutableStateOf(false)
+        private set
+    var awaitingCancelCheck: Boolean by mutableStateOf(false)
         private set
     var isOrderConsumed: Boolean by mutableStateOf(false)
         private set
@@ -126,7 +134,7 @@ class EmbeddedPaymentController(
         }
     }
 
-    fun updateAppearance(appearance: AppearanceConfig) {
+    fun updateAppearance(appearance: Appearance) {
         liveConfiguration = liveConfiguration.copy(
             options = liveConfiguration.options.copy(appearance = appearance),
         )
@@ -145,13 +153,6 @@ class EmbeddedPaymentController(
     fun updateLocale(locale: String) {
         liveConfiguration = liveConfiguration.copy(
             options = liveConfiguration.options.copy(locale = locale),
-        )
-        boundIntent?.let { paymentConfig = liveConfiguration.resolve(it) }
-    }
-
-    fun updateStyle(style: UserInterfaceStyle) {
-        liveConfiguration = liveConfiguration.copy(
-            options = liveConfiguration.options.copy(style = style),
         )
         boundIntent?.let { paymentConfig = liveConfiguration.resolve(it) }
     }
@@ -281,7 +282,9 @@ class EmbeddedPaymentController(
 
     private suspend fun bindLocked(generation: Int, order: PaymentIntent) {
         val initial = sheetState == null
-        val threeDSHost = ThreeDSHostController(activity) { liveConfiguration.options.locale }
+        val threeDSHost = ThreeDSHostController(activity) { liveConfiguration.options.locale }.also { host ->
+            host.onShopperCanceled = { awaitingCancelCheck = true }
+        }
         inFlightOrder = order
         try {
             val candidate = session.load(order, activity)
@@ -362,7 +365,14 @@ class EmbeddedPaymentController(
         }
     }
 
-    fun payWithCard(input: CardInput) {
+    /**
+     * Charges a new card immediately.
+     *
+     * Does not open or enforce the personal-details page. [customerDetails] is validated
+     * and mapped to the wire payload inside the engine. Use [confirm] so the embedded
+     * form collects required details first.
+     */
+    internal fun payWithCard(input: CardInput, customerDetails: CustomerDetailsInput? = null) {
         if (!isInteractionEnabled) return
         val config = paymentConfig ?: return
         val invalid = CardFieldValidators.validateCardNumber(input.number) != null ||
@@ -373,13 +383,26 @@ class EmbeddedPaymentController(
         val presenter = threeDS ?: return
         session.onCardHolderVerification =
             config.card.cardHolderVerification?.onCardHolderVerification
-        runSubmission { session.submitNewCard(input, presenter) }
+        runSubmission { session.submitNewCard(input, presenter, customerDetails) }
     }
 
-    fun paySavedCard(card: SavedCard) {
+    /**
+     * Charges a saved card immediately.
+     *
+     * Does not open or enforce the personal-details page. [customerDetails] is validated
+     * and mapped to the wire payload inside the engine. Use [confirm] so the embedded
+     * form collects required details first.
+     */
+    internal fun paySavedCard(card: SavedCard, customerDetails: CustomerDetailsInput? = null) {
         if (!isInteractionEnabled) return
         val presenter = threeDS ?: return
-        runSubmission { session.submitSavedCard(card.id, presenter) }
+        runSubmission { session.submitSavedCard(card.id, presenter, customerDetails) }
+    }
+
+    internal fun payWithCrypto(customerDetails: CustomerDetailsInput? = null) {
+        if (!isInteractionEnabled) return
+        val presenter = threeDS ?: return
+        runSubmission { session.submitCrypto(presenter, customerDetails) }
     }
 
     suspend fun deleteSavedCard(card: SavedCard) {
@@ -405,6 +428,7 @@ class EmbeddedPaymentController(
 
     private fun deliverResult(result: EngineResult) {
         isProcessing = session.isProcessing
+        if (!isProcessing) awaitingCancelCheck = false
         isOrderConsumed = session.isOrderConsumed
         syncInteractionEnabled()
         onEvent(EmbeddedEvent.Processing(false))
@@ -412,7 +436,9 @@ class EmbeddedPaymentController(
     }
 
     private fun updateProcessing(processing: Boolean) {
+        val starting = processing && !isProcessing
         isProcessing = processing
+        if (!processing || starting) awaitingCancelCheck = false
         syncInteractionEnabled()
         onEvent(EmbeddedEvent.Processing(processing))
     }

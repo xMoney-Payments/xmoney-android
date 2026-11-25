@@ -90,12 +90,11 @@ class GooglePayActivitySample : FragmentActivity() {
                             savedCards = SavedCardsConfig(enabled = false),
                         ),
                         options = OptionsConfig(
-                            style = style,
-                            appearance = exampleAppearance(),
+                            appearance = exampleAppearance().copy(colorScheme = style),
                         ),
                     )
                 }
-                val googlePay = remember(configuration.options.style) {
+                val googlePay = remember(configuration.options.appearance.colorScheme) {
                     GooglePay(configuration)
                 }
                 GooglePayActivityScreen(activity = this, googlePay = googlePay)

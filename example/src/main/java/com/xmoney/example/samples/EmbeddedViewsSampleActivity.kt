@@ -133,8 +133,7 @@ private fun ViewsEmbeddedContent() {
                 savedCards = SavedCardsConfig(enabled = true),
             ),
             options = OptionsConfig(
-                style = style,
-                appearance = appearance,
+                appearance = appearance.copy(colorScheme = style),
             ),
         )
     }
@@ -151,7 +150,7 @@ private fun ViewsEmbeddedContent() {
         },
     )
     LaunchedEffect(appearance) { embedded.updateAppearance(appearance) }
-    LaunchedEffect(style) { embedded.updateStyle(style) }
+    LaunchedEffect(style) { embedded.updateAppearance(appearance.copy(colorScheme = style)) }
     LaunchedEffect(wallet) { embedded.updateWalletAppearance(wallet) }
 
     LaunchedEffect(lastResult, embedded.isOrderConsumed) {

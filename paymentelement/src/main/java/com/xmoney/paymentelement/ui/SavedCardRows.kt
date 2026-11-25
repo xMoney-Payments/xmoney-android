@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.Divider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,16 +31,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.xmoney.paymentelement.R
 import com.xmoney.paymentelement.theme.CheckoutTheme
 import com.xmoney.payments.config.Strings
@@ -52,60 +49,68 @@ internal fun SavedCardsSummaryRow(
     theme: CheckoutTheme,
     locale: String,
     subtitle: String,
+    card: SavedCard? = null,
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(15.dp))
+            .clip(RoundedCornerShape(theme.rowRadius))
             .pressScaleClickable(enabled = enabled, onClick = onClick)
             .padding(PaymentRowContentPadding),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(13.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .width(44.dp)
-                .height(32.dp)
-                .clip(RoundedCornerShape(9.dp))
-                .background(theme.neutralChip),
-            contentAlignment = Alignment.Center,
-        ) {
-            Image(
-                painter = painterResource(R.drawable.xmoney_ic_card_stack),
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                colorFilter = ColorFilter.tint(theme.primaryText.copy(alpha = 0.5f)),
-            )
+        if (card == null) {
+            PayWithCardChip(theme)
+        } else {
+            Box(
+                modifier = Modifier
+                    .width(48.dp)
+                    .height(34.dp)
+                    .clip(RoundedCornerShape(theme.brandTileRadius))
+                    .background(theme.brandTileBackground)
+                    .border(1.dp, theme.brandChipBorder, RoundedCornerShape(theme.brandTileRadius)),
+                contentAlignment = Alignment.Center,
+            ) {
+                CardBrandIcon(
+                    brand = savedCardBrandForIcon(card),
+                    theme = theme,
+                    size = CardBrandIconSize.SavedCardRow,
+                )
+            }
         }
         Column(modifier = Modifier.weight(1f)) {
             SheetText(
-                Strings.text("sheet.savedCards", locale),
+                if (card == null) {
+                    Strings.text("sheet.savedCards", locale)
+                } else {
+                    "${savedCardIssuerLabel(card)} ${savedCardMaskedNumber(card)}"
+                },
                 theme = theme,
                 fontSize = 16f,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = (-0.01).sp,
-                lineHeight = 20f,
+                letterSpacing = SheetTracking,
+                lineHeight = 24f,
             )
             if (subtitle.isNotEmpty()) {
                 SheetText(
                     subtitle,
                     theme = theme,
-                    color = theme.primaryText.copy(alpha = SecondaryMetaAlpha),
-                    fontSize = 13f,
-                    fontWeight = FontWeight.Medium,
-                    lineHeight = 18f,
-                )
+                        color = theme.metaText,
+                        fontSize = 14f,
+                        fontWeight = FontWeight.Medium,
+                        lineHeight = 16f,
+                    )
             }
         }
         Image(
             painter = painterResource(R.drawable.xmoney_ic_chevron_down),
             contentDescription = null,
             modifier = Modifier
-                .width(13.dp)
-                .height(8.dp),
-            colorFilter = ColorFilter.tint(theme.primaryText.copy(alpha = 0.38f)),
+                .size(16.dp),
+            colorFilter = ColorFilter.tint(theme.iconBrand),
         )
     }
 }
@@ -125,11 +130,11 @@ internal fun SavedCardPickerRow(
     onConfirmDelete: () -> Unit,
     onCancelDelete: () -> Unit,
 ) {
-    val askTint = theme.errorBorder.copy(alpha = 0.08f)
+    val askTint = theme.dangerTint
     val rowShape = if (isAskingDelete) {
-        RoundedCornerShape(topStart = 15.dp, topEnd = 15.dp)
+        RoundedCornerShape(topStart = theme.rowRadius, topEnd = theme.rowRadius)
     } else {
-        RoundedCornerShape(15.dp)
+        RoundedCornerShape(theme.rowRadius)
     }
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(
@@ -152,21 +157,21 @@ internal fun SavedCardPickerRow(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = SavedCardRowHeight)
+                    .height(SavedCardRowHeight)
                     .padding(PaymentRowContentPadding),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(13.dp),
+                horizontalArrangement = Arrangement.spacedBy(if (isAskingDelete) 13.dp else 12.dp),
             ) {
                 Box(
                     modifier = Modifier
-                        .width(44.dp)
-                        .height(32.dp)
-                        .clip(RoundedCornerShape(9.dp))
-                        .background(theme.componentBackground)
+                        .width(48.dp)
+                        .height(34.dp)
+                        .clip(RoundedCornerShape(theme.brandTileRadius))
+                        .background(theme.brandTileBackground)
                         .border(
-                            theme.containerBorderWidth,
-                            theme.containerBorder,
-                            RoundedCornerShape(9.dp),
+                            1.dp,
+                            theme.brandChipBorder,
+                            RoundedCornerShape(theme.brandTileRadius),
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -191,8 +196,8 @@ internal fun SavedCardPickerRow(
                             modifier = Modifier.weight(1f, fill = false),
                             fontSize = 16f,
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = (-0.01).sp,
-                            lineHeight = 20f,
+                            letterSpacing = SheetTracking,
+                            lineHeight = 24f,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -201,18 +206,18 @@ internal fun SavedCardPickerRow(
                             theme = theme,
                             fontSize = 16f,
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = (-0.01).sp,
-                            lineHeight = 20f,
+                            letterSpacing = SheetTracking,
+                            lineHeight = 24f,
                             maxLines = 1,
                         )
                     }
                     SheetText(
                         savedCardMeta(card, locale),
                         theme = theme,
-                        color = theme.primaryText.copy(alpha = SecondaryMetaAlpha),
-                        fontSize = 13f,
+                        color = theme.metaText,
+                        fontSize = 14f,
                         fontWeight = FontWeight.Medium,
-                        lineHeight = 18f,
+                        lineHeight = 16f,
                     )
                 }
                 if (isEditing) {
@@ -222,15 +227,8 @@ internal fun SavedCardPickerRow(
                         enabled = enabled && !isDeleting,
                         onClick = onAskDelete,
                     )
-                } else if (selected) {
-                    SelectedCheckmark(theme)
                 } else {
-                    Box(
-                        modifier = Modifier
-                            .size(21.dp)
-                            .clip(CircleShape)
-                            .border(1.5.dp, theme.unselectedRing, CircleShape),
-                    )
+                    RadioDot(theme, selected = selected)
                 }
             }
         }
@@ -266,13 +264,13 @@ private fun SavedCardTrashButton(
     )
     Box(
         modifier = Modifier
-            .size(34.dp)
+            .size(32.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
             .clip(CircleShape)
-            .background(theme.errorBorder.copy(alpha = 0.09f))
+            .background(theme.dangerTintStrong)
             .pressScaleClickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -282,7 +280,7 @@ private fun SavedCardTrashButton(
             modifier = Modifier
                 .width(15.dp)
                 .height(16.dp),
-            colorFilter = ColorFilter.tint(theme.errorText),
+            colorFilter = ColorFilter.tint(if (theme.isDark) Color(0xFFEF4444) else Color(0xFFDC2626)),
         )
     }
 }
@@ -298,16 +296,15 @@ private fun SavedCardRemoveConfirm(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 15.dp, bottomEnd = 15.dp))
-            .background(theme.errorBorder.copy(alpha = 0.08f))
-            .padding(start = 13.dp, end = 13.dp, top = 4.dp, bottom = 14.dp),
+            .clip(RoundedCornerShape(bottomStart = theme.rowRadius, bottomEnd = theme.rowRadius))
+            .background(theme.dangerTint)
+            .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 16.dp),
     ) {
         SheetText(
             Strings.text("sheet.removeCardConfirm", locale),
             theme = theme,
-            fontSize = 15f,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = (-0.01).sp,
+            fontSize = 16f,
+            fontWeight = FontWeight.SemiBold,
         )
         Row(
             modifier = Modifier
@@ -318,9 +315,8 @@ private fun SavedCardRemoveConfirm(
             ConfirmPill(
                 theme = theme,
                 title = Strings.text("sheet.remove", locale),
-                background = theme.errorText,
+                background = theme.errorBadge,
                 contentColor = Color.White,
-                fontWeight = FontWeight.Bold,
                 enabled = enabled,
                 modifier = Modifier.weight(1f),
                 onClick = onRemove,
@@ -328,9 +324,8 @@ private fun SavedCardRemoveConfirm(
             ConfirmPill(
                 theme = theme,
                 title = Strings.text("sheet.keepIt", locale),
-                background = theme.primaryText.copy(alpha = 0.06f),
-                contentColor = theme.primaryText,
-                fontWeight = FontWeight.SemiBold,
+                background = theme.primaryText,
+                contentColor = theme.inverseText,
                 enabled = enabled,
                 modifier = Modifier.weight(1f),
                 onClick = onKeep,
@@ -345,15 +340,14 @@ private fun ConfirmPill(
     title: String,
     background: Color,
     contentColor: Color,
-    fontWeight: FontWeight,
     enabled: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     Box(
         modifier = modifier
-            .height(46.dp)
-            .clip(RoundedCornerShape(9999.dp))
+            .height(48.dp)
+            .clip(RoundedCornerShape(theme.buttonRadius(48.dp)))
             .background(background)
             .pressScaleClickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -362,9 +356,8 @@ private fun ConfirmPill(
             title,
             theme = theme,
             color = contentColor,
-            fontSize = 14.5f,
-            fontWeight = fontWeight,
-            letterSpacing = (-0.01).sp,
+            fontSize = 14f,
+            fontWeight = FontWeight.SemiBold,
         )
     }
 }
@@ -375,31 +368,24 @@ internal fun UseOtherCardRow(
     locale: String,
     selected: Boolean,
     enabled: Boolean,
-    showTopBorder: Boolean,
-    horizontalContentPadding: Dp = PaymentRowContentPadding,
     onClick: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        if (showTopBorder) {
-            Divider(color = theme.footerBorder, thickness = 1.dp)
-        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(15.dp))
+                .heightIn(min = SavedCardRowHeight)
+                .clip(RoundedCornerShape(theme.rowRadius))
                 .pressScaleClickable(enabled = enabled, onClick = onClick)
-                .padding(
-                    horizontal = horizontalContentPadding,
-                    vertical = PaymentRowContentPadding,
-                ),
+                .padding(PaymentRowContentPadding),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(13.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Box(
                 modifier = Modifier
-                    .width(44.dp)
-                    .height(32.dp)
-                    .clip(RoundedCornerShape(9.dp))
+                    .width(48.dp)
+                    .height(34.dp)
+                    .clip(RoundedCornerShape(theme.brandTileRadius))
                     .background(theme.accentIconBackground),
                 contentAlignment = Alignment.Center,
             ) {
@@ -407,44 +393,43 @@ internal fun UseOtherCardRow(
                     painter = painterResource(R.drawable.xmoney_ic_plus),
                     contentDescription = null,
                     modifier = Modifier.size(14.dp),
-                    colorFilter = ColorFilter.tint(theme.primary),
+                    colorFilter = ColorFilter.tint(theme.iconBrand),
                 )
             }
             if (selected) {
                 Column(modifier = Modifier.weight(1f)) {
                     SheetText(
-                        Strings.text("sheet.useOtherCard", locale),
+                        Strings.text("sheet.useAnotherCard", locale),
                         theme = theme,
                         color = theme.primaryText,
                         fontSize = 16f,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = (-0.01).sp,
-                        lineHeight = 20f,
+                        letterSpacing = SheetTracking,
+                        lineHeight = 24f,
                     )
                     SheetText(
                         Strings.text("sheet.visaOrMastercard", locale),
                         theme = theme,
-                        color = theme.primaryText.copy(alpha = SecondaryMetaAlpha),
-                        fontSize = 13f,
+                        color = theme.metaText,
+                        fontSize = 14f,
                         fontWeight = FontWeight.Medium,
-                        lineHeight = 18f,
+                        lineHeight = 16f,
                     )
                 }
-                SelectedCheckmark(theme)
+                RadioDot(theme, selected = true)
             } else {
                 SheetText(
-                    Strings.text("sheet.useOtherCard", locale),
+                    Strings.text("sheet.useAnotherCard", locale),
                     theme = theme,
-                    color = theme.primary,
+                    color = theme.textBrand,
                     fontSize = 16f,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = (-0.01).sp,
+                    letterSpacing = SheetTracking,
                     modifier = Modifier.weight(1f),
                 )
                 VisaMastercardMarks(
                     theme = theme,
                     size = CardBrandIconSize.UseOtherCardPair,
-                    modifier = Modifier.padding(start = 4.dp),
                 )
             }
         }
@@ -452,26 +437,64 @@ internal fun UseOtherCardRow(
 }
 
 @Composable
-internal fun SelectedCheckmark(theme: CheckoutTheme) {
+internal fun PayWithCardChip(theme: CheckoutTheme) {
+    val shape = RoundedCornerShape(theme.brandTileRadius)
     Box(
         modifier = Modifier
-            .size(21.dp)
-            .clip(CircleShape)
-            .background(theme.primary),
+            .width(48.dp)
+            .height(34.dp)
+            .then(
+                if (theme.isDarkSurface) {
+                    Modifier
+                } else {
+                    Modifier.shadow(
+                        elevation = 1.dp,
+                        shape = shape,
+                        clip = false,
+                        ambientColor = PayWithCardChipShadow,
+                        spotColor = PayWithCardChipShadow,
+                    )
+                },
+            )
+            .clip(shape)
+            .background(theme.accentIconBackground),
         contentAlignment = Alignment.Center,
     ) {
         Image(
-            painter = painterResource(R.drawable.xmoney_ic_check),
+            painter = painterResource(R.drawable.xmoney_ic_card_generic),
             contentDescription = null,
-            modifier = Modifier
-                .width(12.dp)
-                .height(9.dp),
-            colorFilter = ColorFilter.tint(contrastingOn(theme.primary)),
+            modifier = Modifier.size(24.dp),
+            colorFilter = ColorFilter.tint(theme.iconBrand),
         )
     }
 }
 
-/** White check on a light primary (e.g. Pulse lime) is invisible; pick ink from luminance. */
-private fun contrastingOn(background: Color): Color =
-    if (background.luminance() > 0.4f) Color.Black else Color.White
+@Composable
+internal fun RadioDot(theme: CheckoutTheme, selected: Boolean) {
+    val stroke = if (selected) theme.primary else theme.radioIdle
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .border(2.dp, stroke, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .size(14.dp)
+                    .clip(CircleShape)
+                    .background(theme.primary),
+            )
+        }
+    }
+}
+
+@Composable
+internal fun SelectedCheckmark(theme: CheckoutTheme) {
+    RadioDot(theme, selected = true)
+}
+
+/** Figma chip shadow is 0 1 1 at 4% ink. A 1dp elevation fades an opaque color to about that. */
+private val PayWithCardChipShadow = Color(0xFF16141A)
+
 

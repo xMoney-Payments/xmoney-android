@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.annotation.RestrictTo
 import androidx.fragment.app.FragmentActivity
 import com.xmoney.payments.config.PaymentConfig
+import com.xmoney.payments.customerdetails.CustomerDetailsInput
 import com.xmoney.payments.model.CardHolderVerificationResult
 import com.xmoney.payments.model.CardInput
 import com.xmoney.payments.model.PaymentError
@@ -138,11 +139,25 @@ class PaymentSession(
     ): DigitalWalletAuthorizing? =
         DigitalWalletFactory.makeGooglePay?.invoke(candidate.engine, presenter, activity)
 
-    suspend fun submitNewCard(input: CardInput, presenter: ThreeDSPresenter): EngineResult =
-        submit(didAuthorize = true) { engine.submitNewCard(input, presenter) }
+    suspend fun submitNewCard(
+        input: CardInput,
+        presenter: ThreeDSPresenter,
+        customerDetails: CustomerDetailsInput? = null,
+    ): EngineResult =
+        submit(didAuthorize = true) { engine.submitNewCard(input, presenter, customerDetails) }
 
-    suspend fun submitSavedCard(cardId: String, presenter: ThreeDSPresenter): EngineResult =
-        submit(didAuthorize = true) { engine.submitSavedCard(cardId, presenter) }
+    suspend fun submitSavedCard(
+        cardId: String,
+        presenter: ThreeDSPresenter,
+        customerDetails: CustomerDetailsInput? = null,
+    ): EngineResult =
+        submit(didAuthorize = true) { engine.submitSavedCard(cardId, presenter, customerDetails) }
+
+    suspend fun submitCrypto(
+        presenter: ThreeDSPresenter,
+        customerDetails: CustomerDetailsInput? = null,
+    ): EngineResult =
+        submit(didAuthorize = true) { engine.submitCrypto(presenter, customerDetails) }
 
     /** Reports the result of a payment whose screen was destroyed, instead of taking a second payment. */
     suspend fun recover(pending: PendingPayment): EngineResult {

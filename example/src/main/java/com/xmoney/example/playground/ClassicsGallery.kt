@@ -9,115 +9,88 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.xmoney.example.theme.ExampleColors
-import com.xmoney.example.theme.ExampleRadii
+
+private const val FieldOverWhite = 0.18f
 
 @Composable
-fun ClassicsGallery(
+fun PlaygroundPresetSwatches(
     selectedPresetId: String?,
     onPresetSelected: (DemoAppearancePreset) -> Unit,
-    onCustomize: (() -> Unit)? = null,
-    showDescriptions: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Presets",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            if (onCustomize != null) {
-                TextButton(onClick = onCustomize) {
-                    Text("Customize…")
+        DemoAppearancePresets.all.forEach { preset ->
+            val selected = selectedPresetId == preset.id
+            val brand = preset.appearance.brandColor?.light?.let { Color(it) } ?: ExampleColors.Purple
+            val field = preset.appearance.backgroundColor?.light?.let { Color(it) }
+                ?: brand.mixedOverWhite(FieldOverWhite)
+            Column(
+                modifier = Modifier
+                    .width(76.dp)
+                    .clickable { onPresetSelected(preset) }
+                    .padding(vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .border(
+                            width = if (selected) 2.5.dp else 1.dp,
+                            color = if (selected) ExampleColors.Purple else MaterialTheme.colorScheme.outline,
+                            shape = CircleShape,
+                        ),
+                ) {
+                    Box(Modifier.matchParentSize().background(field))
+                    Box(
+                        Modifier
+                            .align(Alignment.Center)
+                            .offset(x = 8.dp, y = 9.dp)
+                            .size(27.dp)
+                            .clip(CircleShape)
+                            .background(brand),
+                    )
                 }
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            DemoAppearancePresets.all.forEach { preset ->
-                ClassicDesignChip(
-                    preset = preset,
-                    selected = selectedPresetId == preset.id,
-                    showDescription = showDescriptions,
-                    onClick = { onPresetSelected(preset) },
+                Text(
+                    text = preset.label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
                 )
             }
         }
     }
 }
 
-@Composable
-private fun ClassicDesignChip(
-    preset: DemoAppearancePreset,
-    selected: Boolean,
-    showDescription: Boolean,
-    onClick: () -> Unit,
-) {
-    val shape = RoundedCornerShape(ExampleRadii.inner)
-    val borderColor = if (selected) ExampleColors.Purple else MaterialTheme.colorScheme.outline
-    val borderWidth = if (selected) 2.dp else 1.dp
-    val accent = parseDemoHexColor(preset.swatches.firstOrNull() ?: "#7C4DFF") ?: Color.Gray
-
-    Column(
-        modifier = Modifier
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surface)
-            .border(borderWidth, borderColor, shape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(14.dp)
-                    .clip(CircleShape)
-                    .background(accent)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
-            )
-            Text(
-                text = preset.label,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-        if (showDescription) {
-            Text(
-                text = preset.description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-            )
-        }
-    }
+private fun Color.mixedOverWhite(weight: Float): Color {
+    val t = weight.coerceIn(0f, 1f)
+    return Color(
+        red = red * t + (1f - t),
+        green = green * t + (1f - t),
+        blue = blue * t + (1f - t),
+        alpha = 1f,
+    )
 }

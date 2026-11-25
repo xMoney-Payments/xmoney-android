@@ -32,6 +32,10 @@ Issues in merchant apps, backends, or non-SDK xMoney products are out of scope h
 - Use sandbox keys during development.
 - Do not log PAN or CVV. The SDK does not; report any suspected leakage of card data immediately.
 
+## Shopper details in saved state
+
+Name, email, phone, and address typed into the personal-details form are kept in the host Activity's saved instance state so a rotation or process death does not wipe them. Card number and CVC are not saved. The saved state is handed to the Android system with the rest of the Activity state.
+
 ## Card data (reality)
 
 Native card entry collects PAN + CVV in memory and sends them over HTTPS to xMoney’s PCI DSS Level 1 backends (`secure*.xmoney.com` for payment; `api-*-next.xmoney.com` for optional account validation).

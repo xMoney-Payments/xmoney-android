@@ -12,48 +12,48 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.Text
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.xmoney.payments.config.ResolvedPaymentConfig
+import com.xmoney.payments.customerdetails.CustomerDetailsInput
 import com.xmoney.payments.config.Strings
 import com.xmoney.payments.engine.SheetState
 import com.xmoney.payments.model.CardInput
 import com.xmoney.payments.model.SavedCard
+import com.xmoney.paymentelement.R
 import com.xmoney.paymentelement.theme.CheckoutTheme
 import com.xmoney.paymentelement.ui.PaymentForm
+import com.xmoney.paymentelement.ui.PersonalDetailsPageHeader
 import com.xmoney.paymentelement.ui.UIHelpers
+import com.xmoney.paymentelement.ui.rememberIncreasedContrast
 
 @Composable
 internal fun PaymentSheetContent(
     config: ResolvedPaymentConfig,
     state: SheetState,
     isProcessing: Boolean,
-    onPayCard: (CardInput) -> Unit,
-    onSelectSaved: (SavedCard) -> Unit,
+    awaitingCancelCheck: Boolean = false,
+    onPayCard: (CardInput, CustomerDetailsInput?) -> Unit,
+    onSelectSaved: (SavedCard, CustomerDetailsInput?) -> Unit,
+    onPayCrypto: (CustomerDetailsInput?) -> Unit,
     onDeleteSaved: suspend (SavedCard) -> Unit,
     onGooglePay: () -> Unit,
     onCancel: () -> Unit,
@@ -61,17 +61,32 @@ internal fun PaymentSheetContent(
     onSurfaceDrawn: () -> Unit = {},
 ) {
     val isDark = UIHelpers.isDarkMode(config, isSystemInDarkTheme())
-    val theme = remember(config, isDark) { CheckoutTheme.resolve(config, isDark) }
-    val nestedScrollInterop = rememberNestedScrollInteropConnection()
-    val maxSheetHeight = (LocalConfiguration.current.screenHeightDp * 0.9f).dp
-    val scrollState = rememberScrollState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val contentSizeScale = UIHelpers.contentSizeScale(context)
+    val increasedContrast = rememberIncreasedContrast()
+    val theme = remember(config, isDark, contentSizeScale, increasedContrast) {
+        CheckoutTheme.resolve(config, isDark, contentSizeScale, increasedContrast)
+    }
+    val maxSheetHeight = sheetMaxHeight(LocalConfiguration.current.screenHeightDp.dp)
+    val pageHeader: @Composable (onBack: () -> Unit, title: String) -> Unit = { onBack, title ->
+        SheetHandle(theme)
+        PersonalDetailsPageHeader(
+            theme = theme,
+            locale = config.options.locale,
+            enabled = !isProcessing,
+            title = title,
+            onBack = onBack,
+        )
+    }
 
     PaymentForm(
         config = config,
         state = state,
         isProcessing = isProcessing,
+        awaitingCancelCheck = awaitingCancelCheck,
         onPayCard = onPayCard,
         onSelectSaved = onSelectSaved,
+        onPayCrypto = onPayCrypto,
         onDeleteSaved = onDeleteSaved,
         onGooglePay = onGooglePay,
         surfaceEpoch = surfaceEpoch,
@@ -79,10 +94,8 @@ internal fun PaymentSheetContent(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(max = maxSheetHeight)
-            .nestedScroll(nestedScrollInterop)
-            .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
-            .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
-            .verticalScroll(scrollState),
+            .windowInsetsPadding(WindowInsets.ime)
+            .clip(RoundedCornerShape(topStart = theme.sheetCornerRadius, topEnd = theme.sheetCornerRadius)),
         header = {
             SheetHandle(theme)
             SheetHeader(
@@ -92,6 +105,8 @@ internal fun PaymentSheetContent(
                 onCancel = onCancel,
             )
         },
+        personalDetailsHeader = pageHeader,
+        savedCardsEditHeader = pageHeader,
     )
 }
 
@@ -100,7 +115,7 @@ private fun SheetHandle(theme: CheckoutTheme) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 10.dp, bottom = 2.dp),
+            .padding(top = 8.dp, bottom = 2.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -124,14 +139,12 @@ private fun SheetHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 6.dp),
+            .padding(start = 8.dp, top = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(theme.neutralChip)
+                .size(44.dp)
                 .clickable(enabled = enabled) { onCancel() }
                 .semantics {
                     contentDescription = closeLabel
@@ -139,15 +152,19 @@ private fun SheetHeader(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = "✕",
-                color = theme.primaryText,
-                fontSize = theme.scaledSp(14f),
-                fontWeight = FontWeight.Normal,
-                fontFamily = theme.fontFamily,
-                modifier = Modifier.clearAndSetSemantics { },
+            Image(
+                painter = painterResource(R.drawable.xmoney_ic_close),
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                colorFilter = ColorFilter.tint(theme.sheetChromeText),
             )
         }
         Spacer(Modifier.weight(1f))
     }
 }
+
+/** Sheet cap: 95% of the screen. Content shorter than this is not clamped. */
+internal fun sheetMaxHeight(screenHeight: Dp): Dp = screenHeight * 0.95f
+
+internal fun sheetHeight(content: Dp, screenHeight: Dp): Dp =
+    content.coerceAtMost(sheetMaxHeight(screenHeight)).coerceAtLeast(0.dp)

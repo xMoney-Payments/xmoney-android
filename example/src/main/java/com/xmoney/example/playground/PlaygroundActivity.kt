@@ -30,12 +30,8 @@ class PlaygroundActivity : FragmentActivity() {
                         onCustomizeAppearance = { route = PlaygroundRoute.Appearance },
                     )
                     PlaygroundRoute.Appearance -> AppearancePlaygroundScreen(
-                        initialState = appearanceState,
+                        state = appearanceState,
                         onBack = { route = PlaygroundRoute.Checkout },
-                        onApply = { draft ->
-                            appearanceState.copyFrom(draft)
-                            route = PlaygroundRoute.Checkout
-                        },
                     )
                 }
             }
