@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+
 package com.xmoney.paymentelement.ui
 
 import androidx.compose.foundation.Image
@@ -163,7 +165,11 @@ internal fun CardForm(
         anyFocused -> theme.focusRing
         else -> Color.Transparent
     }
-    val borderWidth = if (hasVisibleError || anyFocused) theme.fieldStrokeWidth(hasVisibleError) else 0.dp
+    val borderWidth = when {
+        hasVisibleError -> theme.fieldStrokeWidth(hasError = true)
+        anyFocused -> theme.fieldStrokeWidth(hasError = false, focused = true)
+        else -> 0.dp
+    }
     val holderIsLast = showHolderName && !holderFirst
     val spacedInputs = config.card.inputs.isSpaced
     val locale = config.options.locale
@@ -176,7 +182,7 @@ internal fun CardForm(
         }
 
     fun fieldBorderWidth(field: CardField): Dp =
-        theme.fieldStrokeWidth(shouldShowError(field))
+        theme.fieldStrokeWidth(shouldShowError(field), focused = focused[field] == true)
 
     fun fieldErrorMessage(field: CardField): String? {
         if (!shouldShowError(field)) return null

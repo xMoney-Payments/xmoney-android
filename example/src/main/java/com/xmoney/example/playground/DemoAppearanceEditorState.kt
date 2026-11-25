@@ -17,13 +17,13 @@ class DemoAppearanceEditorState {
         get() = listOf(
             selectedPresetId,
             style,
-            appearance.fontFamily.orEmpty(),
+            appearance.typography.fontFamily.orEmpty(),
             appearance.brandColor?.light?.toString().orEmpty(),
             appearance.backgroundColor?.light?.toString().orEmpty(),
             appearance.neutralTint?.light?.toString().orEmpty(),
             appearance.accentColor?.light?.toString().orEmpty(),
-            appearance.corners.scale.toString(),
-            appearance.pillButtons.toString(),
+            appearance.shape.corners.scale.toString(),
+            appearance.shape.pillButtons.toString(),
         ).joinToString("|")
 
     fun applyPreset(preset: DemoAppearancePreset) {
@@ -46,15 +46,15 @@ class DemoAppearanceEditorState {
     }
 
     fun updateCorners(corners: Corners) {
-        appearance = appearance.copy(corners = corners)
+        appearance = appearance.copy(shape = appearance.shape.copy(corners = corners))
     }
 
     fun updatePillButtons(enabled: Boolean) {
-        appearance = appearance.copy(pillButtons = enabled)
+        appearance = appearance.copy(shape = appearance.shape.copy(pillButtons = enabled))
     }
 
     fun updateFont(family: String) {
-        appearance = appearance.copy(fontFamily = family.ifBlank { null })
+        appearance = appearance.copy(typography = appearance.typography.copy(fontFamily = family.ifBlank { null }))
     }
 
     fun toAppearance(): Appearance =

@@ -38,6 +38,7 @@ internal object ThemeDerivation {
         contentSizeScale: Float = 1f,
         increasedContrast: Boolean = false,
     ): CheckoutTheme {
+        // Order: surfaces, derived roles, exact overrides, then shape (typography, borders, shape).
         val brand = appearance.brandColor?.srgb(isDark) ?: Defaults.brand
         val accent = appearance.accentColor?.srgb(isDark) ?: brand
         val customBrand = appearance.brandColor != null
@@ -54,48 +55,50 @@ internal object ThemeDerivation {
             Defaults.lightSheet
         }
         val customSurface = appearance.backgroundColor != null || tint != null
-        val card = appearance.overrides.componentColor?.srgb(isDark)
-            ?: if (customSurface) {
-                if (isDark) {
-                    if (lifted) tint!!.mixed(backdrop!!, ThemeConstants.cardOverBackdropDark)
-                    else (tint ?: Defaults.darkGray).mixed(sheet, ThemeConstants.cardOverSheetDark)
-                } else SrgbColor.WHITE.mixed(sheet, ThemeConstants.cardOverSheetLight)
-            } else if (isDark) Defaults.darkCard else Defaults.lightCard
+        val derivedCard = if (customSurface) {
+            if (isDark) {
+                if (lifted) tint!!.mixed(backdrop!!, ThemeConstants.cardOverBackdropDark)
+                else (tint ?: Defaults.darkGray).mixed(sheet, ThemeConstants.cardOverSheetDark)
+            } else SrgbColor.WHITE.mixed(sheet, ThemeConstants.cardOverSheetLight)
+        } else if (isDark) Defaults.darkCard else Defaults.lightCard
+        val card = exact(appearance.overrides.componentColor?.srgb(isDark), derivedCard)
         val cardIsDark = card.relativeLuminance <= 0.5
         val sheetIsDark = sheet.relativeLuminance < 0.5
         val cardNeedsOwnInk = appearance.overrides.textColor == null &&
             (appearance.overrides.componentColor != null || cardIsDark != sheetIsDark)
         val toneDark = if (cardNeedsOwnInk) cardIsDark else isDark
         fun gray(forDark: Boolean) = tint ?: if (forDark) Defaults.darkGray else Defaults.lightGray
-        val selected = appearance.overrides.selectedColor?.srgb(isDark)
-            ?: if (customSurface) {
-                if (toneDark) {
-                    if (lifted) tint!!.mixed(backdrop!!, ThemeConstants.selectedOverBackdropDark)
-                    else gray(true).mixed(sheet, ThemeConstants.selectedOverSheetDark)
-                }
-                else gray(false).mixed(card, ThemeConstants.selectedOverCardLight)
-            } else if (toneDark) Defaults.darkSelected else if (customBrand) sheet else Defaults.lightSelected
-        val preferredSheet = appearance.overrides.textColor?.srgb(isDark)
-            ?: if (customSurface) bestInk(sheet) else if (isDark) Defaults.darkText else Defaults.lightText
-        val sheetText = if (preferredSheet.contrast(sheet) >= 4.5) preferredSheet else bestInk(sheet)
+        val derivedSelected = if (customSurface) {
+            if (toneDark) {
+                if (lifted) tint!!.mixed(backdrop!!, ThemeConstants.selectedOverBackdropDark)
+                else gray(true).mixed(sheet, ThemeConstants.selectedOverSheetDark)
+            } else gray(false).mixed(card, ThemeConstants.selectedOverCardLight)
+        } else if (toneDark) Defaults.darkSelected else if (customBrand) sheet else Defaults.lightSelected
+        val selected = exact(appearance.overrides.selectedColor?.srgb(isDark), derivedSelected)
+        val sentText = appearance.overrides.textColor?.srgb(isDark)
+        val derivedSheet = if (customSurface) bestInk(sheet) else if (isDark) Defaults.darkText else Defaults.lightText
+        val readableSheet = if (derivedSheet.contrast(sheet) >= 4.5) derivedSheet else bestInk(sheet)
+        val sheetText = exact(sentText, readableSheet)
         val primaryText = if (cardNeedsOwnInk) bestInk(card) else sheetText
-        warn("textColor", appearance.overrides.textColor?.srgb(isDark), listOf(sheet, card), 4.5)
+        warn("textColor", sentText, listOf(sheet, card), 4.5)
         val cardGray = gray(toneDark)
         val sheetGray = gray(sheetIsDark)
         fun target(value: Double) = if (increasedContrast) 7.0 else value
+        fun increasedDefault(color: SrgbColor, surface: SrgbColor): SrgbColor =
+            if (increasedContrast) color.withContrast(4.6, surface) else color
         val secondary = if (customSurface) cardGray.withContrast(target(if (toneDark) 6.41 else 7.0), selected)
-            else if (toneDark) Defaults.darkSecondary else Defaults.lightSecondary
+            else increasedDefault(if (toneDark) Defaults.darkSecondary else Defaults.lightSecondary, selected)
         val tertiary = if (customSurface) cardGray.withContrast(target(5.5), card)
             else if (toneDark) Defaults.darkTertiary else Defaults.lightTertiary
         val muted = if (customSurface) cardGray.withContrast(target(4.5), card)
             else if (toneDark) Defaults.darkMuted else Defaults.lightMuted
         val placeholder = if (customSurface) cardGray.withContrast(target(3.0), card)
-            else if (toneDark) Defaults.darkPlaceholder else Defaults.lightPlaceholder
+            else increasedDefault(if (toneDark) Defaults.darkPlaceholder else Defaults.lightPlaceholder, card)
         val powered = if (customSurface) sheetGray.withContrast(target(3.0), sheet)
-            else if (sheetIsDark) Defaults.darkPowered else Defaults.lightPowered
+            else increasedDefault(if (sheetIsDark) Defaults.darkPowered else Defaults.lightPowered, sheet)
         val orLabel = if (customSurface) sheetGray.withContrast(target(4.5), sheet)
-            else if (sheetIsDark) Defaults.darkTertiary else Defaults.lightTertiary
-        val onBrand = appearance.overrides.onBrandColor?.srgb(isDark) ?: bestLabel(brand)
+            else increasedDefault(if (sheetIsDark) Defaults.darkTertiary else Defaults.lightTertiary, sheet)
+        val onBrand = exact(appearance.overrides.onBrandColor?.srgb(isDark), bestLabel(brand))
         warn("onBrandColor", appearance.overrides.onBrandColor?.srgb(isDark), listOf(brand), 4.5)
         val linkSource = appearance.accentColor ?: appearance.brandColor
         val hasDistinctDark = linkSource != null && linkSource.light != linkSource.dark
@@ -104,18 +107,19 @@ internal object ThemeDerivation {
         } else {
             accent
         }
-        val linkBase = appearance.overrides.linkColor?.srgb(isDark)
-            ?: if (customBrand || appearance.accentColor != null) paintedAccent
+        val derivedLink = if (customBrand || appearance.accentColor != null) paintedAccent
             else if (if (cardNeedsOwnInk) cardIsDark else isDark) Defaults.darkLink else Defaults.lightLink
+        val linkBase = exact(appearance.overrides.linkColor?.srgb(isDark), derivedLink)
         val link = if (appearance.overrides.linkColor == null &&
             appearance.accentColor == null && appearance.brandColor == null && cardNeedsOwnInk
         ) {
             linkBase.withContrast(4.5, card)
         } else linkBase
         warn("linkColor", appearance.overrides.linkColor?.srgb(isDark), listOf(sheet, card), 4.5)
-        val border = appearance.overrides.borderColor?.srgb(isDark)
-            ?: if (customSurface) (tint ?: cardGray).withAlpha(if (toneDark) ThemeConstants.borderAlphaDark else ThemeConstants.borderAlphaLight)
-            else if (toneDark) Defaults.darkBorder else Defaults.lightBorder
+        val derivedBorder = if (customSurface) {
+            (tint ?: cardGray).withAlpha(if (toneDark) ThemeConstants.borderAlphaDark else ThemeConstants.borderAlphaLight)
+        } else if (toneDark) Defaults.darkBorder else Defaults.lightBorder
+        val border = exact(appearance.overrides.borderColor?.srgb(isDark), derivedBorder)
         appearance.overrides.borderColor?.srgb(isDark)?.let { sent ->
             if (sent.alpha > 0.01 &&
                 sent.contrast(sheet, sheet) < 3 &&
@@ -136,9 +140,9 @@ internal object ThemeDerivation {
         val pressed = brand.mixed(onBrand, 1 - ThemeConstants.pressedTowardLabel)
         val disabledFill = brand.withAlpha(ThemeConstants.disabledFillAlpha).composited(sheet)
         val disabledText = onBrand.withContrast(4.5, disabledFill)
-        val secondaryFill = appearance.overrides.secondaryButtonColor?.srgb(isDark)
-            ?: if (toneDark) brand.withAlpha(ThemeConstants.secondaryOverCardDark).composited(card)
+        val derivedSecondary = if (toneDark) brand.withAlpha(ThemeConstants.secondaryOverCardDark).composited(card)
             else brand.mixed(sheet, ThemeConstants.secondaryOverSheetLight)
+        val secondaryFill = exact(appearance.overrides.secondaryButtonColor?.srgb(isDark), derivedSecondary)
         val secondaryLabel = link.withContrast(4.5, secondaryFill)
         val subtle = if (customBrand) {
             if (toneDark) brand.mixed(SrgbColor.BLACK, 0.28) else brand.mixed(SrgbColor.WHITE, ThemeConstants.lightIconChipBrand)
@@ -170,10 +174,10 @@ internal object ThemeDerivation {
             icon = ui(placeholder),
             error = ui(error),
             borderRadius = radii.field,
-            borderWidth = 1.dp,
+            borderWidth = appearance.borders.width.coerceIn(0.0, 4.0).dp,
             fontScale = scale,
-            fontFamily = CheckoutTheme.resolveFontFamily(appearance.fontFamily),
-            primaryButtonFontFamily = CheckoutTheme.resolveFontFamily(appearance.fontFamily),
+            fontFamily = CheckoutTheme.resolveFontFamily(appearance.typography.fontFamily),
+            primaryButtonFontFamily = CheckoutTheme.resolveFontFamily(appearance.typography.fontFamily),
             primaryButtonBackground = ui(brand),
             primaryButtonText = ui(onBrand),
             primaryButtonBorder = ui(brand),
@@ -245,6 +249,9 @@ internal object ThemeDerivation {
     private fun uncheckedRing(accent: SrgbColor, isDark: Boolean): SrgbColor =
         if (isDark) accent.mixed(SrgbColor.WHITE, 0.72).withAlpha(0.63) else accent.withAlpha(0.80)
 
+    /** A set override is painted as sent. The derived color is used only when the override is nil. */
+    private fun exact(sent: SrgbColor?, fallback: SrgbColor): SrgbColor = sent ?: fallback
+
     private fun warn(name: String, color: SrgbColor?, surfaces: List<SrgbColor>, minimum: Double) {
         color ?: return
         if (color.alpha < 0.99) AppearanceLog.warn("$name is transparent")
@@ -270,14 +277,14 @@ internal object ThemeDerivation {
     )
 
     private fun radii(appearance: Appearance): Radii {
-        val scale = appearance.corners.scale
+        val scale = appearance.shape.corners.scale
         val control = interpolate(0.0, 12.0, 24.0, scale)
         val field = interpolate(0.0, 16.0, 24.0, scale)
         val container = interpolate(0.0, 24.0, 32.0, scale)
         val sheet = 32.0
         val checkbox = interpolate(0.0, 8.0, 12.0, scale)
         val row = if (container >= 16) maxOf(8.0, minOf(field, container - 8)) else minOf(control, container)
-        val button = if (appearance.pillButtons) CheckoutTheme.DefaultPrimaryButtonRadius.toDouble() else control
+        val button = if (appearance.shape.pillButtons) CheckoutTheme.DefaultPrimaryButtonRadius.toDouble() else control
         return Radii(button.dp, field.dp, row.dp, container.dp, sheet.dp, checkbox.dp, control.dp)
     }
 

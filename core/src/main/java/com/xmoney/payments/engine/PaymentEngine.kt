@@ -2,9 +2,10 @@ package com.xmoney.payments.engine
 
 import com.xmoney.payments.config.PaymentEnvironment
 import com.xmoney.payments.config.ResolvedPaymentConfig
-import com.xmoney.payments.customerdetails.AddressFormats
+import com.xmoney.payments.customerdetails.CustomerDetails
 import com.xmoney.payments.customerdetails.CustomerDetailsInput
 import com.xmoney.payments.customerdetails.CustomerDetailsResolver
+import com.xmoney.payments.customerdetails.CustomerDetailsValidator
 import com.xmoney.payments.customerdetails.CustomerDetailsVisibility
 import com.xmoney.payments.model.CardHolderVerificationResult
 import com.xmoney.payments.model.CardInput
@@ -152,6 +153,7 @@ class PaymentEngine(
     }
 
     private suspend fun customerDetailFields(sessionToken: String): InlineFieldsResult {
+        if (!config.customerDetails.anyEnabled) return InlineFieldsResult(emptyList(), unavailable = false)
         val override = config.customerDetails.fields
         if (override != null) {
             val fields = CustomerDetailsResolver.inlineCheckoutFields(override)
@@ -163,28 +165,20 @@ class PaymentEngine(
             }
             return InlineFieldsResult(fields, unavailable = false)
         }
-        if (!config.customerDetails.anyEnabled) return InlineFieldsResult(emptyList(), unavailable = false)
         return inlineFields.getFields(sessionToken)
     }
 
-    private fun requireCustomerDetails(details: Map<String, String>?) {
+    private fun requireCustomerDetails(input: CustomerDetailsInput?) {
         if (!config.customerDetails.card || !customerDetailsVisibility.isActive) return
-        val payload = details ?: throw PaymentError.InvalidCustomerDetails()
-        fun filled(vararg keys: String) = keys.any { !payload[it].isNullOrBlank() }
-        val visibility = customerDetailsVisibility
-        // The form submits the wire map (firstName, zipCode, region folded into address).
-        // An internal map uses fullName, region, and postalCode. Accept either shape.
-        if (visibility.showFullName && !filled("fullName", "firstName")) throw PaymentError.InvalidCustomerDetails()
-        if (visibility.showEmail && !filled("email")) throw PaymentError.InvalidCustomerDetails()
-        if (visibility.showPhone && !filled("phone")) throw PaymentError.InvalidCustomerDetails()
-        if (visibility.showAddressSection) {
-            if (!filled("country") || !filled("address") || !filled("city")) throw PaymentError.InvalidCustomerDetails()
-            val format = AddressFormats.forCountry(payload["country"])
-            val wire = filled("firstName", "lastName", "zipCode") ||
-                (!payload.containsKey("fullName") && !payload.containsKey("postalCode") && !payload.containsKey("region"))
-            if (format.showPostal && !filled("postalCode", "zipCode")) throw PaymentError.InvalidCustomerDetails()
-            if (format.showRegion && !wire && !filled("region")) throw PaymentError.InvalidCustomerDetails()
+        val details = input ?: throw PaymentError.InvalidCustomerDetails()
+        if (!CustomerDetailsValidator.isValid(details, customerDetailsVisibility)) {
+            throw PaymentError.InvalidCustomerDetails()
         }
+    }
+
+    private fun wireCustomerDetails(input: CustomerDetailsInput?): Map<String, String>? {
+        if (input == null || !config.customerDetails.card || !customerDetailsVisibility.isActive) return null
+        return CustomerDetails.apiPayloadFromForm(input, customerDetailsVisibility)
     }
 
     suspend fun refreshSavedCards(): List<SavedCard> =
@@ -193,9 +187,10 @@ class PaymentEngine(
     suspend fun submitNewCard(
         card: CardInput,
         presenter: ThreeDSPresenter,
-        customerDetails: Map<String, String>? = null,
+        customerDetails: CustomerDetailsInput? = null,
     ): EngineResult {
         requireCustomerDetails(customerDetails)
+        val wireDetails = wireCustomerDetails(customerDetails)
         val verification = config.card.cardHolderVerification
         if (verification != null) {
             if (!nameCheckValidationEnabled) {
@@ -219,17 +214,22 @@ class PaymentEngine(
                 )
             }
         }
-        val fields = payment.cardFields(card, config.orderPayload, config.orderChecksum, customerDetails)
+        val fields = payment.cardFields(card, config.orderPayload, config.orderChecksum, wireDetails)
         return submit(fields, presenter)
     }
 
     suspend fun submitSavedCard(
         cardId: String,
         presenter: ThreeDSPresenter,
-        customerDetails: Map<String, String>? = null,
+        customerDetails: CustomerDetailsInput? = null,
     ): EngineResult {
         requireCustomerDetails(customerDetails)
-        val fields = payment.savedCardFields(cardId, config.orderPayload, config.orderChecksum, customerDetails)
+        val fields = payment.savedCardFields(
+            cardId,
+            config.orderPayload,
+            config.orderChecksum,
+            wireCustomerDetails(customerDetails),
+        )
         return submit(fields, presenter)
     }
 
@@ -245,10 +245,14 @@ class PaymentEngine(
 
     suspend fun submitCrypto(
         presenter: ThreeDSPresenter,
-        customerDetails: Map<String, String>? = null,
+        customerDetails: CustomerDetailsInput? = null,
     ): EngineResult {
         requireCustomerDetails(customerDetails)
-        val fields = payment.cryptoFields(config.orderPayload, config.orderChecksum, customerDetails)
+        val fields = payment.cryptoFields(
+            config.orderPayload,
+            config.orderChecksum,
+            wireCustomerDetails(customerDetails),
+        )
         return submit(fields, presenter)
     }
 

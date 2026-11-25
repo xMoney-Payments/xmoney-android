@@ -124,6 +124,9 @@ class PaymentService(
 
         if (requiresThreeDS) {
             if (challengeUrl != null) {
+                android.net.Uri.parse(challengeUrl).host?.let { host ->
+                    android.util.Log.i("xmoney-payment", "redirect host=$host")
+                }
                 val useRedirect = !checkoutThreeDS && challengeUrl == data.redirectUrl
                 val submission = if (useRedirect) {
                     PaymentSubmissionResult.Needs3DS(

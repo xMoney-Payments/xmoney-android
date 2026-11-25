@@ -55,10 +55,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.saveable.listSaver
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.SideEffect
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import kotlinx.coroutines.CancellationException
@@ -108,9 +105,9 @@ fun PaymentForm(
     config: ResolvedPaymentConfig,
     state: SheetState,
     isProcessing: Boolean,
-    onPayCard: (CardInput, Map<String, String>?) -> Unit,
-    onSelectSaved: (SavedCard, Map<String, String>?) -> Unit,
-    onPayCrypto: (Map<String, String>?) -> Unit = {},
+    onPayCard: (CardInput, CustomerDetailsInput?) -> Unit,
+    onSelectSaved: (SavedCard, CustomerDetailsInput?) -> Unit,
+    onPayCrypto: (CustomerDetailsInput?) -> Unit = {},
     onDeleteSaved: suspend (SavedCard) -> Unit = {},
     onGooglePay: () -> Unit,
     modifier: Modifier = Modifier,
@@ -127,7 +124,7 @@ fun PaymentForm(
     val context = androidx.compose.ui.platform.LocalContext.current
     val fontScale = androidx.compose.ui.platform.LocalConfiguration.current.fontScale
     val contentSizeScale = maxOf(fontScale, 1f)
-    val increasedContrast = UIHelpers.increasedContrast(context)
+    val increasedContrast = rememberIncreasedContrast()
     val theme = remember(config, isDark, contentSizeScale, increasedContrast) {
         CheckoutTheme.resolve(config, isDark, contentSizeScale, increasedContrast)
     }
@@ -152,25 +149,20 @@ fun PaymentForm(
     var cardFormValid by remember { mutableStateOf(false) }
     var showCardErrors by remember { mutableStateOf(false) }
     val needsDetails = config.customerDetails.card && state.customerDetailsVisibility.isActive
-    var savedInput by rememberSaveable(
-        state.customerDetailsVisibility,
-        stateSaver = CustomerDetailsInputSaver,
-    ) {
-        mutableStateOf(
-            if (config.customerDetails.card) state.customerDetailsDefaults else CustomerDetailsInput(),
-        )
-    }
-    var savedCompleted by rememberSaveable(state.customerDetailsVisibility) { mutableStateOf(false) }
-    val detailsState = remember(state.customerDetailsVisibility, config.card.validationMode) {
+    val detailsState = remember(config.card.validationMode) {
         PersonalDetailsFormState(state.customerDetailsVisibility, config.card.validationMode).apply {
-            restore(savedInput, savedCompleted)
+            val defaults = if (config.customerDetails.card) state.customerDetailsDefaults else CustomerDetailsInput()
+            adoptDefaults(defaults, state.customerDetailsVisibility)
         }
     }
-    SideEffect {
-        savedInput = detailsState.input
-        savedCompleted = detailsState.completed
+    LaunchedEffect(state.sessionToken, state.customerDetailsDefaults) {
+        val defaults = if (config.customerDetails.card) state.customerDetailsDefaults else CustomerDetailsInput()
+        detailsState.adoptDefaults(defaults, state.customerDetailsVisibility)
     }
-    var showingDetails by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(state.customerDetailsVisibility) {
+        detailsState.revalidate(state.customerDetailsVisibility)
+    }
+    var showingDetails by remember { mutableStateOf(false) }
     var detailsPicker by remember { mutableStateOf<DetailsPicker?>(null) }
     var detailsAttempted by remember { mutableStateOf(false) }
     var detailsScrollNonce by remember { mutableIntStateOf(0) }
@@ -261,16 +253,16 @@ fun PaymentForm(
             detailsScrollNonce += 1
         }
         if (selectedMethod == PaymentMethod.Crypto) {
-            if (detailsReady) onPayCrypto(detailsState.payload())
+            if (detailsReady) onPayCrypto(detailsState.completedInput())
             return@paySelected
         }
         val useNewCard = !hasSavedCards || selectedMethod == PaymentMethod.NewCard
         if (useNewCard) {
             if (!cardFormValid) showCardErrors = true
-            if (cardFormValid && detailsReady) onPayCard(cardInput, detailsState.payload())
+            if (cardFormValid && detailsReady) onPayCard(cardInput, detailsState.completedInput())
         } else if (detailsReady) {
             val saved = state.savedCards.firstOrNull { it.id == selectedSavedId }
-            if (saved != null) onSelectSaved(saved, detailsState.payload())
+            if (saved != null) onSelectSaved(saved, detailsState.completedInput())
         }
     }
     // Continue only saves the page and returns. Host confirm() saves a valid page and pays.
@@ -924,32 +916,3 @@ internal fun hostConfirmPays(detailsPageOpen: Boolean, detailsValid: Boolean): B
     if (!detailsPageOpen) return true
     return detailsValid
 }
-
-internal val CustomerDetailsInputSaver = listSaver<CustomerDetailsInput, String>(
-    save = {
-        listOf(
-            it.fullName,
-            it.email,
-            it.phoneCountry,
-            it.phoneNational,
-            it.country,
-            it.region,
-            it.address,
-            it.city,
-            it.postalCode,
-        )
-    },
-    restore = {
-        CustomerDetailsInput(
-            fullName = it[0],
-            email = it[1],
-            phoneCountry = it[2],
-            phoneNational = it[3],
-            country = it[4],
-            region = it[5],
-            address = it[6],
-            city = it[7],
-            postalCode = it[8],
-        )
-    },
-)

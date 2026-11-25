@@ -1,6 +1,7 @@
 package com.xmoney.paymentelement.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -33,7 +34,7 @@ class PaymentFormCustomerDetailsTest {
     @Test
     fun cardInputSurvivesThePersonalDetailsPageAndIsSubmitted() {
         var paid: CardInput? = null
-        var details: Map<String, String>? = null
+        var details: com.xmoney.payments.customerdetails.CustomerDetailsInput? = null
         compose.setContent {
             PaymentForm(
                 config = config(),
@@ -65,7 +66,7 @@ class PaymentFormCustomerDetailsTest {
         assertEquals("30", paid?.expiryYear)
         assertEquals("123", paid?.cvv)
         assertEquals("Jane Doe", paid?.holderName)
-        assertEquals("a@b.co", details?.get("email"))
+        assertEquals("a@b.co", details?.email)
     }
 
     @Test
@@ -111,6 +112,37 @@ class PaymentFormCustomerDetailsTest {
         assertEquals(0, compose.onAllNodesWithText("Contact info").fetchSemanticsNodes().size)
         compose.onNodeWithText("Pay").assertIsDisplayed()
         assertNull(paid)
+    }
+
+    @Test
+    fun untouchedDetailsFollowTheNextOrdersDefaults() {
+        val sheet = mutableStateOf(
+            sheetState().copy(customerDetailsDefaults = CustomerDetailsInput(email = "first@x.co")),
+        )
+        compose.setContent {
+            PaymentForm(
+                config = config(),
+                state = sheet.value,
+                isProcessing = false,
+                onPayCard = { _, _ -> },
+                onSelectSaved = { _, _ -> },
+                onGooglePay = {},
+            )
+        }
+
+        compose.onNodeWithText("Enter your personal details").performClick()
+        compose.onNodeWithText("first@x.co").assertIsDisplayed()
+        compose.activity.onBackPressedDispatcher.onBackPressed()
+        compose.waitForIdle()
+
+        sheet.value = sheetState().copy(
+            sessionToken = "token-2",
+            customerDetailsDefaults = CustomerDetailsInput(email = "second@x.co"),
+        )
+        compose.waitForIdle()
+        compose.onNodeWithText("Enter your personal details").performClick()
+        compose.onNodeWithText("second@x.co").assertIsDisplayed()
+        assertEquals(0, compose.onAllNodesWithText("first@x.co").fetchSemanticsNodes().size)
     }
 
     private fun config() = ResolvedPaymentConfig(

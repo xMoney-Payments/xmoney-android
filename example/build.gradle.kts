@@ -111,5 +111,5 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
-    debugImplementation(libs.compose.ui.test.manifest)
+    testImplementation(libs.compose.ui.test.manifest)
 }

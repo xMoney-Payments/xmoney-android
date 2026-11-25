@@ -94,23 +94,21 @@ data class CheckoutTheme(
     val cornerRadius: Dp get() = borderRadius
 
     val containerBorderWidth: Dp
-        get() = if (containerBorder.alpha == 0f) 0.dp else 1.dp
+        get() = if (containerBorder.alpha == 0f) 0.dp else borderWidth
 
     /** Close and back icons sit on the sheet. Field text can follow a lighter card. */
     val sheetChromeText: Color
         get() = sheetText
 
-    /** Low-contrast brands stay the brand color. The ink outline is not drawn. */
-    val filledBrandNeedsOutline: Boolean
-        get() = false
-
     /** Corner radius for any button, following `primaryButton.borderRadius` so every button shares one shape. */
     fun buttonRadius(height: Dp): Dp = primaryButtonBorderRadius.coerceIn(0.dp, height / 2)
 
-    fun fieldStrokeWidth(hasError: Boolean): Dp =
-        if (hasError) maxOf(borderWidth, 1.5.dp) else borderWidth
+    /** Idle stroke follows `borderWidth`. Error and focus stay visible at 1.5 when the idle stroke is thinner. */
+    fun fieldStrokeWidth(hasError: Boolean, focused: Boolean = false): Dp =
+        if (hasError || focused) maxOf(borderWidth, 1.5.dp) else borderWidth
 
-    fun scaledSp(size: Float): TextUnit = (size * fontScale).sp
+    /** Compose `.sp` already applies the system font scale. Do not multiply [fontScale] in. */
+    fun scaledSp(size: Float): TextUnit = size.sp
 
     companion object {
         val BrandPrimary = Color(0xFF7C4DFF)
@@ -119,13 +117,6 @@ data class CheckoutTheme(
         const val DefaultPaymentContainerRadius = 24f
         const val DefaultRowRadius = 16f
         const val DefaultBrandTileRadius = 12f
-        /** `kyc-status-danger-solid`. The "!" badge keeps this in both themes. */
-        private val DefaultErrorBadge = Color(0xFFDC2626)
-        private val DefaultErrorTextLight = Color(0xFFDC2626)
-        private val DefaultErrorTextDark = Color(0xFFEF4444)
-        private val LightInk = Color(0xFF16141A)
-        private val DarkInk = Color(0xFFF7F6F9)
-        private val DarkChrome = Color(0xFFFFFFFF)
 
         fun resolve(
             config: ResolvedPaymentConfig,
@@ -138,32 +129,6 @@ data class CheckoutTheme(
             contentSizeScale,
             increasedContrast,
         )
-
-        internal fun parseColorOrNone(raw: String?): Color? {
-            if (raw == null) return null
-            val trimmed = raw.trim()
-            if (trimmed.isEmpty()) return null
-            when (trimmed.lowercase()) {
-                "none", "transparent" -> return Color.Transparent
-            }
-            return parseColor(trimmed)
-        }
-
-        internal fun parseColor(hex: String?): Color? {
-            val cleaned = hex?.trim()?.removePrefix("#") ?: return null
-            if (cleaned.length == 8) {
-                val value = cleaned.toLongOrNull(16) ?: return null
-                return Color(
-                    alpha = ((value shr 24) and 0xFF) / 255f,
-                    red = ((value shr 16) and 0xFF) / 255f,
-                    green = ((value shr 8) and 0xFF) / 255f,
-                    blue = (value and 0xFF) / 255f,
-                )
-            }
-            if (cleaned.length != 6) return null
-            val value = cleaned.toLongOrNull(16) ?: return null
-            return Color(0xFF000000 or value)
-        }
 
         internal fun resolveFontFamily(name: String?): FontFamily {
             val trimmed = name?.trim().orEmpty()

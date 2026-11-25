@@ -107,12 +107,6 @@ class GooglePayHandler(activity: Activity, private val env: PaymentEnvironment) 
                 )
         )
 
-    private fun allowedNetworksJson(params: WalletParams): JSONArray =
-        JSONArray(
-            (params.supportedNetworks.takeIf { it.isNotEmpty() } ?: listOf("VISA", "MASTERCARD"))
-                .map { it.uppercase() }
-        )
-
     companion object {
         fun extractToken(paymentData: PaymentData): String {
             val json = JSONObject(paymentData.toJson())

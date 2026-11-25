@@ -15,9 +15,11 @@ import com.xmoney.payments.customerdetails.CustomerDetailsVisibility
 import com.xmoney.payments.customerdetails.PersonalField
 
 internal class PersonalDetailsFormState(
-    val visibility: CustomerDetailsVisibility,
+    visibility: CustomerDetailsVisibility,
     private val validationMode: ValidationMode,
 ) {
+    var visibility by mutableStateOf(visibility)
+        private set
     var input by mutableStateOf(CustomerDetailsInput())
         private set
     var completed by mutableStateOf(false)
@@ -29,6 +31,10 @@ internal class PersonalDetailsFormState(
     val focused = mutableStateMapOf<PersonalField, Boolean>()
     private val displayedErrors = mutableStateMapOf<PersonalField, String?>()
     private val forceShown = mutableStateMapOf<PersonalField, Boolean>()
+    /** A field edit. Untouched defaults can still be replaced by a new order. */
+    private var shopperEdited = false
+    /** Stays set after the first successful Continue. `revalidate` does not clear it. */
+    private var hasConfirmed = false
 
     fun errorMessage(field: PersonalField, locale: String): String? {
         if (!shouldShow(field)) return null
@@ -47,13 +53,14 @@ internal class PersonalDetailsFormState(
     }
 
     fun onTextChange(field: PersonalField, value: String) {
+        shopperEdited = true
         input = when (field) {
             PersonalField.FULL_NAME -> input.copy(fullName = value)
             PersonalField.EMAIL -> input.copy(email = value)
             PersonalField.PHONE -> input.copy(phoneNational = value)
             PersonalField.ADDRESS -> input.copy(address = value)
             PersonalField.CITY -> input.copy(city = value)
-            PersonalField.POSTAL -> input.copy(postalCode = value)
+            PersonalField.POSTAL -> input.copy(postalCode = value.take(12))
             else -> input
         }
         refresh(Trigger.CHANGE)
@@ -65,12 +72,14 @@ internal class PersonalDetailsFormState(
     }
 
     fun onPhoneCountrySelected(code: String) {
+        shopperEdited = true
         input = input.copy(phoneCountry = code)
         touched[PersonalField.PHONE_COUNTRY] = true
         refresh(Trigger.BLUR, PersonalField.PHONE_COUNTRY)
     }
 
     fun onRegionSelected(name: String) {
+        shopperEdited = true
         input = input.copy(region = name)
         touched[PersonalField.REGION] = true
         forceShown[PersonalField.REGION] = false
@@ -82,6 +91,7 @@ internal class PersonalDetailsFormState(
         val hadPostal = input.postalCode.isNotBlank()
         val regionTouched = touched[PersonalField.REGION] == true
         val postalTouched = touched[PersonalField.POSTAL] == true
+        shopperEdited = true
         val format = AddressFormats.forCountry(code)
         input = input.copy(
             country = code,
@@ -111,8 +121,31 @@ internal class PersonalDetailsFormState(
 
     fun restore(saved: CustomerDetailsInput, wasCompleted: Boolean) {
         input = saved
+        if (wasCompleted) hasConfirmed = true
         completed = wasCompleted && CustomerDetailsValidator.isValid(saved, visibility)
     }
+
+    /**
+     * A new order's prefills replace the form only when the shopper has not edited or continued.
+     * The field list is revalidated either way.
+     */
+    fun adoptDefaults(defaults: CustomerDetailsInput, newVisibility: CustomerDetailsVisibility) {
+        if (!shopperEdited && !hasConfirmed) {
+            input = defaults
+        }
+        revalidate(newVisibility)
+    }
+
+    /** Keeps typed values when the field list changes. Drops Continue if the new list rejects them. */
+    fun revalidate(newVisibility: CustomerDetailsVisibility) {
+        visibility = newVisibility
+        if (completed && !CustomerDetailsValidator.isValid(input, newVisibility)) {
+            completed = false
+        }
+        refresh(Trigger.CHANGE)
+    }
+
+    fun completedInput(): CustomerDetailsInput? = if (completed) input else null
 
     fun confirm(): Boolean {
         showAllErrors = true
@@ -120,12 +153,16 @@ internal class PersonalDetailsFormState(
         fields.forEach { touched[it] = true }
         refresh(Trigger.SUBMIT)
         val valid = CustomerDetailsValidator.isValid(input, visibility)
-        if (valid) completed = true
+        if (valid) {
+            completed = true
+            hasConfirmed = true
+        }
         return valid
     }
 
+    /** After Continue, a valid draft is committed again. Back does not complete a first visit. */
     fun onLeave() {
-        if (!completed) return
+        if (!hasConfirmed) return
         completed = CustomerDetailsValidator.isValid(input, visibility)
     }
 

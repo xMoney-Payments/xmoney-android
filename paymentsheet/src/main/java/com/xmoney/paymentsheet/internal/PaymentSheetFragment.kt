@@ -20,9 +20,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Text
-import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -51,6 +51,7 @@ import com.xmoney.payments.config.Strings
 import com.xmoney.payments.engine.DigitalWalletAuthorizing
 import com.xmoney.payments.engine.PendingPayment
 import com.xmoney.payments.engine.SheetState
+import com.xmoney.payments.customerdetails.CustomerDetailsInput
 import com.xmoney.payments.model.CardInput
 import com.xmoney.payments.model.PaymentError
 import com.xmoney.payments.engine.EngineResult
@@ -315,7 +316,7 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
         }
     }
 
-    private fun payWithCard(input: CardInput, customerDetails: Map<String, String>? = null) {
+    private fun payWithCard(input: CardInput, customerDetails: CustomerDetailsInput? = null) {
         val invalid = CardFieldValidators.validateCardNumber(input.number) != null ||
             CardFieldValidators.validateExpiry(input.expiryMonth, input.expiryYear) != null ||
             CardFieldValidators.validateCVV(input.cvv) != null ||
@@ -327,10 +328,10 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
         runSubmission { session.submitNewCard(input, threeDSHostController, customerDetails) }
     }
 
-    private fun paySavedCard(card: SavedCard, customerDetails: Map<String, String>? = null) =
+    private fun paySavedCard(card: SavedCard, customerDetails: CustomerDetailsInput? = null) =
         runSubmission { session.submitSavedCard(card.id, threeDSHostController, customerDetails) }
 
-    private fun payWithCrypto(customerDetails: Map<String, String>? = null) =
+    private fun payWithCrypto(customerDetails: CustomerDetailsInput? = null) =
         runSubmission { session.submitCrypto(threeDSHostController, customerDetails) }
 
     private suspend fun deleteSavedCard(card: SavedCard) {
@@ -406,25 +407,14 @@ private val SheetCorner = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
 @androidx.compose.runtime.Composable
 private fun SheetSurface(theme: CheckoutTheme, content: @androidx.compose.runtime.Composable () -> Unit) {
     val density = LocalDensity.current
-    var shadow by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var retired by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    SideEffect {
-        retired?.recycle()
-        retired = null
+    var widthPx by remember { mutableIntStateOf(0) }
+    val shadow = remember(widthPx, density.density) {
+        sheetLiftShadow(widthPx, density.density)
     }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .onSizeChanged { size ->
-                val next = sheetLiftShadow(size.width, size.height, density.density) ?: return@onSizeChanged
-                val current = shadow
-                if (current != null && current.width == next.width && current.height == next.height) {
-                    next.recycle()
-                    return@onSizeChanged
-                }
-                retired = current
-                shadow = next
-            }
+            .onSizeChanged { widthPx = it.width }
             .graphicsLayer { clip = false }
             .drawBehind {
                 val bitmap = shadow ?: return@drawBehind
@@ -441,21 +431,25 @@ private fun SheetSurface(theme: CheckoutTheme, content: @androidx.compose.runtim
     }
 }
 
-/** CSS `0 -24 35` at `#16141A` 22%, drawn above the sheet into the scrim. */
-private fun sheetLiftShadow(width: Int, height: Int, density: Float): android.graphics.Bitmap? {
-    if (width <= 0 || height <= 0) return null
+/**
+ * CSS `0 -24 35` at `#16141A` 22%, drawn above the sheet into the scrim.
+ * Only the strip above the sheet is visible, so the bitmap is a fixed height keyed on width.
+ * Sheet height changes (animation, keyboard) do not allocate a new bitmap.
+ */
+internal fun sheetLiftShadow(width: Int, density: Float): android.graphics.Bitmap? {
+    if (width <= 0) return null
     val blur = 35f * density
+    val lift = 24f * density
     val radius = 32f * density
-    val pad = (blur * 2).toInt() + 4
-    val bitmap = android.graphics.Bitmap.createBitmap(width, height + pad, android.graphics.Bitmap.Config.ARGB_8888)
+    val bitmapHeight = (lift + blur * 2f + radius).toInt() + 4
+    val bitmap = android.graphics.Bitmap.createBitmap(width, bitmapHeight, android.graphics.Bitmap.Config.ARGB_8888)
     val canvas = android.graphics.Canvas(bitmap)
     val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
         color = android.graphics.Color.argb(56, 0x16, 0x14, 0x1A)
         maskFilter = android.graphics.BlurMaskFilter(blur, android.graphics.BlurMaskFilter.Blur.NORMAL)
     }
-    val top = blur
     canvas.drawRoundRect(
-        android.graphics.RectF(0f, top, width.toFloat(), top + height),
+        android.graphics.RectF(0f, blur, width.toFloat(), blur + bitmapHeight + radius),
         radius,
         radius,
         paint,

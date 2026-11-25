@@ -1,7 +1,15 @@
 package com.xmoney.paymentelement.ui
 
+import android.app.UiModeManager
 import android.content.Context
 import android.os.Build
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import com.xmoney.payments.config.ColorSchemePreference
 import com.xmoney.payments.config.ResolvedPaymentConfig
 
@@ -28,4 +36,23 @@ object UIHelpers {
             false
         }
     }
+}
+
+@Composable
+fun rememberIncreasedContrast(): Boolean {
+    val context = LocalContext.current
+    var enabled by remember { mutableStateOf(UIHelpers.increasedContrast(context)) }
+    DisposableEffect(context) {
+        if (Build.VERSION.SDK_INT < 34) {
+            onDispose {}
+        } else {
+            val manager = context.getSystemService(UiModeManager::class.java)
+            val listener = UiModeManager.ContrastChangeListener { contrast ->
+                enabled = contrast > 0f
+            }
+            manager?.addContrastChangeListener(context.mainExecutor, listener)
+            onDispose { manager?.removeContrastChangeListener(listener) }
+        }
+    }
+    return enabled
 }

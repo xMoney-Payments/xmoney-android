@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+
 package com.xmoney.paymentelement.ui
 
 import androidx.compose.foundation.Image
@@ -23,17 +25,26 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.AutofillNode
+import androidx.compose.ui.autofill.AutofillType
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalAutofill
+import androidx.compose.ui.platform.LocalAutofillTree
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
@@ -41,6 +52,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -323,17 +335,7 @@ internal fun SaveCardCheckbox(
                 .clip(RoundedCornerShape(theme.checkboxRadius))
                 .then(
                     if (checked) {
-                        Modifier.background(theme.primary).then(
-                            if (theme.filledBrandNeedsOutline) {
-                                Modifier.border(
-                                    1.5.dp,
-                                    theme.stateIndicatorBorder,
-                                    RoundedCornerShape(theme.checkboxRadius),
-                                )
-                            } else {
-                                Modifier
-                            },
-                        )
+                        Modifier.background(theme.primary)
                     } else {
                         Modifier.border(1.5.dp, theme.radioIdle, RoundedCornerShape(theme.checkboxRadius))
                     },
@@ -360,6 +362,7 @@ internal fun SaveCardCheckbox(
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun ContainedFieldRow(
     theme: CheckoutTheme,
@@ -369,6 +372,8 @@ internal fun ContainedFieldRow(
     fieldHeight: Dp,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    capitalization: KeyboardCapitalization = KeyboardCapitalization.None,
+    autofillType: AutofillType? = null,
     horizontalPadding: Dp = CardFieldHorizontalPadding,
     valueColor: Color = theme.primaryText,
     placeholderColor: Color = theme.metaText,
@@ -384,12 +389,25 @@ internal fun ContainedFieldRow(
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     val focusManager = LocalFocusManager.current
+    val autofill = LocalAutofill.current
+    val autofillTree = LocalAutofillTree.current
+    val onFill = rememberUpdatedState(onValueChange)
+    val autofillNode = remember(autofillType) {
+        autofillType?.let { type ->
+            AutofillNode(autofillTypes = listOf(type), onFill = { onFill.value(it) })
+        }
+    }
+    if (autofillNode != null) {
+        SideEffect { autofillTree += autofillNode }
+    }
     var hadFocus by remember { mutableStateOf(false) }
     LaunchedEffect(isFocused) {
         if (isFocused) {
             hadFocus = true
+            autofillNode?.let { autofill?.requestAutofillForNode(it) }
             onFocus()
         } else if (hadFocus) {
+            autofillNode?.let { autofill?.cancelAutofillForNode(it) }
             onBlur()
         }
     }
@@ -414,6 +432,7 @@ internal fun ContainedFieldRow(
             ),
             visualTransformation = visualTransformation,
             keyboardOptions = KeyboardOptions(
+                capitalization = capitalization,
                 keyboardType = keyboardType,
                 imeAction = imeAction,
             ),
@@ -425,6 +444,13 @@ internal fun ContainedFieldRow(
             cursorBrush = SolidColor(theme.primary),
             modifier = Modifier
                 .weight(1f)
+                .then(
+                    if (autofillNode != null) {
+                        Modifier.onGloballyPositioned { autofillNode.boundingBox = it.boundsInWindow() }
+                    } else {
+                        Modifier
+                    },
+                )
                 .then(
                     if (contentDescription != null) {
                         Modifier.semantics { this.contentDescription = contentDescription }

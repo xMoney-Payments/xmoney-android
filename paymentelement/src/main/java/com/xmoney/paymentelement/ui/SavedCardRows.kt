@@ -472,14 +472,9 @@ internal fun PayWithCardChip(theme: CheckoutTheme) {
 @Composable
 internal fun RadioDot(theme: CheckoutTheme, selected: Boolean) {
     val stroke = if (selected) theme.primary else theme.radioIdle
-    val outline = selected && theme.filledBrandNeedsOutline
     Box(
         modifier = Modifier
             .size(24.dp)
-            .then(
-                if (outline) Modifier.border(1.dp, theme.stateIndicatorBorder, CircleShape) else Modifier,
-            )
-            .padding(if (outline) 1.dp else 0.dp)
             .border(2.dp, stroke, CircleShape),
         contentAlignment = Alignment.Center,
     ) {

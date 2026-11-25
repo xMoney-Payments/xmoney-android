@@ -95,12 +95,12 @@ fun AppearancePlaygroundScreen(
             isLoading = false
         }
     }
-    val cornerValue = when (state.appearance.corners) {
+    val cornerValue = when (state.appearance.shape.corners) {
         Corners.Sharp -> "sharp"
         Corners.Rounded -> "rounded"
         else -> "default"
     }
-    val fontOption = playgroundFontFamilyOptions.option(state.appearance.fontFamily.orEmpty())
+    val fontOption = playgroundFontFamilyOptions.option(state.appearance.typography.fontFamily.orEmpty())
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -165,7 +165,7 @@ fun AppearancePlaygroundScreen(
             ExampleSwitchRow(
                 title = "Pill buttons",
                 subtitle = "",
-                checked = state.appearance.pillButtons,
+                checked = state.appearance.shape.pillButtons,
                 onCheckedChange = { state.updatePillButtons(it) },
             )
             PlaygroundDropdown(

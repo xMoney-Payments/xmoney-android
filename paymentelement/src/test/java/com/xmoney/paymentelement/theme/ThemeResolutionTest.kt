@@ -2,7 +2,9 @@ package com.xmoney.paymentelement.theme
 
 import com.xmoney.payments.config.Appearance
 import com.xmoney.payments.config.AppearanceOverrides
+import com.xmoney.payments.config.Borders
 import com.xmoney.payments.config.Corners
+import com.xmoney.payments.config.Shape
 import com.xmoney.payments.config.OptionsConfig
 import com.xmoney.payments.config.ResolvedPaymentConfig
 import com.xmoney.payments.config.ThemeColor
@@ -15,14 +17,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ThemeResolutionTest {
-    private fun resolve(appearance: Appearance = Appearance(), isDark: Boolean): CheckoutTheme {
+    private fun resolve(
+        appearance: Appearance = Appearance(),
+        isDark: Boolean,
+        increasedContrast: Boolean = false,
+    ): CheckoutTheme {
         val config = ResolvedPaymentConfig(
             publicKey = "pk_test",
             orderPayload = "payload",
             orderChecksum = "checksum",
             options = OptionsConfig(appearance = appearance),
         )
-        return CheckoutTheme.resolve(config, isDark)
+        return CheckoutTheme.resolve(config, isDark, increasedContrast = increasedContrast)
     }
 
     private fun assertClose(expected: String, actual: String) {
@@ -126,14 +132,127 @@ class ThemeResolutionTest {
     }
 
     @Test
+    fun lowContrastTextColorIsKept() {
+        val theme = resolve(
+            Appearance(overrides = AppearanceOverrides(textColor = ThemeColor.of("#FACC15"))),
+            false,
+        )
+        assertEquals("#facc15", hex(theme.primaryText))
+        assertEquals("#facc15", hex(theme.sheetText))
+    }
+
+    @Test
+    fun lowContrastOverridesStayExact() {
+        val yellow = ThemeColor.of("#FACC15")
+        val theme = resolve(
+            Appearance(
+                overrides = AppearanceOverrides(
+                    onBrandColor = yellow,
+                    textColor = yellow,
+                    linkColor = yellow,
+                    borderColor = yellow,
+                    componentColor = yellow,
+                    selectedColor = yellow,
+                    secondaryButtonColor = yellow,
+                ),
+            ),
+            false,
+        )
+        assertEquals("#facc15", hex(theme.primaryButtonText))
+        assertEquals("#facc15", hex(theme.primaryText))
+        assertEquals("#facc15", hex(theme.sheetText))
+        assertEquals("#facc15", hex(theme.textBrand))
+        assertEquals("#facc15", hex(theme.fieldBorder))
+        assertEquals("#facc15", hex(theme.componentBackground))
+        assertEquals("#facc15", hex(theme.selectedBackground))
+        assertEquals("#facc15", hex(theme.secondaryButtonBackground))
+    }
+
+    @Test
+    fun borderWidthDrivesTheIdleStrokeAndKeepsErrorAndFocusVisible() {
+        assertEquals(1f, resolve(isDark = false).borderWidth.value)
+        val none = resolve(Appearance(borders = Borders(width = 0.0)), false)
+        assertEquals(0f, none.fieldStrokeWidth(hasError = false).value)
+        assertTrue(none.fieldStrokeWidth(hasError = true).value >= 1.5f)
+        assertTrue(none.fieldStrokeWidth(hasError = false, focused = true).value >= 1.5f)
+        assertEquals(0f, none.containerBorderWidth.value)
+        val wide = resolve(
+            Appearance(
+                overrides = AppearanceOverrides(borderColor = ThemeColor.of("#111111")),
+                borders = Borders(width = 2.0),
+            ),
+            false,
+        )
+        assertEquals(2f, wide.borderWidth.value)
+        assertEquals(2f, wide.containerBorderWidth.value)
+        val hidden = resolve(
+            Appearance(
+                overrides = AppearanceOverrides(borderColor = ThemeColor.of("#111111")),
+                borders = Borders(width = 0.0),
+            ),
+            false,
+        )
+        assertEquals(0f, hidden.containerBorderWidth.value)
+        assertEquals(4f, resolve(Appearance(borders = Borders(width = 9.0)), false).borderWidth.value)
+        assertEquals(2.5, Appearance.from(mapOf("borders" to mapOf("width" to 2.5))).borders.width, 0.001)
+        assertEquals(4.0, Appearance.from(mapOf("borders" to mapOf("width" to 9))).borders.width, 0.001)
+        assertEquals(0.0, Appearance.from(mapOf("borders" to mapOf("width" to -1))).borders.width, 0.001)
+        assertEquals(1.0, Appearance.from(mapOf("borders" to mapOf("width" to true))).borders.width, 0.001)
+        val flat = Appearance.from(mapOf("fontFamily" to "Georgia", "borderWidth" to 3, "corners" to "sharp", "pillButtons" to false))
+        assertEquals(null, flat.typography.fontFamily)
+        assertEquals(1.0, flat.borders.width, 0.001)
+        assertEquals(Corners.Default, flat.shape.corners)
+        assertEquals(true, flat.shape.pillButtons)
+    }
+
+    @Test
+    fun unusualPalettesKeepGuaranteedContrast() {
+        // withContrast stops a hair under its target, and the built-in dark section
+        // token (#85858D on #1F1F23) is 4.49:1. Sheet text, secondary, meta, and the
+        // pay label clear 4.5. The lower floors lock that miss without changing it.
+        val palettes = listOf(
+            "near-white brand" to Appearance(brandColor = ThemeColor.of("#FAFAFA")),
+            "near-black brand" to Appearance(brandColor = ThemeColor.of("#16141A")),
+            "yellow" to Appearance(brandColor = ThemeColor.of("#FACC15")),
+            "neon" to Appearance(brandColor = ThemeColor.of("#00FF00")),
+            "mid-gray" to Appearance(brandColor = ThemeColor.of("#808080")),
+            "white on black" to Appearance(
+                brandColor = ThemeColor.of("#FFFFFF"),
+                backgroundColor = ThemeColor.of("#000000"),
+            ),
+            "cream" to Appearance(backgroundColor = ThemeColor.of("#FBF5EA")),
+            "dark tint on light" to Appearance(
+                backgroundColor = ThemeColor.of("#FBF5EA"),
+                neutralTint = ThemeColor.of("#2A2118"),
+            ),
+        )
+        for ((name, appearance) in palettes) {
+            for (isDark in listOf(false, true)) {
+                for (increased in listOf(false, true)) {
+                    val theme = resolve(appearance, isDark, increasedContrast = increased)
+                    val where = "$name dark=$isDark increased=$increased"
+                    assertContrast(where, "sheet text", theme.sheetText, theme.background, 4.5f)
+                    assertContrast(where, "secondary", theme.secondaryText, theme.componentBackground, 4.5f)
+                    assertContrast(where, "meta", theme.metaText, theme.componentBackground, 4.5f)
+                    assertContrast(where, "section", theme.sectionLabel, theme.componentBackground, 4.45f)
+                    assertContrast(where, "placeholder", theme.placeholderText, theme.componentBackground, 2.95f)
+                    assertContrast(where, "or", theme.orLabel, theme.background, 4.45f)
+                    assertContrast(where, "disabled pay", theme.primaryButtonDisabledText, theme.primaryButtonDisabledBackground, 4.45f)
+                    assertContrast(where, "pay label", theme.primaryButtonText, theme.primaryButtonBackground, 4.5f)
+                }
+            }
+        }
+    }
+
+    @Test
     fun cornersAtTenAndPillButtons() {
-        val theme = resolve(Appearance(corners = Corners.Custom(10.0)), false)
+        val theme = resolve(Appearance(shape = Shape(corners = Corners.Custom(10.0))), false)
         assertEquals(10f, theme.formFieldRadius.value)
         assertEquals(8f, theme.rowRadius.value)
         assertEquals(5f, theme.checkboxRadius.value)
         assertEquals(15f, theme.paymentContainerRadius.value)
         assertEquals(32f, theme.sheetCornerRadius.value)
-        val square = resolve(Appearance(corners = Corners.Sharp, pillButtons = false), false)
+        val square = resolve(Appearance(shape = Shape(Corners.Sharp, pillButtons = false)), false)
         assertEquals(0f, square.primaryButtonBorderRadius.value)
     }
 
@@ -146,7 +265,6 @@ class ThemeResolutionTest {
         assertEquals("#fafafa", hex(dark.stateIndicatorBorder))
         assertEquals(0.63f, dark.radioIdle.alpha, 0.02f)
         assertEquals(1f, dark.stateIndicatorBorder.alpha, 0.01f)
-        assertFalse(dark.filledBrandNeedsOutline)
 
         val light = resolve(isDark = false)
         assertEquals(0.80f, light.radioIdle.alpha, 0.02f)
@@ -161,7 +279,6 @@ class ThemeResolutionTest {
 
         val yellow = resolve(Appearance(brandColor = ThemeColor.of("#FACC15")), false)
         assertEquals("#16141a", hex(yellow.primaryButtonText))
-        assertFalse(yellow.filledBrandNeedsOutline)
     }
 
     @Test
@@ -176,23 +293,22 @@ class ThemeResolutionTest {
         val appearance = Appearance.from(
             mapOf(
                 "brandColor" to "#1D4ED8",
-                "corners" to 40,
-                "mystery" to true,
+                "shape" to mapOf("corners" to 40, "pillButtons" to false, "mystery" to true),
+                "typography" to mapOf("fontFamily" to "Georgia"),
                 "fontFamily" to "Georgia",
-                "pillButtons" to false,
                 "colorScheme" to "dark",
             ),
         )
         assertEquals("#1D4ED8", String.format("#%06X", appearance.brandColor!!.light and 0xFFFFFF))
-        assertEquals(24.0, appearance.corners.scale, 0.001)
-        assertEquals("Georgia", appearance.fontFamily)
-        assertEquals(false, appearance.pillButtons)
+        assertEquals(24.0, appearance.shape.corners.scale, 0.001)
+        assertEquals("Georgia", appearance.typography.fontFamily)
+        assertEquals(false, appearance.shape.pillButtons)
     }
 
     @Test
     fun sheetRadiusStaysAtTheDefault() {
-        assertEquals(32f, resolve(Appearance(corners = Corners.Sharp), false).sheetCornerRadius.value)
-        assertEquals(32f, resolve(Appearance(corners = Corners.Rounded), true).sheetCornerRadius.value)
+        assertEquals(32f, resolve(Appearance(shape = Shape(corners = Corners.Sharp)), false).sheetCornerRadius.value)
+        assertEquals(32f, resolve(Appearance(shape = Shape(corners = Corners.Rounded)), true).sheetCornerRadius.value)
     }
 
     @Test
@@ -271,8 +387,49 @@ class ThemeResolutionTest {
             val item = cases.getJSONObject(i)
             val theme = resolve(Appearance.from(jsonToMap(item.getJSONObject("appearance"))), item.getBoolean("isDark"))
             val expected = item.getJSONObject("expected")
-            if (expected.has("primary")) assertEquals(expected.getString("primary"), hex(theme.primary))
-            if (expected.has("background")) assertEquals(expected.getString("background"), hex(theme.background))
+            val keys = expected.keys()
+            while (keys.hasNext()) {
+                when (val key = keys.next()) {
+                    "primary" -> assertEquals(expected.getString(key), hex(theme.primary))
+                    "background" -> assertEquals(expected.getString(key), hex(theme.background))
+                    else -> error("unhandled theme vector key $key")
+                }
+            }
+            val brand = item.getJSONObject("appearance").optString("brandColor")
+            if (brand.length == 9) {
+                val parsed = com.xmoney.payments.config.SrgbColor.fromHex(brand)
+                assertEquals(128.0 / 255.0, parsed!!.alpha, 0.001)
+                assertEquals(1.0, parsed.red, 0.001)
+            }
+        }
+        val defaults = JSONObject(json).getJSONObject("defaultColors")
+        assertEquals("#dc2626", defaults.getJSONObject("light").getString("error"))
+        assertEquals("#ef4444", defaults.getJSONObject("dark").getString("error"))
+        assertEquals(defaults.getJSONObject("light").getString("error"), hex(resolve(isDark = false).errorText))
+        assertEquals(defaults.getJSONObject("dark").getString("error"), hex(resolve(isDark = true).errorText))
+    }
+
+    @Test
+    fun increasedContrastLiftsDefaultMetaText() {
+        val config = ResolvedPaymentConfig(
+            publicKey = "pk_test",
+            orderPayload = "payload",
+            orderChecksum = "checksum",
+            options = OptionsConfig(),
+        )
+        for (dark in listOf(false, true)) {
+            val theme = CheckoutTheme.resolve(config, dark, increasedContrast = true)
+            fun check(name: String, foreground: androidx.compose.ui.graphics.Color, surface: androidx.compose.ui.graphics.Color) {
+                val ratio = contrast(foreground, surface)
+                assertTrue(
+                    "$name dark=$dark ratio=$ratio ${hex(foreground)} on ${hex(surface)}",
+                    ratio >= 4.5f,
+                )
+            }
+            check("secondary", theme.secondaryText, theme.selectedBackground)
+            check("placeholder", theme.placeholderText, theme.componentBackground)
+            check("powered", theme.poweredByText, theme.background)
+            check("or", theme.orLabel, theme.background)
         }
     }
 
@@ -297,7 +454,7 @@ class ThemeResolutionTest {
         val four = Corners.from(4)
         assertEquals(8.0, eight.scale, 0.001)
         assertEquals(4.0, four.scale, 0.001)
-        assertEquals(8.0, Appearance(corners = Corners.Custom(8.0)).corners.scale, 0.001)
+        assertEquals(8.0, Appearance(shape = Shape(corners = Corners.Custom(8.0))).shape.corners.scale, 0.001)
     }
 
     private fun jsonToMap(source: JSONObject): Map<String, Any?> {
@@ -309,6 +466,17 @@ class ThemeResolutionTest {
             map[key] = if (value is JSONObject) jsonToMap(value) else value
         }
         return map
+    }
+
+    private fun assertContrast(
+        palette: String,
+        role: String,
+        color: androidx.compose.ui.graphics.Color,
+        surface: androidx.compose.ui.graphics.Color,
+        minimum: Float,
+    ) {
+        val ratio = contrast(color, surface)
+        assertTrue("$palette $role $ratio ${hex(color)} on ${hex(surface)}", ratio >= minimum)
     }
 
     private fun contrast(a: androidx.compose.ui.graphics.Color, b: androidx.compose.ui.graphics.Color): Float {

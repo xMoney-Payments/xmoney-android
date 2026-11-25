@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.annotation.RestrictTo
 import androidx.fragment.app.FragmentActivity
 import com.xmoney.payments.config.PaymentConfig
+import com.xmoney.payments.customerdetails.CustomerDetailsInput
 import com.xmoney.payments.model.CardHolderVerificationResult
 import com.xmoney.payments.model.CardInput
 import com.xmoney.payments.model.PaymentError
@@ -141,20 +142,20 @@ class PaymentSession(
     suspend fun submitNewCard(
         input: CardInput,
         presenter: ThreeDSPresenter,
-        customerDetails: Map<String, String>? = null,
+        customerDetails: CustomerDetailsInput? = null,
     ): EngineResult =
         submit(didAuthorize = true) { engine.submitNewCard(input, presenter, customerDetails) }
 
     suspend fun submitSavedCard(
         cardId: String,
         presenter: ThreeDSPresenter,
-        customerDetails: Map<String, String>? = null,
+        customerDetails: CustomerDetailsInput? = null,
     ): EngineResult =
         submit(didAuthorize = true) { engine.submitSavedCard(cardId, presenter, customerDetails) }
 
     suspend fun submitCrypto(
         presenter: ThreeDSPresenter,
-        customerDetails: Map<String, String>? = null,
+        customerDetails: CustomerDetailsInput? = null,
     ): EngineResult =
         submit(didAuthorize = true) { engine.submitCrypto(presenter, customerDetails) }
 

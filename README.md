@@ -177,7 +177,7 @@ PaymentConfig(
 )
 ```
 
-Card, saved-card, and crypto Continue stay blocked while `customerDetails.card` is on and the field list is active, until those fields are valid. They are not blocked when `customerDetails.card` is off. `confirm()` runs that check. Google Pay does not block: it requests the billing contact and sends it with the payment.
+Card, saved-card, and crypto Continue stay blocked while `customerDetails.card` is on and the field list is active, until those fields are valid. They are not blocked when `customerDetails.card` is off. `confirm()` runs that check. Google Pay does not block: it requests the billing contact and sends it with the payment. Typed name, email, phone, and address are kept in the host Activity's saved state so rotation and process death do not clear them. Card number and CVC are not saved.
 
 While idle, the sheet can be dragged closed. Drag, back, and scrim lock while a charge is in flight. `dismiss()` waits for an in-flight charge; idle close still cancels. A second `present()` while idle replaces the open sheet (the previous present completes with `Canceled`); while a charge is in flight the second `present()` is a no-op. Do not treat that `Canceled` as “leave checkout” if you immediately presented again.
 
@@ -386,8 +386,7 @@ PaymentConfig(
         appearance = Appearance(
             colorScheme = ColorSchemePreference.AUTOMATIC,
             brandColor = ThemeColor.of("#1D4ED8"),
-            corners = Corners.Custom(12.0),
-            pillButtons = false,
+            shape = Shape(corners = Corners.Custom(12.0), pillButtons = false),
         ),
     ),
 )
@@ -404,7 +403,15 @@ PaymentConfig(
 
 Pay uses current field validity, not an empty errors map. Cardholder name is always collected.
 
-**Appearance** — set `brandColor`, `accentColor`, `backgroundColor`, and `neutralTint`. Each accepts one hex color or a light/dark pair. The pay button uses `brandColor` as sent. Links, the focus ring, and radios are adjusted so they stay readable. Other unset text, borders, and button states are derived. `textColor` sets primary text only. Saved-card meta, section labels, the "or" label, the powered-by line, and placeholders follow `neutralTint` and `backgroundColor`. `corners` is sharp, default, rounded, or a number from 0 to 24. The default methods container radius is 24. `pillButtons` keeps the pay button fully round. The sheet corner stays 32. `colorScheme` is automatic, light, or dark. On a mounted Element, call `updateAppearance` / `updateWalletAppearance`. See [`exampleAppearance()`](example/src/main/java/com/xmoney/example/SampleHelpers.kt).
+**Appearance** — colors resolve in order: the built-in theme, then your seeds, then colors the SDK derives, then `overrides`. An override is painted as sent. A debug build logs a contrast problem and does not change the color.
+
+Set `brandColor`, `accentColor`, `backgroundColor`, and `neutralTint`. Each accepts one hex color or a light/dark pair. The pay button uses `brandColor` as sent. Links, the focus ring, and radios are adjusted so they stay readable when the SDK derives them. Other unset text, borders, and button states are derived. `overrides` replace one role each: `onBrandColor`, `textColor` (primary text on the sheet and on cards), `linkColor`, `borderColor`, `componentColor`, `selectedColor`, and `secondaryButtonColor`. Saved-card meta, section labels, the "or" label, the powered-by line, and placeholders follow `neutralTint` and `backgroundColor`.
+
+`borders.width` is the idle field stroke, from 0 to 4, default 1. Error and focus stay at least 1.5. When `borderColor` is set, the methods container uses the same width. `0` removes that stroke. A later stroke role is another field on `borders`.
+
+`typography.fontFamily` is resolved with `Typeface.create`, so it finds system families only. A font bundled in `res/font` is not found. Medium, semibold, and bold all use that family's bold face. A missing name keeps the built-in payment face and logs once on a debuggable build. The system font scale sets the size. There is no per-label font size. Later weight and heading fields belong on `typography`.
+
+`shape.corners` is sharp, default, rounded, or a number from 0 to 24. The default methods container radius is 24. `shape.pillButtons` keeps the pay button fully round. The sheet corner stays 32. `colorScheme` is automatic, light, or dark. On a mounted Element, call `updateAppearance` / `updateWalletAppearance`. Unknown keys, including a flat `fontFamily`, `borderWidth`, `corners`, or `pillButtons`, are ignored. Add a new field inside the group that owns it. An empty group is today's checkout. See [`exampleAppearance()`](example/src/main/java/com/xmoney/example/SampleHelpers.kt).
 
 **Cookies** — the 3DS challenge needs WebView cookies. The SDK turns on third-party cookies for its own challenge WebView only and does not call `CookieManager.setAcceptCookie`. If your app turns cookies off app-wide, turn them back on before a payment, or the bank page may fail.
 

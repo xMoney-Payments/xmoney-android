@@ -169,7 +169,7 @@ private fun SearchBox(
             .height(48.dp)
             .clip(shape)
             .background(theme.componentBackground)
-            .border(1.dp, theme.fieldBorder, shape)
+            .border(theme.borderWidth, theme.fieldBorder, shape)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

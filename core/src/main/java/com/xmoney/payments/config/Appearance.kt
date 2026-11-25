@@ -200,6 +200,9 @@ data class ThemeColor(val light: Int, val dark: Int) : Parcelable {
                     null
                 }
             }
+            if (light != null || dark != null) {
+                AppearanceLog.warn("invalid light/dark color pair")
+            }
             return null
         }
     }
@@ -262,8 +265,14 @@ data class AppearanceOverrides(
     val secondaryButtonColor: ThemeColor? = null,
 ) : Parcelable {
     companion object {
+        internal val dictionaryKeys = setOf(
+            "onBrandColor", "textColor", "linkColor", "borderColor",
+            "componentColor", "selectedColor", "secondaryButtonColor",
+        )
+
         fun from(value: Any?): AppearanceOverrides {
             val dict = value as? Map<*, *> ?: return AppearanceOverrides()
+            warnUnknown(dict, dictionaryKeys, "overrides")
             return AppearanceOverrides(
                 onBrandColor = ThemeColor.from(dict["onBrandColor"]),
                 textColor = ThemeColor.from(dict["textColor"]),
@@ -277,6 +286,69 @@ data class AppearanceOverrides(
     }
 }
 
+/** Type family. Later weights and a heading face are fields here. */
+@Parcelize
+data class Typography(
+    val fontFamily: String? = null,
+) : Parcelable {
+    companion object {
+        internal val dictionaryKeys = setOf("fontFamily")
+
+        fun from(value: Any?): Typography {
+            val dict = value as? Map<*, *> ?: return Typography()
+            warnUnknown(dict, dictionaryKeys, "typography")
+            return Typography(fontFamily = (dict["fontFamily"] as? String)?.takeIf { it.isNotEmpty() })
+        }
+    }
+}
+
+/** Strokes. `width` is the idle field stroke, in dp, clamped to 0...4. */
+@Parcelize
+data class Borders(
+    val width: Double = 1.0,
+) : Parcelable {
+    companion object {
+        internal val dictionaryKeys = setOf("width")
+
+        fun from(value: Any?): Borders {
+            val dict = value as? Map<*, *> ?: return Borders()
+            warnUnknown(dict, dictionaryKeys, "borders")
+            return Borders(width = width(dict["width"]))
+        }
+
+        /** Numbers only. Booleans are rejected. Missing or invalid values stay at 1. */
+        fun width(value: Any?): Double {
+            val number = value as? Number ?: run {
+                if (value != null) AppearanceLog.warn("borders.width must be a number")
+                return 1.0
+            }
+            val raw = number.toDouble()
+            if (raw < 0 || raw > 4) AppearanceLog.warn("borders.width $raw is outside 0...4 and was clamped")
+            return raw.coerceIn(0.0, 4.0)
+        }
+    }
+}
+
+/** Control geometry. The sheet corner is not part of this group. */
+@Parcelize
+data class Shape(
+    val corners: Corners = Corners.Default,
+    val pillButtons: Boolean = true,
+) : Parcelable {
+    companion object {
+        internal val dictionaryKeys = setOf("corners", "pillButtons")
+
+        fun from(value: Any?): Shape {
+            val dict = value as? Map<*, *> ?: return Shape()
+            warnUnknown(dict, dictionaryKeys, "shape")
+            return Shape(
+                corners = Corners.from(dict["corners"]),
+                pillButtons = dict["pillButtons"] as? Boolean ?: true,
+            )
+        }
+    }
+}
+
 @Parcelize
 data class Appearance(
     val colorScheme: ColorSchemePreference = ColorSchemePreference.AUTOMATIC,
@@ -285,18 +357,19 @@ data class Appearance(
     val backgroundColor: ThemeColor? = null,
     val neutralTint: ThemeColor? = null,
     val overrides: AppearanceOverrides = AppearanceOverrides(),
-    val corners: Corners = Corners.Default,
-    val pillButtons: Boolean = true,
-    val fontFamily: String? = null,
+    val typography: Typography = Typography(),
+    val borders: Borders = Borders(),
+    val shape: Shape = Shape(),
 ) : Parcelable {
     companion object {
+        internal val dictionaryKeys = setOf(
+            "colorScheme", "brandColor", "accentColor", "backgroundColor", "neutralTint",
+            "overrides", "typography", "borders", "shape",
+        )
+
         fun from(dict: Map<String, Any?>?): Appearance {
             if (dict == null) return Appearance()
-            val known = setOf(
-                "colorScheme", "brandColor", "accentColor", "backgroundColor", "neutralTint",
-                "overrides", "corners", "pillButtons", "fontFamily",
-            )
-            dict.keys.filter { it !in known }.forEach { AppearanceLog.warn("unknown appearance key '$it'") }
+            warnUnknown(dict, dictionaryKeys, "appearance")
             return Appearance(
                 colorScheme = ColorSchemePreference.from(dict["colorScheme"] as? String),
                 brandColor = ThemeColor.from(dict["brandColor"]),
@@ -304,29 +377,28 @@ data class Appearance(
                 backgroundColor = ThemeColor.from(dict["backgroundColor"]),
                 neutralTint = ThemeColor.from(dict["neutralTint"]),
                 overrides = AppearanceOverrides.from(dict["overrides"]),
-                corners = Corners.from(dict["corners"]),
-                pillButtons = dict["pillButtons"] as? Boolean ?: true,
-                fontFamily = (dict["fontFamily"] as? String)?.takeIf { it.isNotEmpty() },
+                typography = Typography.from(dict["typography"]),
+                borders = Borders.from(dict["borders"]),
+                shape = Shape.from(dict["shape"]),
             )
         }
     }
 }
 
+private fun warnUnknown(dict: Map<*, *>, known: Set<String>, group: String) {
+    dict.keys.mapNotNull { it as? String }.filter { it !in known }
+        .forEach { AppearanceLog.warn("unknown $group key '$it'") }
+}
+
 object AppearanceLog {
-    private val seen = mutableSetOf<String>()
+    private val seen = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    @Volatile
+    var isDebuggable: Boolean = false
 
     fun warn(message: String) {
         if (!seen.add(message)) return
-        val debuggable = try {
-            val app = Class.forName("android.app.ActivityThread")
-                .getMethod("currentApplication")
-                .invoke(null) as? android.app.Application
-            val flags = app?.applicationInfo?.flags ?: 0
-            flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
-        } catch (_: Throwable) {
-            false
-        }
-        if (debuggable) android.util.Log.w("xMoney appearance", message)
+        if (isDebuggable) android.util.Log.w("xMoney appearance", message)
     }
 }
 

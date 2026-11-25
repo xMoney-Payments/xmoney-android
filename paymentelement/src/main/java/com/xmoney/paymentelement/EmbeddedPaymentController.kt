@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.xmoney.payments.config.Appearance
+import com.xmoney.payments.config.AppearanceLog
 import com.xmoney.payments.config.PaymentConfig
 import com.xmoney.payments.config.ResolvedPaymentConfig
 import com.xmoney.payments.config.WalletAppearance
@@ -30,7 +31,7 @@ import com.xmoney.payments.model.UpdateOrderSuperseded
 import com.xmoney.payments.threeds.ThreeDSHostController
 import com.xmoney.payments.util.onMainThread
 import com.xmoney.payments.validation.CardFieldValidators
-import kotlin.jvm.JvmOverloads
+import com.xmoney.payments.customerdetails.CustomerDetailsInput
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
@@ -48,6 +49,11 @@ class EmbeddedPaymentController(
     private val onResult: (PaymentResult) -> Unit,
 ) {
     private var liveConfiguration = configuration
+
+    init {
+        AppearanceLog.isDebuggable =
+            (activity.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    }
     @VisibleForTesting
     internal var session = PaymentSession(liveConfiguration, placeholderIntent(), activity.applicationContext)
 
@@ -358,11 +364,11 @@ class EmbeddedPaymentController(
     /**
      * Charges a new card immediately.
      *
-     * Does not open or enforce the personal-details page. [customerDetails] is sent
-     * as given. Use [confirm] so the embedded form collects required details first.
+     * Does not open or enforce the personal-details page. [customerDetails] is validated
+     * and mapped to the wire payload inside the engine. Use [confirm] so the embedded
+     * form collects required details first.
      */
-    @JvmOverloads
-    fun payWithCard(input: CardInput, customerDetails: Map<String, String>? = null) {
+    internal fun payWithCard(input: CardInput, customerDetails: CustomerDetailsInput? = null) {
         if (!isInteractionEnabled) return
         val config = paymentConfig ?: return
         val invalid = CardFieldValidators.validateCardNumber(input.number) != null ||
@@ -379,17 +385,17 @@ class EmbeddedPaymentController(
     /**
      * Charges a saved card immediately.
      *
-     * Does not open or enforce the personal-details page. [customerDetails] is sent
-     * as given. Use [confirm] so the embedded form collects required details first.
+     * Does not open or enforce the personal-details page. [customerDetails] is validated
+     * and mapped to the wire payload inside the engine. Use [confirm] so the embedded
+     * form collects required details first.
      */
-    @JvmOverloads
-    fun paySavedCard(card: SavedCard, customerDetails: Map<String, String>? = null) {
+    internal fun paySavedCard(card: SavedCard, customerDetails: CustomerDetailsInput? = null) {
         if (!isInteractionEnabled) return
         val presenter = threeDS ?: return
         runSubmission { session.submitSavedCard(card.id, presenter, customerDetails) }
     }
 
-    internal fun payWithCrypto(customerDetails: Map<String, String>? = null) {
+    internal fun payWithCrypto(customerDetails: CustomerDetailsInput? = null) {
         if (!isInteractionEnabled) return
         val presenter = threeDS ?: return
         runSubmission { session.submitCrypto(presenter, customerDetails) }

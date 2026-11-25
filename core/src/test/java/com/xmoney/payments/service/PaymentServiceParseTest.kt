@@ -232,7 +232,7 @@ class PaymentServiceParseTest {
                     "is3d": 1,
                     "isRedirect": true,
                     "redirect": {
-                      "url": "https://pm-redirects.stripe.com/authorize/acct_1UYPf73UukRSbFJH/pa_nonce_Ve3VdjdMuWVqEj5CX1AoeRId4qufr1c",
+                      "url": "https://pm-redirects.stripe.com/authorize/acct_test/pa_nonce_test",
                       "formMethod": "GET",
                       "params": {}
                     },
@@ -247,7 +247,7 @@ class PaymentServiceParseTest {
         assertTrue(submission is PaymentSubmissionResult.Needs3DS)
         submission as PaymentSubmissionResult.Needs3DS
         assertEquals(
-            "https://pm-redirects.stripe.com/authorize/acct_1UYPf73UukRSbFJH/pa_nonce_Ve3VdjdMuWVqEj5CX1AoeRId4qufr1c",
+            "https://pm-redirects.stripe.com/authorize/acct_test/pa_nonce_test",
             submission.url,
         )
         assertEquals("GET", submission.formMethod)

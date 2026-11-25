@@ -8,6 +8,8 @@ import androidx.compose.ui.graphics.toArgb
 import com.xmoney.example.theme.ExampleColors
 import com.xmoney.example.theme.ExampleThemeController
 import com.xmoney.payments.config.Appearance
+import com.xmoney.payments.config.Corners
+import com.xmoney.payments.config.Shape
 import com.xmoney.payments.config.ColorSchemePreference
 import com.xmoney.payments.config.CardConfig
 import com.xmoney.payments.config.GooglePayConfig
@@ -56,7 +58,7 @@ internal fun exampleAppearance(
         overrides = com.xmoney.payments.config.AppearanceOverrides(
             onBrandColor = ThemeColor(argb(buttonText), argb(buttonText)),
         ),
-        corners = com.xmoney.payments.config.Corners.Rounded,
+        shape = Shape(corners = Corners.Rounded),
     )
 }
 

@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.xmoney.payments.config.ResolvedPaymentConfig
+import com.xmoney.payments.customerdetails.CustomerDetailsInput
 import com.xmoney.payments.config.Strings
 import com.xmoney.payments.engine.SheetState
 import com.xmoney.payments.model.CardInput
@@ -47,15 +48,16 @@ import com.xmoney.paymentelement.theme.CheckoutTheme
 import com.xmoney.paymentelement.ui.PaymentForm
 import com.xmoney.paymentelement.ui.PersonalDetailsPageHeader
 import com.xmoney.paymentelement.ui.UIHelpers
+import com.xmoney.paymentelement.ui.rememberIncreasedContrast
 
 @Composable
 internal fun PaymentSheetContent(
     config: ResolvedPaymentConfig,
     state: SheetState,
     isProcessing: Boolean,
-    onPayCard: (CardInput, Map<String, String>?) -> Unit,
-    onSelectSaved: (SavedCard, Map<String, String>?) -> Unit,
-    onPayCrypto: (Map<String, String>?) -> Unit,
+    onPayCard: (CardInput, CustomerDetailsInput?) -> Unit,
+    onSelectSaved: (SavedCard, CustomerDetailsInput?) -> Unit,
+    onPayCrypto: (CustomerDetailsInput?) -> Unit,
     onDeleteSaved: suspend (SavedCard) -> Unit,
     onGooglePay: () -> Unit,
     onCancel: () -> Unit,
@@ -65,13 +67,23 @@ internal fun PaymentSheetContent(
     val isDark = UIHelpers.isDarkMode(config, isSystemInDarkTheme())
     val context = androidx.compose.ui.platform.LocalContext.current
     val contentSizeScale = UIHelpers.contentSizeScale(context)
-    val increasedContrast = UIHelpers.increasedContrast(context)
+    val increasedContrast = rememberIncreasedContrast()
     val theme = remember(config, isDark, contentSizeScale, increasedContrast) {
         CheckoutTheme.resolve(config, isDark, contentSizeScale, increasedContrast)
     }
     val nestedScrollInterop = rememberNestedScrollInteropConnection()
     val maxSheetHeight = (LocalConfiguration.current.screenHeightDp * 0.9f).dp
     val scrollState = rememberScrollState()
+    val pageHeader: @Composable (onBack: () -> Unit, title: String) -> Unit = { onBack, title ->
+        SheetHandle(theme)
+        PersonalDetailsPageHeader(
+            theme = theme,
+            locale = config.options.locale,
+            enabled = !isProcessing,
+            title = title,
+            onBack = onBack,
+        )
+    }
 
     PaymentForm(
         config = config,
@@ -100,26 +112,8 @@ internal fun PaymentSheetContent(
                 onCancel = onCancel,
             )
         },
-        personalDetailsHeader = { onBack, title ->
-            SheetHandle(theme)
-            PersonalDetailsPageHeader(
-                theme = theme,
-                locale = config.options.locale,
-                enabled = !isProcessing,
-                title = title,
-                onBack = onBack,
-            )
-        },
-        savedCardsEditHeader = { onBack, title ->
-            SheetHandle(theme)
-            PersonalDetailsPageHeader(
-                theme = theme,
-                locale = config.options.locale,
-                enabled = !isProcessing,
-                title = title,
-                onBack = onBack,
-            )
-        },
+        personalDetailsHeader = pageHeader,
+        savedCardsEditHeader = pageHeader,
     )
 }
 

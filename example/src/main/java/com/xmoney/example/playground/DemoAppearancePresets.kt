@@ -3,6 +3,7 @@ package com.xmoney.example.playground
 import com.xmoney.payments.config.Appearance
 import com.xmoney.payments.config.ColorSchemePreference
 import com.xmoney.payments.config.Corners
+import com.xmoney.payments.config.Shape
 import com.xmoney.payments.config.ThemeColor
 
 data class DemoAppearancePreset(
@@ -20,13 +21,13 @@ internal object DemoAppearancePresets {
         "sharp_blue",
         "Sharp blue",
         "Square corners, blue brand in both modes",
-        Appearance(brandColor = pair("#1D4ED8", "#436CDF"), corners = Corners.Sharp, pillButtons = false),
+        Appearance(brandColor = pair("#1D4ED8", "#436CDF"), shape = Shape(Corners.Sharp, pillButtons = false)),
     )
     val roundedTeal = DemoAppearancePreset(
         "rounded_teal",
         "Rounded teal",
         "Rounded corners, teal brand in both modes",
-        Appearance(brandColor = pair("#0F766E", "#0F766E"), corners = Corners.Rounded),
+        Appearance(brandColor = pair("#0F766E", "#0F766E"), shape = Shape(corners = Corners.Rounded)),
     )
     val blackBrand = DemoAppearancePreset(
         "black_brand",

@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+
 package com.xmoney.paymentelement.ui
 
 import androidx.compose.foundation.Image
@@ -6,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -33,7 +36,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.autofill.AutofillType
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -129,6 +135,7 @@ internal fun PersonalDetailsForm(
                                     theme, state, PersonalField.FULL_NAME,
                                     Strings.text("personalDetails.fullNamePlaceholder", localeTag),
                                     KeyboardType.Text,
+                                    localeTag = localeTag,
                                 )
                             }
                             if (visibility.showPhone) {
@@ -142,6 +149,7 @@ internal fun PersonalDetailsForm(
                                     theme, state, PersonalField.EMAIL,
                                     Strings.text("personalDetails.emailPlaceholder", localeTag),
                                     KeyboardType.Email,
+                                    localeTag = localeTag,
                                 )
                             }
                         }
@@ -219,6 +227,7 @@ internal fun PersonalDetailsForm(
                                 theme, state, PersonalField.ADDRESS,
                                 Strings.text("personalDetails.addressPlaceholder", localeTag),
                                 KeyboardType.Text,
+                                localeTag = localeTag,
                             )
                             Divider(color = theme.fieldBorder, thickness = 1.dp)
                             CondensedCityPostal(state, theme, localeTag, format.showPostal, format.postalType)
@@ -301,7 +310,11 @@ private fun GroupedFields(
             .fillMaxWidth()
             .clip(RoundedCornerShape(theme.formFieldRadius))
             .background(theme.componentBackground)
-            .border(theme.fieldStrokeWidth(hasError), borderColor, RoundedCornerShape(theme.formFieldRadius)),
+            .border(
+                theme.fieldStrokeWidth(hasError, focused = anyFocused),
+                borderColor,
+                RoundedCornerShape(theme.formFieldRadius),
+            ),
         content = { content() },
     )
 }
@@ -333,7 +346,7 @@ private fun SpacedTextField(
     Column {
         DetailsFieldCaption(label, theme)
         LabeledFieldBox(theme, borderColor(state, field, theme), borderWidth(state, field, theme)) {
-            GroupTextField(theme, state, field, placeholder, keyboardType)
+            GroupTextField(theme, state, field, placeholder, keyboardType, localeTag = locale)
         }
         FieldErrorText(state.errorMessage(field, locale), theme)
     }
@@ -433,7 +446,11 @@ private fun SpacedCityPostal(
         if (postalValue.isBlank()) FontWeight.Normal else FontWeight.Medium,
     )
     val postalLabelWidth = measuredTextWidth(postalLabel, theme, 14f, FontWeight.SemiBold)
-    val postalWidth = maxOf(postalLabelWidth, postalTextWidth + DetailsFieldInset * 2)
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+    val postalWidth = minOf(
+        maxOf(postalLabelWidth, postalTextWidth + DetailsFieldInset * 2),
+        maxWidth * 0.45f,
+    )
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -451,6 +468,7 @@ private fun SpacedCityPostal(
                 postalValue, PersonalField.POSTAL, KeyboardType.Text, state, localeTag,
             )
         }
+    }
     }
 }
 
@@ -481,6 +499,7 @@ private fun CondensedPhoneRow(
             Strings.text("personalDetails.phonePlaceholder", localeTag),
             KeyboardType.Phone,
             modifier = Modifier.weight(204f),
+            localeTag = localeTag,
         )
     }
 }
@@ -498,6 +517,7 @@ private fun CondensedCityPostal(
             theme, state, PersonalField.CITY,
             Strings.text("personalDetails.cityPlaceholder", localeTag),
             KeyboardType.Text,
+            localeTag = localeTag,
         )
         return
     }
@@ -508,6 +528,7 @@ private fun CondensedCityPostal(
             Strings.text("personalDetails.cityPlaceholder", localeTag),
             KeyboardType.Text,
             modifier = Modifier.weight(1f),
+            localeTag = localeTag,
         )
         Divider(
             color = theme.fieldBorder,
@@ -518,6 +539,7 @@ private fun CondensedCityPostal(
             Strings.text(postal.placeholder, localeTag),
             KeyboardType.Text,
             modifier = Modifier.weight(1f),
+            localeTag = localeTag,
         )
     }
 }
@@ -530,6 +552,7 @@ private fun GroupTextField(
     placeholder: String,
     keyboardType: KeyboardType,
     modifier: Modifier = Modifier,
+    localeTag: String = "en",
 ) {
     val value = when (field) {
         PersonalField.FULL_NAME -> state.input.fullName
@@ -540,6 +563,17 @@ private fun GroupTextField(
         PersonalField.POSTAL -> state.input.postalCode
         else -> ""
     }
+    val format = AddressFormats.forCountry(state.input.country)
+    val textOrder = buildList {
+        if (state.visibility.showFullName) add(PersonalField.FULL_NAME)
+        if (state.visibility.showPhone) add(PersonalField.PHONE)
+        if (state.visibility.showEmail) add(PersonalField.EMAIL)
+        if (state.visibility.showAddressSection) {
+            add(PersonalField.ADDRESS)
+            add(PersonalField.CITY)
+            if (format.showPostal) add(PersonalField.POSTAL)
+        }
+    }
     ContainedFieldRow(
         theme = theme,
         value = value,
@@ -547,12 +581,18 @@ private fun GroupTextField(
         keyboardType = keyboardType,
         fieldHeight = DetailsFieldHeight,
         modifier = modifier,
+        contentDescription = fieldLabel(field, localeTag),
+        capitalization = when (field) {
+            PersonalField.FULL_NAME, PersonalField.ADDRESS, PersonalField.CITY -> KeyboardCapitalization.Words
+            else -> KeyboardCapitalization.None
+        },
+        autofillType = autofillType(field),
         horizontalPadding = DetailsFieldInset,
         valueColor = theme.primaryText,
         placeholderColor = theme.inputPlaceholder,
         valueWeight = FontWeight.Medium,
         placeholderWeight = FontWeight.Normal,
-        imeAction = ImeAction.Next,
+        imeAction = if (textOrder.lastOrNull() == field) ImeAction.Done else ImeAction.Next,
         onFocus = { state.focused[field] = true },
         onBlur = {
             state.focused[field] = false
@@ -560,6 +600,30 @@ private fun GroupTextField(
         },
         onValueChange = { state.onTextChange(field, it) },
     )
+}
+
+private fun fieldLabel(field: PersonalField, locale: String): String {
+    val key = when (field) {
+        PersonalField.FULL_NAME -> "personalDetails.fullName"
+        PersonalField.EMAIL -> "personalDetails.email"
+        PersonalField.PHONE -> "personalDetails.phone"
+        PersonalField.ADDRESS -> "personalDetails.address"
+        PersonalField.CITY -> "personalDetails.city"
+        PersonalField.POSTAL -> "personalDetails.postal.postalCode"
+        else -> "personalDetails.enterDetails"
+    }
+    return Strings.text(key, locale)
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+private fun autofillType(field: PersonalField): AutofillType? = when (field) {
+    PersonalField.FULL_NAME -> AutofillType.PersonFullName
+    PersonalField.EMAIL -> AutofillType.EmailAddress
+    PersonalField.PHONE -> AutofillType.PhoneNumber
+    PersonalField.ADDRESS -> AutofillType.AddressStreet
+    PersonalField.CITY -> AutofillType.AddressLocality
+    PersonalField.POSTAL -> AutofillType.PostalCode
+    else -> null
 }
 
 @Composable
@@ -626,7 +690,7 @@ private fun borderColor(state: PersonalDetailsFormState, field: PersonalField, t
     }
 
 private fun borderWidth(state: PersonalDetailsFormState, field: PersonalField, theme: CheckoutTheme) =
-    theme.fieldStrokeWidth(state.shouldShow(field))
+    theme.fieldStrokeWidth(state.shouldShow(field), focused = state.focused[field] == true)
 
 @Composable
 private fun DetailsFieldCaption(text: String, theme: CheckoutTheme) {
