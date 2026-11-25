@@ -285,7 +285,9 @@ internal object ThemeDerivation {
         val checkbox = interpolate(0.0, 8.0, 12.0, scale)
         val row = if (container >= 16) maxOf(8.0, minOf(field, container - 8)) else minOf(control, container)
         val button = if (appearance.shape.pillButtons) CheckoutTheme.DefaultPrimaryButtonRadius.toDouble() else control
-        return Radii(button.dp, field.dp, row.dp, container.dp, sheet.dp, checkbox.dp, control.dp)
+        // The chip is 48×34. A radius past half its height (17) draws a stadium, so stop at the 12dp chip.
+        val tile = minOf(control, 12.0)
+        return Radii(button.dp, field.dp, row.dp, container.dp, sheet.dp, checkbox.dp, tile.dp)
     }
 
     private fun interpolate(sharp: Double, regular: Double, rounded: Double, scale: Double): Double {

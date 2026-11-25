@@ -1,7 +1,6 @@
 package com.xmoney.example.playground
 
 import com.xmoney.payments.config.Appearance
-import com.xmoney.payments.config.ColorSchemePreference
 import com.xmoney.payments.config.Corners
 import com.xmoney.payments.config.Shape
 import com.xmoney.payments.config.ThemeColor
@@ -29,41 +28,33 @@ internal object DemoAppearancePresets {
         "Rounded corners, teal brand in both modes",
         Appearance(brandColor = pair("#0F766E", "#0F766E"), shape = Shape(corners = Corners.Rounded)),
     )
-    val blackBrand = DemoAppearancePreset(
-        "black_brand",
-        "Black brand",
-        "Near-black brand, light scheme",
-        Appearance(colorScheme = ColorSchemePreference.LIGHT, brandColor = pair("#16141A", "#16141A")),
-    )
     val yellow = DemoAppearancePreset(
         "yellow",
         "Yellow",
         "Yellow brand in both modes",
         Appearance(brandColor = pair("#FACC15", "#FACC15")),
     )
-    val xportal = DemoAppearancePreset(
-        "xportal",
-        "xPortal",
-        "White brand on the lifted sheet",
+    val black = DemoAppearancePreset(
+        "black",
+        "Black",
+        "Black on a light sheet, white on the lifted black sheet",
         Appearance(
-            colorScheme = ColorSchemePreference.DARK,
-            brandColor = pair("#FFFFFF", "#FFFFFF"),
-            backgroundColor = pair("#000000", "#000000"),
-            neutralTint = pair("#7B909A", "#7B909A"),
+            brandColor = pair("#111111", "#FFFFFF"),
+            backgroundColor = pair("#F4F4F5", "#000000"),
+            neutralTint = pair("#6B7280", "#7B909A"),
         ),
     )
     val warmCream = DemoAppearancePreset(
         "warm_cream",
         "Warm cream",
-        "Terracotta on cream",
+        "Terracotta on cream, warm brown in dark",
         Appearance(
-            colorScheme = ColorSchemePreference.LIGHT,
-            brandColor = pair("#B4532A", "#B4532A"),
-            backgroundColor = pair("#FBF5EA", "#FBF5EA"),
-            neutralTint = pair("#8A7560", "#8A7560"),
+            brandColor = pair("#B4532A", "#F0B090"),
+            backgroundColor = pair("#FBF5EA", "#140E0A"),
+            neutralTint = pair("#8A7560", "#CDB59A"),
         ),
     )
 
-    val all = listOf(xmoney, sharpBlue, roundedTeal, blackBrand, yellow, xportal, warmCream)
+    val all = listOf(xmoney, sharpBlue, roundedTeal, yellow, black, warmCream)
     val default = xmoney
 }

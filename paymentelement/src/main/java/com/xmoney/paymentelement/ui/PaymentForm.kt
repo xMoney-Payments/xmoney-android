@@ -67,6 +67,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -105,6 +107,7 @@ fun PaymentForm(
     config: ResolvedPaymentConfig,
     state: SheetState,
     isProcessing: Boolean,
+    awaitingCancelCheck: Boolean = false,
     onPayCard: (CardInput, CustomerDetailsInput?) -> Unit,
     onSelectSaved: (SavedCard, CustomerDetailsInput?) -> Unit,
     onPayCrypto: (CustomerDetailsInput?) -> Unit = {},
@@ -329,6 +332,29 @@ fun PaymentForm(
         onBack = leaveDetails,
     )
 
+    val nestedScrollInterop = rememberNestedScrollInteropConnection()
+    val sheetScroll = rememberScrollState()
+    val cardHeader: @Composable () -> Unit = {
+        if (isEditingSavedCards) {
+            val editTitle = Strings.text("sheet.savedCards", config.options.locale)
+            if (savedCardsEditHeader != null) {
+                savedCardsEditHeader(leaveSavedCardEdit, editTitle)
+            } else {
+                PersonalDetailsPageHeader(
+                    theme = theme,
+                    locale = config.options.locale,
+                    enabled = interactionEnabled,
+                    title = editTitle,
+                    startPadding = 0.dp,
+                    onBack = leaveSavedCardEdit,
+                )
+            }
+        } else {
+            header?.invoke()
+        }
+    }
+    val openSheetPicker = detailsPicker?.takeIf { !embedded && detailsOnScreen }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -338,8 +364,80 @@ fun PaymentForm(
             .then(if (embedded) Modifier else Modifier.background(theme.background)),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
+        if (!embedded) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(
+                        animationSpec = tween(
+                            durationMillis = SheetInDurationMs,
+                            easing = FastOutSlowInEasing,
+                        ),
+                    ),
+            ) {
+                Column(
+                    modifier = Modifier.pageLayer(
+                        ownsHeight = !detailsOnScreen,
+                        alpha = cardAlpha,
+                    ),
+                ) {
+                    cardHeader()
+                }
+                if (detailsOnScreen) {
+                    PersonalDetailsLayer(
+                        theme = theme,
+                        config = config,
+                        state = detailsState,
+                        enabled = interactionEnabled,
+                        embedded = false,
+                        fillBackground = true,
+                        picker = detailsPicker,
+                        onOpenPicker = { detailsPicker = it },
+                        onClosePicker = closePicker,
+                        onSelectPicker = {},
+                        personalDetailsHeader = personalDetailsHeader,
+                        horizontalPadding = horizontalPadding,
+                        onBack = leaveDetails,
+                        chrome = DetailsChrome.Header,
+                        modifier = Modifier.pageLayer(
+                            ownsHeight = true,
+                            alpha = detailsAlpha,
+                        ),
+                    )
+                }
+            }
+        }
+        if (openSheetPicker != null) {
+            SelectionList(
+                title = openSheetPicker.title,
+                options = openSheetPicker.options,
+                selected = openSheetPicker.selected,
+                theme = theme,
+                modifier = Modifier
+                    .weight(1f)
+                    .nestedScroll(nestedScrollInterop)
+                    .padding(horizontal = horizontalPadding)
+                    .padding(top = 16.dp),
+                onSelect = { value ->
+                    openSheetPicker.onSelect(value)
+                    openSheetPicker.onDismiss()
+                    detailsPicker = null
+                },
+            )
+        } else {
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (embedded) {
+                        Modifier
+                    } else {
+                        Modifier
+                            .weight(1f, fill = false)
+                            .nestedScroll(nestedScrollInterop)
+                            .verticalScroll(sheetScroll)
+                    },
+                ),
             verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             Box(
@@ -358,22 +456,8 @@ fun PaymentForm(
                         alpha = cardAlpha,
                     ),
                 ) {
-                    if (isEditingSavedCards) {
-                        val editTitle = Strings.text("sheet.savedCards", config.options.locale)
-                        if (savedCardsEditHeader != null) {
-                            savedCardsEditHeader(leaveSavedCardEdit, editTitle)
-                        } else {
-                            PersonalDetailsPageHeader(
-                                theme = theme,
-                                locale = config.options.locale,
-                                enabled = interactionEnabled,
-                                title = editTitle,
-                                startPadding = 0.dp,
-                                onBack = leaveSavedCardEdit,
-                            )
-                        }
-                    } else {
-                        header?.invoke()
+                    if (embedded) {
+                        cardHeader()
                     }
                     Column(
                         modifier = Modifier.padding(
@@ -608,6 +692,7 @@ fun PaymentForm(
                         personalDetailsHeader = personalDetailsHeader,
                         horizontalPadding = horizontalPadding,
                         onBack = leaveDetails,
+                        chrome = if (embedded) DetailsChrome.All else DetailsChrome.Body,
                         modifier = Modifier.pageLayer(
                             ownsHeight = true,
                             alpha = detailsAlpha,
@@ -616,6 +701,7 @@ fun PaymentForm(
                 }
             }
         }
+        }
 
         if (detailsPicker == null || embedded) {
         PaymentFormFooter(
@@ -623,6 +709,7 @@ fun PaymentForm(
             config = config,
             state = state,
             isProcessing = isProcessing,
+            awaitingCancelCheck = awaitingCancelCheck,
             interactionEnabled = interactionEnabled,
             onSubmit = {
                 if (isEditingSavedCards) {
@@ -640,6 +727,7 @@ fun PaymentForm(
             continueMode = detailsOnScreen,
             editingSavedCards = isEditingSavedCards,
             cryptoMode = selectedMethod == PaymentMethod.Crypto,
+            modifier = if (embedded) Modifier else Modifier.background(theme.background),
         )
         }
     }
@@ -653,6 +741,8 @@ private val PersonalDetailsHeaderStartPadding = 8.dp
 private const val PageFadeOutMs = 120
 private const val PageFadeInMs = 180
 private const val PageAlphaHidden = 0.01f
+
+private enum class DetailsChrome { All, Header, Body }
 
 private fun Modifier.pageLayer(ownsHeight: Boolean, alpha: Float): Modifier {
     val layer = this
@@ -689,39 +779,41 @@ private fun PersonalDetailsLayer(
     personalDetailsHeader: @Composable ((onBack: () -> Unit, title: String) -> Unit)?,
     horizontalPadding: Dp,
     onBack: () -> Unit,
+    chrome: DetailsChrome = DetailsChrome.All,
     modifier: Modifier = Modifier,
 ) {
     val sheetPicker = picker?.takeIf { !embedded }
     val headerTitle = sheetPicker?.title ?: Strings.text("personalDetails.enterDetails", config.options.locale)
     val headerBack = if (sheetPicker != null) onClosePicker else onBack
-    val listHeight = (LocalConfiguration.current.screenHeightDp * 0.9f).dp - 200.dp
     Column(
         modifier = modifier
             .fillMaxWidth()
             .then(if (fillBackground) Modifier.background(theme.background) else Modifier),
     ) {
-        if (sheetPicker != null) {
-            PickerSheetHandle(theme)
-            SelectionListHeader(
-                title = sheetPicker.title,
-                theme = theme,
-                locale = config.options.locale,
-                enabled = enabled,
-                startPadding = PersonalDetailsHeaderStartPadding,
-                onClose = headerBack,
-            )
-        } else if (personalDetailsHeader != null) {
-            personalDetailsHeader(headerBack, headerTitle)
-        } else {
-            PersonalDetailsPageHeader(
-                theme = theme,
-                locale = config.options.locale,
-                enabled = enabled,
-                startPadding = if (embedded) 0.dp else PersonalDetailsHeaderStartPadding,
-                onBack = onBack,
-            )
+        if (chrome != DetailsChrome.Body) {
+            if (sheetPicker != null) {
+                PickerSheetHandle(theme)
+                SelectionListHeader(
+                    title = sheetPicker.title,
+                    theme = theme,
+                    locale = config.options.locale,
+                    enabled = enabled,
+                    startPadding = PersonalDetailsHeaderStartPadding,
+                    onClose = headerBack,
+                )
+            } else if (personalDetailsHeader != null) {
+                personalDetailsHeader(headerBack, headerTitle)
+            } else {
+                PersonalDetailsPageHeader(
+                    theme = theme,
+                    locale = config.options.locale,
+                    enabled = enabled,
+                    startPadding = if (embedded) 0.dp else PersonalDetailsHeaderStartPadding,
+                    onBack = onBack,
+                )
+            }
         }
-        if (picker == null || embedded) {
+        if (chrome != DetailsChrome.Header && (picker == null || embedded)) {
             PersonalDetailsForm(
                 state = state,
                 config = config,
@@ -730,20 +822,7 @@ private fun PersonalDetailsLayer(
                 modifier = Modifier.padding(horizontal = horizontalPadding),
             )
         }
-        if (sheetPicker != null) {
-            SelectionList(
-                title = sheetPicker.title,
-                options = sheetPicker.options,
-                selected = sheetPicker.selected,
-                theme = theme,
-                modifier = Modifier
-                    .padding(horizontal = horizontalPadding)
-                    .padding(top = 16.dp)
-                    .height(listHeight.coerceAtLeast(280.dp)),
-                onSelect = onSelectPicker,
-            )
-        }
-        if (embedded && picker != null) {
+        if (chrome != DetailsChrome.Header && embedded && picker != null) {
             SelectionListSheet(
                 picker = picker,
                 theme = theme,
@@ -833,6 +912,7 @@ private fun PaymentFormFooter(
     config: ResolvedPaymentConfig,
     state: SheetState,
     isProcessing: Boolean,
+    awaitingCancelCheck: Boolean,
     interactionEnabled: Boolean,
     onSubmit: () -> Unit,
     horizontalPadding: Dp = SheetContentHorizontalPadding,
@@ -841,10 +921,11 @@ private fun PaymentFormFooter(
     continueMode: Boolean = false,
     editingSavedCards: Boolean = false,
     cryptoMode: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     val detailsFooter = continueMode
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = if (detailsFooter) 16.dp else horizontalPadding)
             .padding(
@@ -878,6 +959,7 @@ private fun PaymentFormFooter(
                 locale = config.options.locale,
                 enabled = interactionEnabled,
                 isProcessing = isProcessing,
+                awaitingCancelCheck = awaitingCancelCheck,
                 onClick = onSubmit,
             )
         }

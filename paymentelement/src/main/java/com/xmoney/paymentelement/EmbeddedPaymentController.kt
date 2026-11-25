@@ -61,6 +61,8 @@ class EmbeddedPaymentController(
         private set
     var isProcessing: Boolean by mutableStateOf(false)
         private set
+    var awaitingCancelCheck: Boolean by mutableStateOf(false)
+        private set
     var isOrderConsumed: Boolean by mutableStateOf(false)
         private set
     /**
@@ -280,7 +282,9 @@ class EmbeddedPaymentController(
 
     private suspend fun bindLocked(generation: Int, order: PaymentIntent) {
         val initial = sheetState == null
-        val threeDSHost = ThreeDSHostController(activity) { liveConfiguration.options.locale }
+        val threeDSHost = ThreeDSHostController(activity) { liveConfiguration.options.locale }.also { host ->
+            host.onShopperCanceled = { awaitingCancelCheck = true }
+        }
         inFlightOrder = order
         try {
             val candidate = session.load(order, activity)
@@ -424,6 +428,7 @@ class EmbeddedPaymentController(
 
     private fun deliverResult(result: EngineResult) {
         isProcessing = session.isProcessing
+        if (!isProcessing) awaitingCancelCheck = false
         isOrderConsumed = session.isOrderConsumed
         syncInteractionEnabled()
         onEvent(EmbeddedEvent.Processing(false))
@@ -431,7 +436,9 @@ class EmbeddedPaymentController(
     }
 
     private fun updateProcessing(processing: Boolean) {
+        val starting = processing && !isProcessing
         isProcessing = processing
+        if (!processing || starting) awaitingCancelCheck = false
         syncInteractionEnabled()
         onEvent(EmbeddedEvent.Processing(processing))
     }

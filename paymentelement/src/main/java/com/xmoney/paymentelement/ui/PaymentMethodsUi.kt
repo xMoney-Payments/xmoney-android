@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.xmoney.paymentelement.theme.CheckoutTheme
@@ -243,22 +244,29 @@ private fun SavedCardsExpandedList(
     onConfirmDelete: (SavedCard) -> Unit,
     onCancelDelete: () -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        val cardListScrollState = rememberScrollState()
-        val density = LocalDensity.current
-        val extra = if (pendingDeleteId != null) SavedCardConfirmPanelHeight else 0.dp
-        LaunchedEffect(pendingDeleteId) {
-            val index = cards.indexOfFirst { it.id == pendingDeleteId }
-            if (index >= 0) {
-                val offset = with(density) { (SavedCardRowHeight * index).roundToPx() }
-                cardListScrollState.animateScrollTo(offset)
-            }
+    val cardListScrollState = rememberScrollState()
+    val density = LocalDensity.current
+    val extra = if (pendingDeleteId != null) SavedCardConfirmPanelHeight else 0.dp
+    val overflows = cards.size > 3
+    LaunchedEffect(pendingDeleteId) {
+        val index = cards.indexOfFirst { it.id == pendingDeleteId }
+        if (index >= 0) {
+            val offset = with(density) { (SavedCardRowHeight * index).roundToPx() }
+            cardListScrollState.animateScrollTo(offset)
         }
+    }
+    val listModifier = if (overflows || pendingDeleteId != null) {
+        val rows = if (overflows) MaxVisibleSavedCards else cards.size.coerceAtLeast(1).toFloat()
+        Modifier
+            .fillMaxWidth()
+            .heightIn(max = SavedCardRowHeight * rows + extra)
+            .verticalScroll(cardListScrollState)
+    } else {
+        Modifier.fillMaxWidth()
+    }
+    Column(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = SavedCardRowHeight * MaxVisibleSavedCards + extra)
-                .verticalScroll(cardListScrollState),
+            modifier = listModifier.testTag("saved-card-list"),
         ) {
             cards.forEach { card ->
                 SavedCardPickerRow(

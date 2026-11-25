@@ -12,30 +12,25 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.xmoney.payments.config.ResolvedPaymentConfig
 import com.xmoney.payments.customerdetails.CustomerDetailsInput
@@ -55,6 +50,7 @@ internal fun PaymentSheetContent(
     config: ResolvedPaymentConfig,
     state: SheetState,
     isProcessing: Boolean,
+    awaitingCancelCheck: Boolean = false,
     onPayCard: (CardInput, CustomerDetailsInput?) -> Unit,
     onSelectSaved: (SavedCard, CustomerDetailsInput?) -> Unit,
     onPayCrypto: (CustomerDetailsInput?) -> Unit,
@@ -71,9 +67,7 @@ internal fun PaymentSheetContent(
     val theme = remember(config, isDark, contentSizeScale, increasedContrast) {
         CheckoutTheme.resolve(config, isDark, contentSizeScale, increasedContrast)
     }
-    val nestedScrollInterop = rememberNestedScrollInteropConnection()
-    val maxSheetHeight = (LocalConfiguration.current.screenHeightDp * 0.9f).dp
-    val scrollState = rememberScrollState()
+    val maxSheetHeight = sheetMaxHeight(LocalConfiguration.current.screenHeightDp.dp)
     val pageHeader: @Composable (onBack: () -> Unit, title: String) -> Unit = { onBack, title ->
         SheetHandle(theme)
         PersonalDetailsPageHeader(
@@ -89,6 +83,7 @@ internal fun PaymentSheetContent(
         config = config,
         state = state,
         isProcessing = isProcessing,
+        awaitingCancelCheck = awaitingCancelCheck,
         onPayCard = onPayCard,
         onSelectSaved = onSelectSaved,
         onPayCrypto = onPayCrypto,
@@ -99,10 +94,8 @@ internal fun PaymentSheetContent(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(max = maxSheetHeight)
-            .nestedScroll(nestedScrollInterop)
-            .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
-            .clip(RoundedCornerShape(topStart = theme.sheetCornerRadius, topEnd = theme.sheetCornerRadius))
-            .verticalScroll(scrollState),
+            .windowInsetsPadding(WindowInsets.ime)
+            .clip(RoundedCornerShape(topStart = theme.sheetCornerRadius, topEnd = theme.sheetCornerRadius)),
         header = {
             SheetHandle(theme)
             SheetHeader(
@@ -169,3 +162,9 @@ private fun SheetHeader(
         Spacer(Modifier.weight(1f))
     }
 }
+
+/** Sheet cap: 95% of the screen. Content shorter than this is not clamped. */
+internal fun sheetMaxHeight(screenHeight: Dp): Dp = screenHeight * 0.95f
+
+internal fun sheetHeight(content: Dp, screenHeight: Dp): Dp =
+    content.coerceAtMost(sheetMaxHeight(screenHeight)).coerceAtLeast(0.dp)

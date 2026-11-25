@@ -92,7 +92,7 @@ internal val PaymentContainerInset = 8.dp
 internal val NewCardFormHorizontalPadding = 12.dp
 internal val SavedCardRowHeight = 64.dp
 internal val SavedCardConfirmPanelHeight = 102.dp
-internal const val MaxVisibleSavedCards = 3
+internal const val MaxVisibleSavedCards = 3.35f
 internal val SheetContentHorizontalPadding = 16.dp
 internal val SheetContentTopPadding = 16.dp
 internal val SheetContentBottomPadding = 0.dp
@@ -184,6 +184,7 @@ internal fun SubmitButton(
     locale: String,
     enabled: Boolean,
     isProcessing: Boolean,
+    awaitingCancelCheck: Boolean = false,
     onClick: () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -230,9 +231,10 @@ internal fun SubmitButton(
         ),
     ) {
         if (isProcessing) {
+            val labelKey = if (awaitingCancelCheck) "button.pleaseWait" else "button.processing"
             XCoinButtonLoadingContent(
                 theme = theme,
-                label = Strings.text("button.processing", locale),
+                label = Strings.text(labelKey, locale),
             )
         } else {
             SheetText(

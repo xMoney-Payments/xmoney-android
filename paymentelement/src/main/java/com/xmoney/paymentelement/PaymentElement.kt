@@ -119,6 +119,7 @@ fun PaymentElement(
                     config = config,
                     state = state,
                     isProcessing = controller.isProcessing,
+                    awaitingCancelCheck = controller.awaitingCancelCheck,
                     isUpdatingOrder = controller.isUpdatingOrder || controller.isStaleOrder,
                     isOrderConsumed = controller.isOrderConsumed,
                     onPayCard = { input, details -> controller.payWithCard(input, details) },

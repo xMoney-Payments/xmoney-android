@@ -68,6 +68,8 @@ class ThemeResolutionTest {
         assertEquals(null, dark.visaMarkTint)
         assertEquals(16f, light.rowRadius.value)
         assertEquals(16f, dark.rowRadius.value)
+        assertEquals(12f, light.brandTileRadius.value)
+        assertEquals(12f, dark.brandTileRadius.value)
         assertEquals(0f, light.containerBorder.alpha, 0.001f)
         assertEquals(0f, dark.containerBorder.alpha, 0.001f)
     }
@@ -95,10 +97,24 @@ class ThemeResolutionTest {
         )
         assertEquals("#fbf5ea", hex(theme.background))
         assertClose("#fefdfa", hex(theme.componentBackground))
+
+        val dark = resolve(
+            Appearance(
+                brandColor = ThemeColor.of("#B4532A", "#F0B090"),
+                backgroundColor = ThemeColor.of("#FBF5EA", "#140E0A"),
+                neutralTint = ThemeColor.of("#8A7560", "#CDB59A"),
+            ),
+            true,
+        )
+        assertEquals("#40362d", hex(dark.background))
+        assertEquals("#53473b", hex(dark.componentBackground))
+        assertEquals("#695b4c", hex(dark.selectedBackground))
+        assertEquals("#f0b090", hex(dark.primary))
+        assertEquals("#16141a", hex(dark.primaryButtonText))
     }
 
     @Test
-    fun xPortalSheetLiftsOffTheBackdrop() {
+    fun blackSheetLiftsOffTheBackdrop() {
         val theme = resolve(
             Appearance(
                 brandColor = ThemeColor.of("#FFFFFF"),
@@ -309,6 +325,8 @@ class ThemeResolutionTest {
     fun sheetRadiusStaysAtTheDefault() {
         assertEquals(32f, resolve(Appearance(shape = Shape(corners = Corners.Sharp)), false).sheetCornerRadius.value)
         assertEquals(32f, resolve(Appearance(shape = Shape(corners = Corners.Rounded)), true).sheetCornerRadius.value)
+        assertEquals(0f, resolve(Appearance(shape = Shape(corners = Corners.Sharp)), false).brandTileRadius.value)
+        assertEquals(12f, resolve(Appearance(shape = Shape(corners = Corners.Rounded)), true).brandTileRadius.value)
     }
 
     @Test

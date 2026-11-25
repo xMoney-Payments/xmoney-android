@@ -80,6 +80,7 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
 
     private var uiState by mutableStateOf<UiState>(UiState.Loading)
     private var isProcessing by mutableStateOf(false)
+    private var awaitingCancelCheck by mutableStateOf(false)
     private var didFinish = false
     private var authorizer: DigitalWalletAuthorizing? = null
     private var pendingWalletResult: androidx.activity.result.ActivityResult? = null
@@ -87,7 +88,9 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
     private var behaviorCallback: BottomSheetBehavior.BottomSheetCallback? = null
 
     private val threeDSHostController by lazy {
-        ThreeDSHostController(requireActivity()) { viewModel.config.options.locale }
+        ThreeDSHostController(requireActivity()) { viewModel.config.options.locale }.also { host ->
+            host.onShopperCanceled = { awaitingCancelCheck = true }
+        }
     }
 
     private lateinit var resolutionLauncher: ActivityResultLauncher<IntentSenderRequest>
@@ -118,8 +121,13 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
             window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
             window.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
         }
+        // Material pads the container for system bars when edge-to-edge is off. The footer
+        // already keeps 16dp under "Powered by", so that navigation-bar padding is not added again.
+        dialog.findViewById<View>(com.google.android.material.R.id.container)?.clearBottomSystemPadding()
+        dialog.findViewById<View>(com.google.android.material.R.id.coordinator)?.clearBottomSystemPadding()
         dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { sheet ->
             sheet.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            sheet.clearBottomSystemPadding()
             sheet.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
             sheet.clipToOutline = false
             (sheet.parent as? ViewGroup)?.clipChildren = false
@@ -129,8 +137,11 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
 
     private fun bindSheetBehavior(sheet: View) {
         val behavior = BottomSheetBehavior.from(sheet)
-        behavior.state = BottomSheetBehavior.STATE_EXPANDED
+        // Hug the content. maxHeight is the only cap, applied once the content is taller.
+        behavior.isFitToContents = true
         behavior.skipCollapsed = true
+        behavior.maxHeight = sheetMaxHeightPx(sheet.resources.displayMetrics.heightPixels)
+        behavior.state = BottomSheetBehavior.STATE_EXPANDED
         behavior.isHideable = true
         behavior.isDraggable = !isProcessing
         if (sheetBehavior !== behavior) {
@@ -241,6 +252,7 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
                                 config = vm.config,
                                 state = loaded.state,
                                 isProcessing = isProcessing,
+                                awaitingCancelCheck = awaitingCancelCheck,
                                 onPayCard = { input, details -> payWithCard(input, details) },
                                 onSelectSaved = { card, details -> paySavedCard(card, details) },
                                 onPayCrypto = { details -> payWithCrypto(details) },
@@ -357,7 +369,9 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
     }
 
     private fun setProcessingState(processing: Boolean) {
+        val starting = processing && !isProcessing
         isProcessing = processing
+        if (!processing || starting) awaitingCancelCheck = false
         isCancelable = !processing
         sheetBehavior?.isDraggable = !processing
         viewModel.onEvent(PaymentSheetEvent.Processing(processing))
@@ -387,6 +401,11 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
     companion object {
         const val TAG = "PaymentSheet"
     }
+}
+
+private fun View.clearBottomSystemPadding() {
+    fitsSystemWindows = false
+    setPadding(paddingLeft, paddingTop, paddingRight, 0)
 }
 
 @androidx.compose.runtime.Composable
@@ -436,6 +455,9 @@ private fun SheetSurface(theme: CheckoutTheme, content: @androidx.compose.runtim
  * Only the strip above the sheet is visible, so the bitmap is a fixed height keyed on width.
  * Sheet height changes (animation, keyboard) do not allocate a new bitmap.
  */
+internal fun sheetMaxHeightPx(screenHeightPx: Int): Int =
+    (screenHeightPx * 0.95f).toInt().coerceAtLeast(1)
+
 internal fun sheetLiftShadow(width: Int, density: Float): android.graphics.Bitmap? {
     if (width <= 0) return null
     val blur = 35f * density

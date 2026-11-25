@@ -157,7 +157,7 @@ internal fun SavedCardPickerRow(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = SavedCardRowHeight)
+                    .height(SavedCardRowHeight)
                     .padding(PaymentRowContentPadding),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(if (isAskingDelete) 13.dp else 12.dp),
