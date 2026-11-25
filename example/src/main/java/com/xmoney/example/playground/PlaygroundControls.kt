@@ -18,13 +18,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SegmentedButton
@@ -34,6 +31,8 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,11 +48,11 @@ import com.xmoney.example.exampleForcedStyle
 import com.xmoney.example.theme.ExampleColors
 import com.xmoney.example.theme.ExampleRadii
 import com.xmoney.example.ui.ExampleCard
-import com.xmoney.payments.config.UserInterfaceStyle
+import com.xmoney.payments.config.ColorSchemePreference
 
 @Composable
-internal fun playgroundResolvedStyle(selected: UserInterfaceStyle): UserInterfaceStyle =
-    if (selected == UserInterfaceStyle.AUTOMATIC) exampleForcedStyle() else selected
+internal fun playgroundResolvedStyle(selected: ColorSchemePreference): ColorSchemePreference =
+    if (selected == ColorSchemePreference.AUTOMATIC) exampleForcedStyle() else selected
 
 @Composable
 internal fun PlaygroundSection(
@@ -124,7 +123,6 @@ internal fun PlaygroundSegmentedRow(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PlaygroundDropdown(
     label: String,
@@ -136,39 +134,40 @@ internal fun PlaygroundDropdown(
     enabled: Boolean = true,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = ExampleColors.Purple,
-        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-        focusedContainerColor = MaterialTheme.colorScheme.surface,
-        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-    )
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(
         modifier = modifier
             .fillMaxWidth()
             .alpha(if (enabled) 1f else 0.45f),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        ExposedDropdownMenuBox(
-            expanded = expanded && enabled,
-            onExpandedChange = { if (enabled) expanded = it },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            OutlinedTextField(
-                value = selected.label,
-                onValueChange = {},
-                readOnly = true,
-                enabled = enabled,
-                label = { Text(label) },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                colors = fieldColors,
-                shape = RoundedCornerShape(ExampleRadii.inner),
+        Box(Modifier.fillMaxWidth()) {
+            Row(
                 modifier = Modifier
-                    .menuAnchor(type = MenuAnchorType.PrimaryNotEditable, enabled = enabled)
-                    .fillMaxWidth(),
-            )
-            ExposedDropdownMenu(
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(ExampleRadii.inner))
+                    .clickable(enabled = enabled) { expanded = true }
+                    .focusProperties { canFocus = false }
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(selected.label, style = MaterialTheme.typography.bodyMedium, color = muted)
+                Icon(
+                    imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                    contentDescription = null,
+                    tint = muted,
+                )
+            }
+            DropdownMenu(
                 expanded = expanded && enabled,
                 onDismissRequest = { expanded = false },
+                properties = PopupProperties(focusable = false),
             ) {
                 options.forEach { option ->
                     DropdownMenuItem(
@@ -185,7 +184,7 @@ internal fun PlaygroundDropdown(
             Text(
                 text = caption,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = muted,
             )
         }
     }
@@ -392,6 +391,13 @@ internal fun PlaygroundExpandableGroup(
             )
         }
     }
+}
+
+internal fun parseDemoHexColor(raw: String): Color? {
+    val cleaned = raw.trim().removePrefix("#")
+    val value = cleaned.toLongOrNull(16) ?: return null
+    val argb = if (cleaned.length == 6) 0xFF000000 or value else value
+    return Color(argb)
 }
 
 @Composable

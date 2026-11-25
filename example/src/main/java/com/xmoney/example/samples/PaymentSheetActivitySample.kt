@@ -63,12 +63,11 @@ class PaymentSheetActivitySample : FragmentActivity() {
                             savedCards = SavedCardsConfig(enabled = true),
                         ),
                         options = OptionsConfig(
-                            style = style,
-                            appearance = exampleAppearance(),
+                            appearance = exampleAppearance().copy(colorScheme = style),
                         ),
                     )
                 }
-                val paymentSheet = remember(configuration.options.style) {
+                val paymentSheet = remember(configuration.options.appearance.colorScheme) {
                     PaymentSheet(configuration)
                 }
                 ActivityApiScreen(activity = this, paymentSheet = paymentSheet)

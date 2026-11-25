@@ -12,9 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.fragment.app.FragmentActivity
 import com.xmoney.example.BuildConfig
 import com.xmoney.example.backend.DemoCheckoutBackend
-import com.xmoney.example.exampleAppearance
 import com.xmoney.example.exampleForcedStyle
-import com.xmoney.example.exampleWalletAppearance
 import com.xmoney.example.orderConsumed
 import com.xmoney.example.theme.ExampleTheme
 import com.xmoney.example.ui.ExampleButton
@@ -24,6 +22,7 @@ import com.xmoney.example.ui.ExampleStatusChip
 import com.xmoney.example.ui.ExampleStatusKind
 import com.xmoney.example.ui.SampleOrderCard
 import com.xmoney.example.ui.SampleScaffold
+import com.xmoney.payments.config.Appearance
 import com.xmoney.payments.config.CardConfig
 import com.xmoney.payments.config.GooglePayConfig
 import com.xmoney.payments.config.OptionsConfig
@@ -70,19 +69,17 @@ private fun PaymentSheetSampleScreen(activity: FragmentActivity) {
     val scope = rememberCoroutineScope()
 
     val style = exampleForcedStyle()
-    val wallet = exampleWalletAppearance()
-    val configuration = remember(style, wallet.color) {
+    val configuration = remember(style) {
         PaymentConfig(
             publicKey = BuildConfig.PUBLIC_KEY,
             paymentMethods = PaymentMethodsConfig(
-                googlePay = GooglePayConfig(enabled = true, appearance = wallet),
+                googlePay = GooglePayConfig(enabled = true),
             ),
             card = CardConfig(
                 savedCards = SavedCardsConfig(enabled = true),
             ),
             options = OptionsConfig(
-                style = style,
-                appearance = exampleAppearance(),
+                appearance = Appearance(colorScheme = style),
             ),
         )
     }

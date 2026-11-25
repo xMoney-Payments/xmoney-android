@@ -293,10 +293,10 @@ private fun TestCardRow(
                 onCopy = { onCopy(card.expiry, "expiry") },
             )
             TestCardCopyField(
-                title = "CVV",
+                title = "CVC",
                 value = card.cvv,
                 modifier = Modifier.weight(1f),
-                onCopy = { onCopy(card.cvv, "CVV") },
+                onCopy = { onCopy(card.cvv, "CVC") },
             )
             TestCardCopyField(
                 title = "3DS",

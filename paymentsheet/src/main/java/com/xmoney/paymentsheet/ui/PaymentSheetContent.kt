@@ -63,7 +63,12 @@ internal fun PaymentSheetContent(
     onSurfaceDrawn: () -> Unit = {},
 ) {
     val isDark = UIHelpers.isDarkMode(config, isSystemInDarkTheme())
-    val theme = remember(config, isDark) { CheckoutTheme.resolve(config, isDark) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val contentSizeScale = UIHelpers.contentSizeScale(context)
+    val increasedContrast = UIHelpers.increasedContrast(context)
+    val theme = remember(config, isDark, contentSizeScale, increasedContrast) {
+        CheckoutTheme.resolve(config, isDark, contentSizeScale, increasedContrast)
+    }
     val nestedScrollInterop = rememberNestedScrollInteropConnection()
     val maxSheetHeight = (LocalConfiguration.current.screenHeightDp * 0.9f).dp
     val scrollState = rememberScrollState()
@@ -84,7 +89,7 @@ internal fun PaymentSheetContent(
             .heightIn(max = maxSheetHeight)
             .nestedScroll(nestedScrollInterop)
             .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
-            .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
+            .clip(RoundedCornerShape(topStart = theme.sheetCornerRadius, topEnd = theme.sheetCornerRadius))
             .verticalScroll(scrollState),
         header = {
             SheetHandle(theme)
@@ -96,6 +101,16 @@ internal fun PaymentSheetContent(
             )
         },
         personalDetailsHeader = { onBack, title ->
+            SheetHandle(theme)
+            PersonalDetailsPageHeader(
+                theme = theme,
+                locale = config.options.locale,
+                enabled = !isProcessing,
+                title = title,
+                onBack = onBack,
+            )
+        },
+        savedCardsEditHeader = { onBack, title ->
             SheetHandle(theme)
             PersonalDetailsPageHeader(
                 theme = theme,
@@ -154,7 +169,7 @@ private fun SheetHeader(
                 painter = painterResource(R.drawable.xmoney_ic_close),
                 contentDescription = null,
                 modifier = Modifier.size(24.dp),
-                colorFilter = ColorFilter.tint(theme.primaryText),
+                colorFilter = ColorFilter.tint(theme.sheetChromeText),
             )
         }
         Spacer(Modifier.weight(1f))

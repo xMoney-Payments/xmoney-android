@@ -1,5 +1,6 @@
 package com.xmoney.payments.model
 
+import com.xmoney.payments.config.Appearance
 import com.xmoney.payments.config.Strings
 import com.xmoney.payments.validation.CardFieldValidators
 
@@ -97,6 +98,35 @@ class ContractTest {
     }
 
     @Test
+    fun themeResolutionVectors() {
+        val cases = vectors.getJSONArray("themeResolution")
+        assertTrue(cases.length() > 0)
+        for (i in 0 until cases.length()) {
+            val item = cases.getJSONObject(i)
+            val sent = item.getJSONObject("appearance")
+            val appearance = Appearance.from(jsonToMap(sent))
+            val expected = item.getJSONObject("expected")
+            val isDark = item.getBoolean("isDark")
+            if (sent.has("brandColor")) {
+                assertEquals(
+                    expected.getString("primary"),
+                    appearance.brandColor!!.srgb(isDark).hex.lowercase(),
+                )
+            } else {
+                assertEquals(null, appearance.brandColor)
+            }
+            if (sent.has("backgroundColor")) {
+                assertEquals(
+                    expected.getString("background"),
+                    appearance.backgroundColor!!.srgb(isDark).hex.lowercase(),
+                )
+            } else {
+                assertEquals(null, appearance.backgroundColor)
+            }
+        }
+    }
+
+    @Test
     fun localeVectors() {
         val cases = vectors.getJSONArray("locales")
         for (i in 0 until cases.length()) {
@@ -107,6 +137,17 @@ class ContractTest {
             val text = Strings.text(key, locale)
             assertTrue("locale $locale case $i", text.contains(contains))
         }
+    }
+
+    private fun jsonToMap(source: JSONObject): Map<String, Any?> {
+        val map = linkedMapOf<String, Any?>()
+        val keys = source.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            val value = source.get(key)
+            map[key] = if (value is JSONObject) jsonToMap(value) else value
+        }
+        return map
     }
 
     private fun loadVectors(): JSONObject {

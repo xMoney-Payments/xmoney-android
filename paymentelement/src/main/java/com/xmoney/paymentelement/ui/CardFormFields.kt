@@ -320,12 +320,22 @@ internal fun SaveCardCheckbox(
         Box(
             modifier = Modifier
                 .size(22.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(theme.checkboxRadius))
                 .then(
                     if (checked) {
-                        Modifier.background(theme.primary)
+                        Modifier.background(theme.primary).then(
+                            if (theme.filledBrandNeedsOutline) {
+                                Modifier.border(
+                                    1.5.dp,
+                                    theme.stateIndicatorBorder,
+                                    RoundedCornerShape(theme.checkboxRadius),
+                                )
+                            } else {
+                                Modifier
+                            },
+                        )
                     } else {
-                        Modifier.border(1.5.dp, theme.unselectedRing, RoundedCornerShape(8.dp))
+                        Modifier.border(1.5.dp, theme.radioIdle, RoundedCornerShape(theme.checkboxRadius))
                     },
                 ),
             contentAlignment = Alignment.Center,

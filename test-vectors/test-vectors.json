@@ -63,5 +63,22 @@
     { "type": "subscribe", "key": "button.subscribe" },
     { "type": "topUp", "key": "button.topUp" },
     { "type": "deposit", "key": "button.deposit" }
+  ],
+  "themeResolution": [
+    {
+      "isDark": false,
+      "appearance": { "brandColor": "#ff0000" },
+      "expected": { "primary": "#ff0000", "background": "#fff0f0" }
+    },
+    {
+      "isDark": true,
+      "appearance": { "backgroundColor": "#111111" },
+      "expected": { "primary": "#7c4dff", "background": "#111111" }
+    },
+    {
+      "isDark": false,
+      "appearance": { "colorsLight": { "primary": "#ff0000" } },
+      "expected": { "primary": "#7c4dff", "background": "#f7f6ff" }
+    }
   ]
 }

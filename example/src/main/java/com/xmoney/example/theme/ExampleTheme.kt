@@ -50,7 +50,7 @@ object ExampleRadii {
 
 /**
  * Process-wide light/dark preference for example-app chrome.
- * Also forces SDK [com.xmoney.payments.config.UserInterfaceStyle] on Sheet, Element, and Google Pay.
+ * Also forces SDK [com.xmoney.payments.config.ColorSchemePreference] on Sheet, Element, and Google Pay.
  */
 object ExampleThemeController {
     private const val PREFS = "xmoney_example"

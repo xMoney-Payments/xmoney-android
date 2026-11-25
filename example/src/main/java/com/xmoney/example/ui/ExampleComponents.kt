@@ -877,11 +877,13 @@ fun ExampleSwitchRow(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(title, style = MaterialTheme.typography.titleMedium, color = titleColor)
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = subtitleColor,
-                )
+                if (subtitle.isNotEmpty()) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = subtitleColor,
+                    )
+                }
             }
             Switch(
                 checked = checked,

@@ -10,10 +10,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
-import com.xmoney.payments.config.AppearanceConfig
+import com.xmoney.payments.config.Appearance
 import com.xmoney.payments.config.PaymentConfig
 import com.xmoney.payments.config.ResolvedPaymentConfig
-import com.xmoney.payments.config.UserInterfaceStyle
 import com.xmoney.payments.config.WalletAppearance
 import com.xmoney.payments.engine.DigitalWalletAuthorizing
 import com.xmoney.payments.engine.DigitalWalletFactory
@@ -127,7 +126,7 @@ class EmbeddedPaymentController(
         }
     }
 
-    fun updateAppearance(appearance: AppearanceConfig) {
+    fun updateAppearance(appearance: Appearance) {
         liveConfiguration = liveConfiguration.copy(
             options = liveConfiguration.options.copy(appearance = appearance),
         )
@@ -146,13 +145,6 @@ class EmbeddedPaymentController(
     fun updateLocale(locale: String) {
         liveConfiguration = liveConfiguration.copy(
             options = liveConfiguration.options.copy(locale = locale),
-        )
-        boundIntent?.let { paymentConfig = liveConfiguration.resolve(it) }
-    }
-
-    fun updateStyle(style: UserInterfaceStyle) {
-        liveConfiguration = liveConfiguration.copy(
-            options = liveConfiguration.options.copy(style = style),
         )
         boundIntent?.let { paymentConfig = liveConfiguration.resolve(it) }
     }

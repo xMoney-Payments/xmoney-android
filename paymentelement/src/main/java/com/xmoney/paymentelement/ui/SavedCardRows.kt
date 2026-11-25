@@ -56,7 +56,7 @@ internal fun SavedCardsSummaryRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(PaymentRowRadius))
+            .clip(RoundedCornerShape(theme.rowRadius))
             .pressScaleClickable(enabled = enabled, onClick = onClick)
             .padding(PaymentRowContentPadding),
         verticalAlignment = Alignment.CenterVertically,
@@ -69,9 +69,9 @@ internal fun SavedCardsSummaryRow(
                 modifier = Modifier
                     .width(48.dp)
                     .height(34.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(theme.componentBackground)
-                    .border(1.dp, theme.brandChipBorder, RoundedCornerShape(12.dp)),
+                    .clip(RoundedCornerShape(theme.brandTileRadius))
+                    .background(theme.brandTileBackground)
+                    .border(1.dp, theme.brandChipBorder, RoundedCornerShape(theme.brandTileRadius)),
                 contentAlignment = Alignment.Center,
             ) {
                 CardBrandIcon(
@@ -98,11 +98,11 @@ internal fun SavedCardsSummaryRow(
                 SheetText(
                     subtitle,
                     theme = theme,
-                    color = theme.sectionLabel,
-                    fontSize = 14f,
-                    fontWeight = FontWeight.Medium,
-                    lineHeight = 16f,
-                )
+                        color = theme.metaText,
+                        fontSize = 14f,
+                        fontWeight = FontWeight.Medium,
+                        lineHeight = 16f,
+                    )
             }
         }
         Image(
@@ -132,9 +132,9 @@ internal fun SavedCardPickerRow(
 ) {
     val askTint = theme.dangerTint
     val rowShape = if (isAskingDelete) {
-        RoundedCornerShape(topStart = PaymentRowRadius, topEnd = PaymentRowRadius)
+        RoundedCornerShape(topStart = theme.rowRadius, topEnd = theme.rowRadius)
     } else {
-        RoundedCornerShape(PaymentRowRadius)
+        RoundedCornerShape(theme.rowRadius)
     }
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(
@@ -166,12 +166,12 @@ internal fun SavedCardPickerRow(
                     modifier = Modifier
                         .width(48.dp)
                         .height(34.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(theme.componentBackground)
+                        .clip(RoundedCornerShape(theme.brandTileRadius))
+                        .background(theme.brandTileBackground)
                         .border(
                             1.dp,
                             theme.brandChipBorder,
-                            RoundedCornerShape(12.dp),
+                            RoundedCornerShape(theme.brandTileRadius),
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -214,7 +214,7 @@ internal fun SavedCardPickerRow(
                     SheetText(
                         savedCardMeta(card, locale),
                         theme = theme,
-                        color = theme.sectionLabel,
+                        color = theme.metaText,
                         fontSize = 14f,
                         fontWeight = FontWeight.Medium,
                         lineHeight = 16f,
@@ -280,7 +280,7 @@ private fun SavedCardTrashButton(
             modifier = Modifier
                 .width(15.dp)
                 .height(16.dp),
-            colorFilter = ColorFilter.tint(theme.errorText),
+            colorFilter = ColorFilter.tint(if (theme.isDark) Color(0xFFEF4444) else Color(0xFFDC2626)),
         )
     }
 }
@@ -296,7 +296,7 @@ private fun SavedCardRemoveConfirm(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = PaymentRowRadius, bottomEnd = PaymentRowRadius))
+            .clip(RoundedCornerShape(bottomStart = theme.rowRadius, bottomEnd = theme.rowRadius))
             .background(theme.dangerTint)
             .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 16.dp),
     ) {
@@ -375,7 +375,7 @@ internal fun UseOtherCardRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = SavedCardRowHeight)
-                .clip(RoundedCornerShape(PaymentRowRadius))
+                .clip(RoundedCornerShape(theme.rowRadius))
                 .pressScaleClickable(enabled = enabled, onClick = onClick)
                 .padding(PaymentRowContentPadding),
             verticalAlignment = Alignment.CenterVertically,
@@ -385,7 +385,7 @@ internal fun UseOtherCardRow(
                 modifier = Modifier
                     .width(48.dp)
                     .height(34.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(theme.brandTileRadius))
                     .background(theme.accentIconBackground),
                 contentAlignment = Alignment.Center,
             ) {
@@ -438,13 +438,13 @@ internal fun UseOtherCardRow(
 
 @Composable
 internal fun PayWithCardChip(theme: CheckoutTheme) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(theme.brandTileRadius)
     Box(
         modifier = Modifier
             .width(48.dp)
             .height(34.dp)
             .then(
-                if (theme.isDark) {
+                if (theme.isDarkSurface) {
                     Modifier
                 } else {
                     Modifier.shadow(
@@ -471,10 +471,16 @@ internal fun PayWithCardChip(theme: CheckoutTheme) {
 
 @Composable
 internal fun RadioDot(theme: CheckoutTheme, selected: Boolean) {
+    val stroke = if (selected) theme.primary else theme.radioIdle
+    val outline = selected && theme.filledBrandNeedsOutline
     Box(
         modifier = Modifier
             .size(24.dp)
-            .border(2.dp, if (selected) theme.primary else theme.radioIdle, CircleShape),
+            .then(
+                if (outline) Modifier.border(1.dp, theme.stateIndicatorBorder, CircleShape) else Modifier,
+            )
+            .padding(if (outline) 1.dp else 0.dp)
+            .border(2.dp, stroke, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         if (selected) {

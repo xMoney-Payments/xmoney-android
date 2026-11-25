@@ -2,7 +2,7 @@
 
 In-repo demo for the SDK. One Gradle module, a launcher, copy-paste samples, three merchant scenarios, and an internal playground.
 
-Sun/moon toggle for **light / dark** (saved across Integrations, Advanced, and Playground). Scenario stores hide it and use their own accent. Samples pass a matching `AppearanceConfig` (`colorsLight` / `colorsDark`) so the SDK form sits on the merchant page instead of the library defaults.
+Sun/moon toggle for **light / dark** (saved across Integrations, Advanced, and Playground). Scenario stores hide it and use their own accent. Samples pass a matching `Appearance` so the SDK form sits on the merchant page instead of the library defaults.
 
 ## Run
 
@@ -37,7 +37,7 @@ Smoke-test published artifacts:
 | Advanced | Update order | `updateOrder()` a new `PaymentIntent` on a mounted Element |
 | Advanced | Card holder verification | Pre-pay name check |
 | Advanced | Embedded in Views | XML + `ComposeView` |
-| Internal | Playground | Every `PaymentConfig` / `AppearanceConfig` option. SDK Style is separate from the example sun/moon toggle (Auto follows that toggle). |
+| Internal | Playground | Every `PaymentConfig` / `Appearance` option. `colorScheme` is separate from the example sun/moon toggle (Auto follows that toggle). |
 
 Integrations and name-check include a **Test cards** sheet — tap to copy Visa/Mastercard sandbox PANs, expiry, CVV, and 3DS (`00000`).
 
@@ -58,6 +58,6 @@ Integrations and name-check include a **Test cards** sheet — tap to copy Visa/
 - After a consumed result, samples hide the payment UI and show **New payment**.
 - To change the amount on a mounted Element or Google Pay button, pass the server call to `updateOrder { }`. Pay locks immediately, including during the debounce and server request, so a fast tap cannot charge the previous order. A newer call cooperatively cancels the older task, so keep the endpoint idempotent. Then pass the returned intent to the host; its repeated bind is a no-op. Do **not** set the intent to `null` or hide the form. Hearth, Pulse, Update order, and Playground use this flow. `Processing` is an in-flight charge only.
 - Activity Google Pay: while the host overlay is open, `GooglePay.updateOrder(nextIntent)` rebinds without dismissing; use `updateOrder { createOrder() }` to lock before server work. Updates do not emit another `Ready`. Throws if no host is open or a different order is requested during payment. A second `present()` is a no-op until `dismiss()`.
-- Call `updateAppearance` / `updateStyle` / `updateWalletAppearance` (Element) or `updateAppearance` (Google Pay) when the example sun/moon theme changes. Recreating `PaymentConfig` does not restyle a live controller.
-- [`exampleAppearance()`](src/main/java/com/xmoney/example/SampleHelpers.kt) is the appearance copy-paste — restyle Sheet / Element / Google Pay to match your chrome. `borderRadius` is the card field and payment-methods container radius.
+- Call `updateAppearance` / `updateWalletAppearance` (Element) or `updateAppearance` (Google Pay) when the example sun/moon theme changes. Recreating `PaymentConfig` does not restyle a live controller.
+- [`exampleAppearance()`](src/main/java/com/xmoney/example/SampleHelpers.kt) is the appearance copy-paste — restyle Sheet / Element / Google Pay to match your chrome. `corners` sets the field and payment-methods container radius. The sheet corner stays 32.
 - Cart amounts are **minor units** (`Long` cents). The demo backend converts to a decimal only at the HTTP boundary.

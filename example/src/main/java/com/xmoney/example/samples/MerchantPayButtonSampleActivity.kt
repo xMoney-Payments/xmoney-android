@@ -83,8 +83,7 @@ private fun MerchantPayButtonScreen(activity: FragmentActivity) {
                 submitButton = SubmitButtonConfig(visible = false),
             ),
             options = OptionsConfig(
-                style = style,
-                appearance = appearance,
+                appearance = appearance.copy(colorScheme = style),
             ),
         )
     }
@@ -101,7 +100,7 @@ private fun MerchantPayButtonScreen(activity: FragmentActivity) {
         },
     )
     LaunchedEffect(appearance) { embedded.updateAppearance(appearance) }
-    LaunchedEffect(style) { embedded.updateStyle(style) }
+    LaunchedEffect(style) { embedded.updateAppearance(appearance.copy(colorScheme = style)) }
     LaunchedEffect(wallet) { embedded.updateWalletAppearance(wallet) }
 
     LaunchedEffect(lastResult, embedded.isOrderConsumed) {

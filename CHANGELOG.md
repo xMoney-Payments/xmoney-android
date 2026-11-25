@@ -6,16 +6,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Appearance is now `Appearance`: `brandColor`, `accentColor`, `backgroundColor`, `neutralTint`, optional semantic overrides, `corners`, `pillButtons`, `fontFamily`, and `colorScheme`. The previous `colors`, `colorsLight`, `colorsDark`, `shapes`, `primaryButton`, `font.scale`, `options.style`, and `updateStyle` APIs are removed. An empty appearance is the built-in xMoney light and dark themes. The pay button uses `brandColor` as sent. Links, the focus ring, and radios are adjusted so they stay readable, and other unsent colors are derived. An empty appearance uses a 24pt methods container.
+- The save-card checkbox starts unchecked.
+
 ### Added
 
-- `PaymentConfig.customerDetails.fields` replaces the account field list. Leave it unset to keep using `/inline-checkout/fields`. A flag left off is not collected.
+- `PaymentConfig.customerDetails` collects shopper details for card payments and Google Pay. Which fields appear comes from your account. Card, saved-card, and crypto Pay stay blocked until the details page is valid when `customerDetails.card` is on and the field list is active. Google Pay requests the billing contact and sends it with the payment.
+- `PaymentConfig.customerDetails.fields` replaces the account field list. Leave it unset to keep using `/inline-checkout/fields`. A flag left off is not collected. If that request fails while `customerDetails.card` is on, checkout shows the load failure and Pay stays disabled.
 - `PaymentConfig.customerDetails.defaultValues` prefills the card form. Blank text and values that are not in the country, region, or phone lists are ignored. Google Pay does not use them.
+- `PaymentConfig.paymentMethods.crypto` adds a crypto payment method. It is off unless enabled. Continue opens the hosted page, and closing that page consumes the order.
+- Card, saved-card, and crypto submit reject a payload that is missing a required customer-details field (`PaymentError.InvalidCustomerDetails`).
 
 ### Fixed
 
 - In dark mode, the "Keep it" button in the remove-card prompt shows its label again instead of white text on a white button. Its label now contrasts with `primaryText`, so a custom `background` no longer hides it.
-- Appearance colors apply again in light mode. `primary` tints the selected saved-card row and radio buttons, `secondaryText` colors saved-card details, section labels, the "or" divider label, and the powered-by footer, and `placeholderText` colors empty fields, including the personal-details form. The new default colors are used only when these are unset.
-- The remove-card prompt buttons and the Google Pay button (when its own `radius` is unset) use `primaryButton.borderRadius`, so every button has the same shape.
+- Appearance colors apply again in light mode. `brandColor` tints the pay button. Links and the focus ring are contrast-adjusted from the accent. `textColor` sets primary text only. Saved-card meta, section labels, the "or" label, the powered-by footer, and placeholders follow `neutralTint` and `backgroundColor`.
+- The remove-card prompt buttons and the Google Pay button (when its own `radius` is unset) use `primaryButton.borderRadius`, so every button has the same shape. The sheet corner stays 32.
+- An open personal-details page keeps validating against the current field list after a new order is bound. Continue will not save values that miss a newly required field.
 
 ## [1.1.0] - 2026-10-16
 
@@ -28,7 +37,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `PaymentError.PaymentInProgress` (a `PaymentError.Payment`) is thrown when `updateOrder` asks for a different order during a charge.
 - `UpdateOrderSuperseded`, a `CancellationException`, is thrown by an `updateOrder` call that a newer call replaced.
 - The loading coin is announced as "Loading" by TalkBack, in the configured locale.
-- `PaymentConfig.customerDetails` collects shopper details for card payments and Google Pay. Which fields appear comes from your account. Card and saved-card Pay stay blocked until the details page is valid. Google Pay requests the billing contact and sends it with the payment.
 
 ### Changed
 

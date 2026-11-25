@@ -12,19 +12,25 @@ class InlineCheckoutFieldsService(
     private val env: PaymentEnvironment,
 ) {
     /**
-     * Returns an empty list when the request cannot be made or fails.
-     * An empty list turns collection off and the payment still proceeds.
+     * [InlineFieldsResult.unavailable] is true when the request cannot be made or fails.
+     * A successful response may still list no fields.
      */
-    suspend fun getFields(sessionToken: String): List<String> {
-        if (sessionToken.isBlank()) return emptyList()
+    suspend fun getFields(sessionToken: String): InlineFieldsResult {
+        if (sessionToken.isBlank()) return InlineFieldsResult(emptyList(), unavailable = true)
         return try {
             val url = ApiUrl.make(env.apiNextBaseURL, SdkConstants.INLINE_CHECKOUT_FIELDS_PATH)
             val result = http.getJson(url, sessionToken)
-            (result["data"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+            val fields = (result["data"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+            InlineFieldsResult(fields, unavailable = false)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            emptyList()
+            InlineFieldsResult(emptyList(), unavailable = true)
         }
     }
 }
+
+data class InlineFieldsResult(
+    val fields: List<String>,
+    val unavailable: Boolean,
+)

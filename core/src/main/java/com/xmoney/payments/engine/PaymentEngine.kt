@@ -2,6 +2,7 @@ package com.xmoney.payments.engine
 
 import com.xmoney.payments.config.PaymentEnvironment
 import com.xmoney.payments.config.ResolvedPaymentConfig
+import com.xmoney.payments.customerdetails.AddressFormats
 import com.xmoney.payments.customerdetails.CustomerDetailsInput
 import com.xmoney.payments.customerdetails.CustomerDetailsResolver
 import com.xmoney.payments.customerdetails.CustomerDetailsVisibility
@@ -20,6 +21,7 @@ import com.xmoney.payments.service.CardsService
 import com.xmoney.payments.service.ConfigService
 import com.xmoney.payments.service.DigitalWalletsService
 import com.xmoney.payments.service.InlineCheckoutFieldsService
+import com.xmoney.payments.service.InlineFieldsResult
 import com.xmoney.payments.service.PaymentService
 import com.xmoney.payments.service.TransactionService
 import com.xmoney.payments.util.DeviceMetadata
@@ -124,7 +126,11 @@ class PaymentEngine(
         val siteConfig = configTask.await()
         nameCheckValidationEnabled = siteConfig.nameCheckValidationEnabled
         walletTask.await()
-        val visibility = CustomerDetailsVisibility.resolve(fieldsTask.await())
+        val fetched = fieldsTask.await()
+        if (fetched.unavailable && config.customerDetails.card) {
+            throw PaymentError.Load(PaymentError.GENERIC_LOAD)
+        }
+        val visibility = CustomerDetailsVisibility.resolve(fetched.fields)
         customerDetailsVisibility = visibility
         if (config.customerDetails.fields == null && config.customerDetails.anyEnabled && !visibility.isActive) {
             Log.w(
@@ -145,7 +151,7 @@ class PaymentEngine(
         )
     }
 
-    private suspend fun customerDetailFields(sessionToken: String): List<String> {
+    private suspend fun customerDetailFields(sessionToken: String): InlineFieldsResult {
         val override = config.customerDetails.fields
         if (override != null) {
             val fields = CustomerDetailsResolver.inlineCheckoutFields(override)
@@ -155,10 +161,30 @@ class PaymentEngine(
                     "[customer-details] customerDetails.fields has every field disabled.",
                 )
             }
-            return fields
+            return InlineFieldsResult(fields, unavailable = false)
         }
-        if (!config.customerDetails.anyEnabled) return emptyList()
+        if (!config.customerDetails.anyEnabled) return InlineFieldsResult(emptyList(), unavailable = false)
         return inlineFields.getFields(sessionToken)
+    }
+
+    private fun requireCustomerDetails(details: Map<String, String>?) {
+        if (!config.customerDetails.card || !customerDetailsVisibility.isActive) return
+        val payload = details ?: throw PaymentError.InvalidCustomerDetails()
+        fun filled(vararg keys: String) = keys.any { !payload[it].isNullOrBlank() }
+        val visibility = customerDetailsVisibility
+        // The form submits the wire map (firstName, zipCode, region folded into address).
+        // An internal map uses fullName, region, and postalCode. Accept either shape.
+        if (visibility.showFullName && !filled("fullName", "firstName")) throw PaymentError.InvalidCustomerDetails()
+        if (visibility.showEmail && !filled("email")) throw PaymentError.InvalidCustomerDetails()
+        if (visibility.showPhone && !filled("phone")) throw PaymentError.InvalidCustomerDetails()
+        if (visibility.showAddressSection) {
+            if (!filled("country") || !filled("address") || !filled("city")) throw PaymentError.InvalidCustomerDetails()
+            val format = AddressFormats.forCountry(payload["country"])
+            val wire = filled("firstName", "lastName", "zipCode") ||
+                (!payload.containsKey("fullName") && !payload.containsKey("postalCode") && !payload.containsKey("region"))
+            if (format.showPostal && !filled("postalCode", "zipCode")) throw PaymentError.InvalidCustomerDetails()
+            if (format.showRegion && !wire && !filled("region")) throw PaymentError.InvalidCustomerDetails()
+        }
     }
 
     suspend fun refreshSavedCards(): List<SavedCard> =
@@ -169,6 +195,7 @@ class PaymentEngine(
         presenter: ThreeDSPresenter,
         customerDetails: Map<String, String>? = null,
     ): EngineResult {
+        requireCustomerDetails(customerDetails)
         val verification = config.card.cardHolderVerification
         if (verification != null) {
             if (!nameCheckValidationEnabled) {
@@ -201,6 +228,7 @@ class PaymentEngine(
         presenter: ThreeDSPresenter,
         customerDetails: Map<String, String>? = null,
     ): EngineResult {
+        requireCustomerDetails(customerDetails)
         val fields = payment.savedCardFields(cardId, config.orderPayload, config.orderChecksum, customerDetails)
         return submit(fields, presenter)
     }
@@ -219,6 +247,7 @@ class PaymentEngine(
         presenter: ThreeDSPresenter,
         customerDetails: Map<String, String>? = null,
     ): EngineResult {
+        requireCustomerDetails(customerDetails)
         val fields = payment.cryptoFields(config.orderPayload, config.orderChecksum, customerDetails)
         return submit(fields, presenter)
     }

@@ -116,6 +116,7 @@ fun PaymentForm(
     modifier: Modifier = Modifier,
     header: @Composable (() -> Unit)? = null,
     personalDetailsHeader: @Composable ((onBack: () -> Unit, title: String) -> Unit)? = null,
+    savedCardsEditHeader: @Composable ((onBack: () -> Unit, title: String) -> Unit)? = null,
     isOrderConsumed: Boolean = false,
     isUpdatingOrder: Boolean = false,
     onBindSubmit: ((() -> Unit) -> Unit)? = null,
@@ -123,7 +124,13 @@ fun PaymentForm(
     onSurfaceDrawn: () -> Unit = {},
 ) {
     val isDark = UIHelpers.isDarkMode(config, isSystemInDarkTheme())
-    val theme = remember(config, isDark) { CheckoutTheme.resolve(config, isDark) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val fontScale = androidx.compose.ui.platform.LocalConfiguration.current.fontScale
+    val contentSizeScale = maxOf(fontScale, 1f)
+    val increasedContrast = UIHelpers.increasedContrast(context)
+    val theme = remember(config, isDark, contentSizeScale, increasedContrast) {
+        CheckoutTheme.resolve(config, isDark, contentSizeScale, increasedContrast)
+    }
     val hasSavedCards = state.savedCards.isNotEmpty()
     val embedded = header == null
     val horizontalPadding = if (embedded) 0.dp else SheetContentHorizontalPadding
@@ -213,7 +220,7 @@ fun PaymentForm(
             pendingDeleteId = null
         }
     }
-    val showCrypto = config.paymentMethods.showCryptoOption
+    val showCrypto = config.paymentMethods.crypto.enabled
     LaunchedEffect(showCrypto) {
         if (!showCrypto && selectedMethod == PaymentMethod.Crypto) {
             selectedMethod = if (hasSavedCards) PaymentMethod.SavedCard else PaymentMethod.NewCard
@@ -249,6 +256,7 @@ fun PaymentForm(
     val paySelected: () -> Unit = paySelected@{
         val detailsReady = !needsDetails || detailsState.completed
         if (needsDetails && !detailsReady) {
+            if (isEditingSavedCards) isEditingSavedCards = false
             detailsAttempted = true
             detailsScrollNonce += 1
         }
@@ -306,6 +314,20 @@ fun PaymentForm(
         if (!showingDetails) detailsPicker = null
         if (showingDetails) focusManager.clearFocus(force = true)
     }
+    LaunchedEffect(state.customerDetailsVisibility.isActive) {
+        if (!state.customerDetailsVisibility.isActive) {
+            detailsPicker = null
+            showingDetails = false
+        }
+    }
+    val leaveSavedCardEdit = {
+        isEditingSavedCards = false
+        pendingDeleteId = null
+    }
+    BackHandler(
+        enabled = isEditingSavedCards && !showingDetails && interactionEnabled,
+        onBack = leaveSavedCardEdit,
+    )
     BackHandler(
         enabled = showingDetails && detailsPicker != null && interactionEnabled,
         onBack = closePicker,
@@ -344,7 +366,23 @@ fun PaymentForm(
                         alpha = cardAlpha,
                     ),
                 ) {
-                    header?.invoke()
+                    if (isEditingSavedCards) {
+                        val editTitle = Strings.text("sheet.savedCards", config.options.locale)
+                        if (savedCardsEditHeader != null) {
+                            savedCardsEditHeader(leaveSavedCardEdit, editTitle)
+                        } else {
+                            PersonalDetailsPageHeader(
+                                theme = theme,
+                                locale = config.options.locale,
+                                enabled = interactionEnabled,
+                                title = editTitle,
+                                startPadding = 0.dp,
+                                onBack = leaveSavedCardEdit,
+                            )
+                        }
+                    } else {
+                        header?.invoke()
+                    }
                     Column(
                         modifier = Modifier.padding(
                             start = horizontalPadding,
@@ -361,7 +399,7 @@ fun PaymentForm(
                             "Add the googlepay artifact so Google Pay installs on load.",
                     )
                 }
-                if (!walletMethods.isNullOrBlank() && walletFactory != null && walletShown) {
+                if (!isEditingSavedCards && !walletMethods.isNullOrBlank() && walletFactory != null && walletShown) {
                     val walletAppearance = config.paymentMethods.googlePay.appearance
                     val walletRadius = walletAppearance.radius ?: theme.buttonRadius(52.dp).value
                     val walletShape = RoundedCornerShape(walletRadius.dp)
@@ -369,7 +407,7 @@ fun PaymentForm(
                         allowedPaymentMethods = walletMethods,
                         appearance = walletAppearance.copy(radius = walletRadius),
                         enabled = interactionEnabled,
-                        isDarkBackground = isDark,
+                        isDarkBackground = theme.isDarkSurface,
                         onClick = onGooglePay,
                     )
                     AndroidView(
@@ -385,7 +423,7 @@ fun PaymentForm(
                             .fillMaxWidth()
                             .height(52.dp)
                             .then(
-                                if (isDark) {
+                                if (theme.isDarkSurface) {
                                     Modifier
                                 } else {
                                     Modifier.shadow(
@@ -595,12 +633,20 @@ fun PaymentForm(
             isProcessing = isProcessing,
             interactionEnabled = interactionEnabled,
             onSubmit = {
-                if (detailsOnScreenState.value) continueDetails() else paySelected()
+                if (isEditingSavedCards) {
+                    isEditingSavedCards = false
+                    pendingDeleteId = null
+                } else if (detailsOnScreenState.value) {
+                    continueDetails()
+                } else {
+                    paySelected()
+                }
             },
             horizontalPadding = horizontalPadding,
             compact = embedded,
-            showSubmitButton = !embedded || config.card.submitButton.visible,
+            showSubmitButton = isEditingSavedCards || !embedded || config.card.submitButton.visible,
             continueMode = detailsOnScreen,
+            editingSavedCards = isEditingSavedCards,
             cryptoMode = selectedMethod == PaymentMethod.Crypto,
         )
         }
@@ -769,12 +815,13 @@ fun PersonalDetailsPageHeader(
                     .size(width = 20.dp, height = 12.dp)
                     .rotate(90f)
                     .clearAndSetSemantics { },
-                colorFilter = ColorFilter.tint(theme.primaryText),
+                colorFilter = ColorFilter.tint(theme.sheetChromeText),
             )
         }
         SheetText(
             title,
             theme = theme,
+            color = theme.sheetText,
             fontSize = 21f,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = (-0.03).em,
@@ -800,6 +847,7 @@ private fun PaymentFormFooter(
     compact: Boolean = false,
     showSubmitButton: Boolean = true,
     continueMode: Boolean = false,
+    editingSavedCards: Boolean = false,
     cryptoMode: Boolean = false,
 ) {
     val detailsFooter = continueMode
@@ -828,7 +876,7 @@ private fun PaymentFormFooter(
             )
             val payTitle = when {
                 continueMode -> Strings.text("personalDetails.continue", config.options.locale)
-                cryptoMode -> Strings.text("button.continue", config.options.locale)
+                editingSavedCards || cryptoMode -> Strings.text("button.continue", config.options.locale)
                 else -> Strings.submitButtonTitle(config.card.submitButton.type.value, config.options.locale, amount)
             }
 
@@ -859,7 +907,7 @@ private fun OrDivider(theme: CheckoutTheme, locale: String) {
         SheetText(
             Strings.text("sheet.or", locale),
             theme = theme,
-            color = theme.sectionLabel,
+            color = theme.orLabel,
             fontSize = 14f,
             fontWeight = FontWeight.Normal,
         )

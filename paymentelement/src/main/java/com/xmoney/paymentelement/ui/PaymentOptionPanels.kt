@@ -43,7 +43,7 @@ private fun PaymentOptionPanel(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(SelectedPanelRadius))
+                .clip(RoundedCornerShape(theme.rowRadius))
                 .background(if (selected) theme.selectedBackground else Color.Transparent),
             content = content,
         )
@@ -65,7 +65,7 @@ private fun PaymentOptionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(PaymentRowRadius))
+            .clip(RoundedCornerShape(theme.rowRadius))
             .pressScaleClickable(enabled = enabled && !selected, onClick = onClick)
             .padding(PaymentRowContentPadding),
         verticalAlignment = Alignment.CenterVertically,
@@ -173,7 +173,7 @@ private fun CryptoChip(theme: CheckoutTheme) {
         modifier = Modifier
             .width(48.dp)
             .height(34.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(theme.brandTileRadius))
             .background(theme.accentIconBackground),
         contentAlignment = Alignment.Center,
     ) {

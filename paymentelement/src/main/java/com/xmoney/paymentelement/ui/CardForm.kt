@@ -70,7 +70,7 @@ internal fun CardForm(
     var expiry by remember { mutableStateOf("") }
     var cvv by remember { mutableStateOf("") }
     var holder by remember { mutableStateOf("") }
-    var save by remember { mutableStateOf(true) }
+    var save by remember { mutableStateOf(false) }
     var brand by remember { mutableStateOf<String?>(null) }
     val blurred = remember { mutableStateMapOf<CardField, Boolean>() }
     val focused = remember { mutableStateMapOf<CardField, Boolean>() }
@@ -160,7 +160,7 @@ internal fun CardForm(
     val anyFocused = errorDisplayOrder.any { focused[it] == true }
     val borderColor = when {
         hasVisibleError -> theme.errorBorder
-        anyFocused -> theme.primary
+        anyFocused -> theme.focusRing
         else -> Color.Transparent
     }
     val borderWidth = if (hasVisibleError || anyFocused) theme.fieldStrokeWidth(hasVisibleError) else 0.dp
@@ -171,7 +171,7 @@ internal fun CardForm(
     fun fieldBorderColor(field: CardField): Color =
         when {
             shouldShowError(field) -> theme.errorBorder
-            focused[field] == true -> theme.primary
+            focused[field] == true -> theme.focusRing
             else -> theme.fieldBorder
         }
 

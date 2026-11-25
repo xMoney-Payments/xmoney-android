@@ -271,7 +271,7 @@ private fun SectionHeading(text: String, theme: CheckoutTheme, spaced: Boolean) 
     SheetText(
         text,
         theme = theme,
-        color = if (spaced) theme.primaryText else theme.sectionLabel,
+        color = if (spaced) theme.primaryText else theme.metaText,
         fontSize = if (spaced) 16f else 14f,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = FieldTracking,
@@ -293,7 +293,7 @@ private fun GroupedFields(
     val anyFocused = fields.any { state.focused[it] == true }
     val borderColor = when {
         hasError -> theme.errorBorder
-        anyFocused -> theme.primary
+        anyFocused -> theme.focusRing
         else -> theme.fieldBorder
     }
     Column(
@@ -621,7 +621,7 @@ private fun SelectRow(
 private fun borderColor(state: PersonalDetailsFormState, field: PersonalField, theme: CheckoutTheme): Color =
     when {
         state.shouldShow(field) -> theme.errorBorder
-        state.focused[field] == true -> theme.primary
+        state.focused[field] == true -> theme.focusRing
         else -> theme.fieldBorder
     }
 
@@ -633,7 +633,7 @@ private fun DetailsFieldCaption(text: String, theme: CheckoutTheme) {
     SheetText(
         text,
         theme = theme,
-        color = theme.sectionLabel,
+        color = theme.metaText,
         fontSize = 14f,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = FieldTracking,

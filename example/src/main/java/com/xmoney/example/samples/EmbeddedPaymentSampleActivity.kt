@@ -15,9 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
 import com.xmoney.example.BuildConfig
 import com.xmoney.example.backend.DemoCheckoutBackend
-import com.xmoney.example.exampleAppearance
 import com.xmoney.example.exampleForcedStyle
-import com.xmoney.example.exampleWalletAppearance
 import com.xmoney.example.theme.ExampleTheme
 import com.xmoney.example.ui.ExampleButton
 import com.xmoney.example.ui.ExampleButtonVariant
@@ -31,6 +29,7 @@ import com.xmoney.example.ui.SampleScaffold
 import com.xmoney.paymentelement.EmbeddedEvent
 import com.xmoney.paymentelement.PaymentElement
 import com.xmoney.paymentelement.rememberEmbeddedPayment
+import com.xmoney.payments.config.Appearance
 import com.xmoney.payments.config.CardConfig
 import com.xmoney.payments.config.GooglePayConfig
 import com.xmoney.payments.config.OptionsConfig
@@ -73,20 +72,17 @@ private fun EmbeddedPaymentSampleScreen(activity: FragmentActivity) {
     val scope = rememberCoroutineScope()
 
     val style = exampleForcedStyle()
-    val wallet = exampleWalletAppearance()
-    val appearance = exampleAppearance()
-    val configuration = remember {
+    val configuration = remember(style) {
         PaymentConfig(
             publicKey = BuildConfig.PUBLIC_KEY,
             paymentMethods = PaymentMethodsConfig(
-                googlePay = GooglePayConfig(enabled = true, appearance = wallet),
+                googlePay = GooglePayConfig(enabled = true),
             ),
             card = CardConfig(
                 savedCards = SavedCardsConfig(enabled = true),
             ),
             options = OptionsConfig(
-                style = style,
-                appearance = appearance,
+                appearance = Appearance(colorScheme = style),
             ),
         )
     }
@@ -102,9 +98,7 @@ private fun EmbeddedPaymentSampleScreen(activity: FragmentActivity) {
             }
         },
     )
-    LaunchedEffect(appearance) { embedded.updateAppearance(appearance) }
-    LaunchedEffect(style) { embedded.updateStyle(style) }
-    LaunchedEffect(wallet) { embedded.updateWalletAppearance(wallet) }
+    LaunchedEffect(style) { embedded.updateAppearance(Appearance(colorScheme = style)) }
 
     LaunchedEffect(lastResult, embedded.isOrderConsumed) {
         if (lastResult is PaymentResult.Canceled && !embedded.isOrderConsumed) {

@@ -73,14 +73,16 @@ internal fun PaymentMethodsContainer(
     ) { expanded ->
         if (expanded) {
             PaymentMethodsFrame(theme) {
-                SavedCardsListHeader(
-                    theme = theme,
-                    locale = config.options.locale,
-                    count = null,
-                    isEditing = isEditing,
-                    enabled = enabled,
-                    onToggleEdit = onToggleEdit,
-                )
+                if (!isEditing) {
+                    SavedCardsListHeader(
+                        theme = theme,
+                        locale = config.options.locale,
+                        count = null,
+                        isEditing = isEditing,
+                        enabled = enabled,
+                        onToggleEdit = onToggleEdit,
+                    )
+                }
                 Column(modifier = Modifier.fillMaxWidth()) {
                     SavedCardsExpandedList(
                         config = config,
@@ -198,11 +200,11 @@ private fun SavedCardsListHeader(
         SheetText(
             title,
             theme = theme,
-            color = theme.sectionLabel,
+            color = if (isEditing) theme.metaText else theme.sectionLabel,
             fontSize = 14f,
             fontWeight = FontWeight.SemiBold,
         )
-        if (expanded) {
+        if (expanded && !isEditing) {
             Box(
                 modifier = Modifier
                     .sizeIn(minWidth = SavedCardsHeaderHeight)
@@ -211,7 +213,7 @@ private fun SavedCardsListHeader(
                 contentAlignment = Alignment.CenterEnd,
             ) {
                 SheetText(
-                    Strings.text(if (isEditing) "sheet.done" else "sheet.edit", locale),
+                    Strings.text("sheet.edit", locale),
                     theme = theme,
                     color = theme.textBrand,
                     fontSize = 14f,
@@ -296,12 +298,10 @@ internal fun NewCardBlock(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(SelectedPanelRadius))
+            .clip(RoundedCornerShape(theme.rowRadius))
             .background(theme.selectedBackground),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         content()
     }
 }
-
-internal val SelectedPanelRadius = 16.dp

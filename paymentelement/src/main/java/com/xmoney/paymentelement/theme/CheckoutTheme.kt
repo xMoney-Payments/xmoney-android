@@ -1,15 +1,19 @@
 package com.xmoney.paymentelement.theme
 
+import android.content.Context
 import android.graphics.Typeface
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.font.AndroidFont
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontLoadingStrategy
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.coerceIn
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.xmoney.payments.config.AppearanceColors
+import com.xmoney.payments.config.AppearanceLog
 import com.xmoney.payments.config.ResolvedPaymentConfig
 
 @androidx.annotation.RestrictTo(androidx.annotation.RestrictTo.Scope.LIBRARY_GROUP)
@@ -49,6 +53,7 @@ data class CheckoutTheme(
     val sheetHandle: Color,
     val orDivider: Color,
     val visaMarkTint: Color?,
+    val brandTileBackground: Color,
     val paymentContainerRadius: Dp,
     val formFieldRadius: Dp,
     val formFieldHeight: Dp,
@@ -65,6 +70,21 @@ data class CheckoutTheme(
     val inverseText: Color,
     val poweredByText: Color,
     val poweredByLogo: Color,
+    val primaryButtonPressed: Color = primaryButtonBackground,
+    val primaryButtonDisabledBackground: Color = primaryButtonBackground,
+    val primaryButtonDisabledText: Color = primaryButtonText,
+    val secondaryButtonBackground: Color = primaryButtonBackground,
+    val secondaryButtonText: Color = primaryButtonText,
+    val focusRing: Color = primary,
+    val stateIndicatorBorder: Color = primary,
+    val checkboxRadius: Dp = 8.dp,
+    val brandShadow: Color = primary.copy(alpha = 0.30f),
+    val sheetCornerRadius: Dp = 32.dp,
+    val rowRadius: Dp = 16.dp,
+    val brandTileRadius: Dp = 12.dp,
+    val sheetText: Color = primaryText,
+    val isDarkSurface: Boolean = isDark,
+    val orLabel: Color = metaText,
 ) {
     val brandChipBorder: Color
         get() = fieldBorder
@@ -75,6 +95,14 @@ data class CheckoutTheme(
 
     val containerBorderWidth: Dp
         get() = if (containerBorder.alpha == 0f) 0.dp else 1.dp
+
+    /** Close and back icons sit on the sheet. Field text can follow a lighter card. */
+    val sheetChromeText: Color
+        get() = sheetText
+
+    /** Low-contrast brands stay the brand color. The ink outline is not drawn. */
+    val filledBrandNeedsOutline: Boolean
+        get() = false
 
     /** Corner radius for any button, following `primaryButton.borderRadius` so every button shares one shape. */
     fun buttonRadius(height: Dp): Dp = primaryButtonBorderRadius.coerceIn(0.dp, height / 2)
@@ -99,144 +127,17 @@ data class CheckoutTheme(
         private val DarkInk = Color(0xFFF7F6F9)
         private val DarkChrome = Color(0xFFFFFFFF)
 
-        fun resolve(config: ResolvedPaymentConfig, isDark: Boolean): CheckoutTheme {
-            val appearance = config.options.appearance
-            val defaults = if (isDark) DefaultColors.dark else DefaultColors.light
-            val modeColors = if (isDark) appearance.colorsDark else appearance.colorsLight
-            val sharedColors = appearance.colors
-            val ink = if (isDark) DarkInk else LightInk
-
-            fun color(
-                selector: (AppearanceColors) -> String?,
-                fallback: Color,
-            ): Color {
-                val hex = modeColors?.let(selector) ?: sharedColors?.let(selector)
-                return parseColor(hex) ?: fallback
-            }
-
-            fun isSet(selector: (AppearanceColors) -> String?): Boolean =
-                parseColor(modeColors?.let(selector) ?: sharedColors?.let(selector)) != null
-
-            fun optionalColor(
-                selector: (AppearanceColors) -> String?,
-                fallback: Color,
-            ): Color {
-                val raw = modeColors?.let(selector) ?: sharedColors?.let(selector)
-                return parseColorOrNone(raw) ?: fallback
-            }
-
-            fun inkAlpha(alpha: Int): Color = ink.copy(alpha = alpha / 255f)
-
-            val pbMode = if (isDark) appearance.primaryButton?.colorsDark else appearance.primaryButton?.colorsLight
-            val pbShared = appearance.primaryButton?.colors
-            val pbShapes = appearance.primaryButton
-
-            val primary = color({ it.primary }, defaults.primary)
-            val primaryText = color({ it.primaryText }, defaults.primaryText)
-            val primaryTextSet = isSet { it.primaryText }
-            val icon = color({ it.icon }, defaults.icon)
-            fun chromeAlpha(alpha: Int): Color =
-                (if (isDark) DarkChrome else ink).copy(alpha = alpha / 255f)
-
-            val secondaryText = color({ it.secondaryText }, defaults.secondaryText)
-            val placeholderText = color({ it.placeholderText }, defaults.placeholderText)
-            val unselectedRing = if (isDark) chromeAlpha(0x33) else inkAlpha(0x29)
-            // Explicit kyc tokens until the merchant sets the source color. Dark no longer
-            // pretends every surface is an alpha wash of primary.
-            val derivesFromPrimary = isSet { it.primary }
-            val derivesFromSecondary = isSet { it.secondaryText }
-            val derivesFromPlaceholder = isSet { it.placeholderText }
-            val textTertiary = if (isDark) Color(0xFF95959D) else Color(0xFF63606D)
-            val textMuted = if (isDark) Color(0xFF85858D) else Color(0xFF6B6779)
-            val placeholder = if (isDark) Color(0xFF69696F) else Color(0xFF9691A3)
-            val poweredBy = if (isDark) Color(0xFF605C70) else Color(0xFF9691A3)
-            val danger = if (isDark) DefaultErrorTextDark else DefaultErrorTextLight
-            val borderDefault = if (isDark) chromeAlpha(0x1A) else Color(0xFFE3E1E8)
-            val fieldBorderColor = color({ it.componentBorder }, borderDefault)
-            val merchantError = isSet { it.error }
-
-            return CheckoutTheme(
-                primary = primary,
-                background = color({ it.background }, defaults.background),
-                componentBackground = color({ it.componentBackground }, defaults.componentBackground),
-                componentBorder = color({ it.componentBorder }, defaults.componentBorder),
-                componentDivider = color({ it.componentDivider }, defaults.componentDivider),
-                primaryText = primaryText,
-                secondaryText = secondaryText,
-                componentText = color({ it.componentText }, defaults.componentText),
-                placeholderText = placeholderText,
-                icon = icon,
-                error = color({ it.error }, defaults.error),
-                borderRadius = (appearance.borderRadius ?: DefaultFormFieldRadius).dp,
-                borderWidth = (appearance.borderWidth ?: 1f).dp,
-                fontScale = appearance.fontScale ?: 1f,
-                fontFamily = resolveFontFamily(appearance.fontFamily),
-                primaryButtonFontFamily = resolveFontFamily(
-                    appearance.primaryButton?.fontFamily ?: appearance.fontFamily,
-                ),
-                primaryButtonBackground = parseColor(pbMode?.background ?: pbShared?.background)
-                    ?: primary,
-                primaryButtonText = parseColor(pbMode?.text ?: pbShared?.text) ?: Color.White,
-                primaryButtonBorder = parseColor(pbMode?.border ?: pbShared?.border)
-                    ?: primary,
-                primaryButtonBorderRadius = (pbShapes?.borderRadius ?: DefaultPrimaryButtonRadius).dp,
-                primaryButtonBorderWidth = (pbShapes?.borderWidth ?: 0f).dp,
-                selectedBackground = if (derivesFromPrimary) {
-                    primary.copy(alpha = (if (isDark) 0x2E else 0x0F) / 255f)
-                } else {
-                    if (isDark) Color(0xFF2A2A2F) else Color(0xFFF7F6FF)
-                },
-                accentIconBackground = if (derivesFromPrimary) {
-                    primary.copy(alpha = (if (isDark) 0x3D else 0x1F) / 255f)
-                } else {
-                    if (isDark) Color(0xFF24124C) else Color(0xFFECE5FF)
-                },
-                containerBorder = optionalColor({ it.containerBorder }, if (isDark) inkAlpha(0x17) else Color.Transparent),
-                neutralChip = inkAlpha(0x0D),
-                fieldBorder = fieldBorderColor,
-                fieldDivider = color({ it.componentDivider }, borderDefault),
-                mutedIcon = when {
-                    isSet { it.icon } -> icon
-                    derivesFromPlaceholder -> placeholderText
-                    else -> placeholder
-                },
-                unselectedRing = unselectedRing,
-                errorBorder = if (merchantError) color({ it.error }, danger) else danger,
-                errorText = if (merchantError) color({ it.error }, danger) else danger,
-                footerBorder = chromeAlpha(if (isDark) 0x14 else 0x0F),
-                sheetHandle = borderDefault,
-                orDivider = borderDefault,
-                visaMarkTint = if (isDark) Color.White else null,
-                paymentContainerRadius = DefaultPaymentContainerRadius.dp,
-                formFieldRadius = (appearance.borderRadius ?: DefaultFormFieldRadius).dp,
-                formFieldHeight = 48.dp,
-                isDark = isDark,
-                inputPlaceholder = if (derivesFromPlaceholder) placeholderText else placeholder,
-                metaText = if (derivesFromSecondary) secondaryText else textTertiary,
-                sectionLabel = if (derivesFromSecondary) secondaryText else textMuted,
-                radioIdle = if (derivesFromPrimary) {
-                    unselectedRing
-                } else if (isDark) {
-                    Color(0xA1A180FF)
-                } else {
-                    Color(0xCC7C4DFF)
-                },
-                textBrand = if (derivesFromPrimary) primary else if (isDark) Color(0xFF926BFF) else Color(0xFF7A4BFB),
-                iconBrand = if (derivesFromPrimary) primary else if (isDark) Color(0xFF926BFF) else Color(0xFF7C4DFF),
-                errorBadge = if (merchantError) color({ it.error }, DefaultErrorBadge) else DefaultErrorBadge,
-                dangerTint = Color(0xFFEF4444).copy(alpha = if (isDark) 0.15f else 0.08f),
-                dangerTintStrong = Color(0xFFEF4444).copy(alpha = if (isDark) 0.30f else 0.09f),
-                inverseText = if (primaryTextSet) {
-                    if (primaryText.luminance() > 0.5f) LightInk else DarkInk
-                } else if (isDark) {
-                    Color(0xFF09090B)
-                } else {
-                    Color(0xFFF7F6FF)
-                },
-                poweredByText = if (derivesFromSecondary) secondaryText.copy(alpha = 0.30f) else poweredBy,
-                poweredByLogo = if (derivesFromSecondary) secondaryText.copy(alpha = 0.42f) else poweredBy,
-            )
-        }
+        fun resolve(
+            config: ResolvedPaymentConfig,
+            isDark: Boolean,
+            contentSizeScale: Float = 1f,
+            increasedContrast: Boolean = false,
+        ): CheckoutTheme = ThemeDerivation.resolve(
+            config.options.appearance,
+            isDark,
+            contentSizeScale,
+            increasedContrast,
+        )
 
         internal fun parseColorOrNone(raw: String?): Color? {
             if (raw == null) return null
@@ -267,50 +168,32 @@ data class CheckoutTheme(
         internal fun resolveFontFamily(name: String?): FontFamily {
             val trimmed = name?.trim().orEmpty()
             if (trimmed.isEmpty()) return PaymentFontFamily.family
-            return FontFamily(typeface = Typeface.create(trimmed, Typeface.NORMAL))
-        }
-
-        private data class Palette(
-            val primary: Color,
-            val background: Color,
-            val componentBackground: Color,
-            val componentBorder: Color,
-            val componentDivider: Color,
-            val primaryText: Color,
-            val secondaryText: Color,
-            val componentText: Color,
-            val placeholderText: Color,
-            val icon: Color,
-            val error: Color,
-        )
-
-        private object DefaultColors {
-            val light = Palette(
-                primary = Color(0xFF7C4DFF),
-                background = Color(0xFFF7F6FF),
-                componentBackground = Color(0xFFFFFFFF),
-                componentBorder = Color(0xFFD1CDDB),
-                componentDivider = Color(0xFFD1CDDB),
-                primaryText = Color(0xFF16141A),
-                secondaryText = Color(0xFF4A4653),
-                componentText = Color(0xFF4A4653),
-                placeholderText = Color(0xFF797585),
-                icon = Color(0xFF797585),
-                error = Color(0xFFFF6B6B),
-            )
-            val dark = Palette(
-                primary = Color(0xFF7C4DFF),
-                background = Color(0xFF18181B),
-                componentBackground = Color(0xFF1F1F23),
-                componentBorder = Color(0xFF3F3B48),
-                componentDivider = Color(0xFF3F3B48),
-                primaryText = Color(0xFFFAFAFA),
-                secondaryText = Color(0xFFD1CDDB),
-                componentText = Color(0xFFD1CDDB),
-                placeholderText = Color(0xFF797585),
-                icon = Color(0xFF797585),
-                error = Color(0xFFFF6B6B),
+            val regular = Typeface.create(trimmed, Typeface.NORMAL)
+            if (regular == Typeface.DEFAULT || regular == Typeface.SANS_SERIF) {
+                AppearanceLog.warn("font family '$trimmed' is not registered")
+                return PaymentFontFamily.family
+            }
+            val bold = Typeface.create(trimmed, Typeface.BOLD)
+            return FontFamily(
+                LoadedTypefaceFont(FontWeight.Normal, regular),
+                LoadedTypefaceFont(FontWeight.Medium, bold),
+                LoadedTypefaceFont(FontWeight.SemiBold, bold),
+                LoadedTypefaceFont(FontWeight.Bold, bold),
             )
         }
+
+        private class LoadedTypefaceFont(
+            override val weight: FontWeight,
+            private val face: Typeface,
+        ) : AndroidFont(
+            FontLoadingStrategy.Blocking,
+            object : TypefaceLoader {
+                override fun loadBlocking(context: Context, font: AndroidFont): Typeface = face
+                override suspend fun awaitLoad(context: Context, font: AndroidFont): Typeface = face
+            },
+        ) {
+            override val style: FontStyle = FontStyle.Normal
+        }
+
     }
 }

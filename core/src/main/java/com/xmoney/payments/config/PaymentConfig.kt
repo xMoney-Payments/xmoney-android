@@ -122,18 +122,6 @@ enum class CardGrouping(val value: String) {
     }
 }
 
-enum class UserInterfaceStyle(val value: String) {
-    AUTOMATIC("automatic"),
-    ALWAYS_LIGHT("alwaysLight"),
-    ALWAYS_DARK("alwaysDark"),
-    ;
-
-    companion object {
-        fun from(raw: String?): UserInterfaceStyle =
-            entries.firstOrNull { it.value == raw } ?: AUTOMATIC
-    }
-}
-
 @Parcelize
 data class CardInputsConfig(
     val grouping: CardGrouping = CardGrouping.CONDENSED,
@@ -176,18 +164,22 @@ data class GooglePayConfig(
     val appearance: WalletAppearance = WalletAppearance(),
 ) : Parcelable
 
+/** Shows the "Pay with crypto" option. Continue redirects the shopper to a secure page to complete the payment. */
+@Parcelize
+data class CryptoConfig(
+    val enabled: Boolean = false,
+) : Parcelable
+
 @Parcelize
 data class PaymentMethodsConfig(
     val googlePay: GooglePayConfig = GooglePayConfig(),
-    /** Shows the "Pay with crypto" option. Continue redirects the shopper to a secure page to complete the payment. */
-    val showCryptoOption: Boolean = false,
+    val crypto: CryptoConfig = CryptoConfig(),
 ) : Parcelable
 
 @Parcelize
 data class OptionsConfig(
     val locale: String = "en-US",
-    val style: UserInterfaceStyle = UserInterfaceStyle.AUTOMATIC,
-    val appearance: AppearanceConfig = AppearanceConfig(),
+    val appearance: Appearance = Appearance(),
 ) : Parcelable
 
 @Parcelize

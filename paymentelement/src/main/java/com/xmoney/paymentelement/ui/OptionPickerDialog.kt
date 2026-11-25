@@ -162,7 +162,7 @@ private fun SearchBox(
     onQueryChange: (String) -> Unit,
 ) {
     val focusManager = LocalFocusManager.current
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(theme.formFieldRadius)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -226,7 +226,7 @@ private fun ChoiceRow(
         modifier = Modifier
             .fillMaxWidth()
             .height(48.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(theme.brandTileRadius))
             .background(if (selected) theme.componentBackground else Color.Transparent)
             .clickable(onClick = onClick)
             .semantics(mergeDescendants = true) {

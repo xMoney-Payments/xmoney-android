@@ -8,10 +8,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -40,7 +38,7 @@ internal fun PersonalDetailsEntryRow(
     topPadding: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(24.dp)
+    val shape = RoundedCornerShape(theme.paymentContainerRadius)
     val showErrorBorder = showError && !completed
     Column(modifier = modifier.fillMaxWidth().padding(top = topPadding, bottom = 12.dp)) {
         Row(
@@ -67,7 +65,7 @@ internal fun PersonalDetailsEntryRow(
                 Box(
                     modifier = Modifier
                         .size(width = 48.dp, height = 34.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(theme.brandTileRadius))
                         .background(theme.accentIconBackground),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -121,36 +119,18 @@ internal fun PersonalDetailsEntryRow(
 
 @Composable
 private fun CompletedMark(theme: CheckoutTheme) {
-    Box(modifier = Modifier.size(width = 48.dp, height = 34.dp)) {
-        Box(
-            modifier = Modifier
-                .size(width = 48.dp, height = 34.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(theme.accentIconBackground),
-            contentAlignment = Alignment.Center,
-        ) {
-            Image(
-                painter = painterResource(R.drawable.xmoney_ic_person),
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                colorFilter = ColorFilter.tint(theme.metaText),
-            )
-        }
-        Box(
-            modifier = Modifier
-                .offset(x = 30.dp, y = 16.dp)
-                .size(22.dp)
-                .border(1.dp, theme.componentBackground, CircleShape)
-                .clip(CircleShape)
-                .background(theme.primary),
-            contentAlignment = Alignment.Center,
-        ) {
-            Image(
-                painter = painterResource(R.drawable.xmoney_ic_check),
-                contentDescription = null,
-                modifier = Modifier.size(width = 10.dp, height = 8.dp),
-                colorFilter = ColorFilter.tint(theme.primaryButtonText),
-            )
-        }
+    Box(
+        modifier = Modifier
+            .size(width = 48.dp, height = 34.dp)
+            .clip(RoundedCornerShape(theme.brandTileRadius))
+            .background(theme.accentIconBackground),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            painter = painterResource(R.drawable.xmoney_ic_step_done),
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+            colorFilter = ColorFilter.tint(theme.primary),
+        )
     }
 }

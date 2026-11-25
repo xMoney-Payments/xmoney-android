@@ -17,6 +17,8 @@ paymentsheet ──► paymentelement ──► payments-core
 
 `paymentelement` does not pull in Google Pay. Add `googlepay` next to it if the embedded form should offer a wallet button.
 
+Crypto is part of Payment Sheet and Payment Element. Turn it on with `paymentMethods.crypto.enabled`.
+
 ## Requirements
 
 - Android Gradle Plugin 8.5+
@@ -49,7 +51,7 @@ Put only a **publishable** `publicKey` (`pk_test_…` / `pk_live_…`) in the ap
 1. Your backend creates an order and returns `payload` + `checksum`.
 2. The app builds a `PaymentIntent` from those two values.
 3. You present Sheet, mount Element, or show Google Pay.
-4. The SDK fetches the session token, collects payment, and runs 3DS if needed.
+4. The SDK fetches the session token and collects payment. A card 3DS challenge, and the hosted crypto page after Continue, open in the same WebView until polling sees a completed payment.
 5. You handle `PaymentResult`. Session tokens are never passed by the merchant.
 
 ```kotlin
@@ -156,7 +158,7 @@ The sheet keeps its loading coin up until the form and, when offered, the Google
 
 ### Customer details
 
-`customerDetails` asks the shopper for the fields your account requires. If that list cannot be loaded, checkout continues without the form. Pass `fields` to choose the blocks yourself; that replaces the account list, and a flag you leave off is not collected. `defaultValues` prefills the card form. Blank text and values that are not in the country, region, or phone lists are ignored. Google Pay does not use them.
+`customerDetails` asks the shopper for the fields your account requires. If that list cannot be loaded and `customerDetails.card` is on, checkout shows the load failure and Pay stays disabled. Pass `fields` to choose the blocks yourself; that replaces the account list, and a flag you leave off is not collected. `defaultValues` prefills the card form. Blank text and values that are not in the country, region, or phone lists are ignored. Crypto Continue uses that same card form. Google Pay does not use them. The save-card checkbox starts unchecked.
 
 ```kotlin
 PaymentConfig(
@@ -175,7 +177,7 @@ PaymentConfig(
 )
 ```
 
-Card and saved-card Pay stay blocked until those fields are valid. `confirm()` runs that check. Google Pay does not block: it requests the billing contact and sends it with the payment.
+Card, saved-card, and crypto Continue stay blocked while `customerDetails.card` is on and the field list is active, until those fields are valid. They are not blocked when `customerDetails.card` is off. `confirm()` runs that check. Google Pay does not block: it requests the billing contact and sends it with the payment.
 
 While idle, the sheet can be dragged closed. Drag, back, and scrim lock while a charge is in flight. `dismiss()` waits for an in-flight charge; idle close still cancels. A second `present()` while idle replaces the open sheet (the previous present completes with `Canceled`); while a charge is in flight the second `present()` is a no-op. Do not treat that `Canceled` as “leave checkout” if you immediately presented again.
 
@@ -238,11 +240,10 @@ Copy-paste sample: [`UpdateOrderSampleActivity.kt`](example/src/main/java/com/xm
 
 ### Live appearance
 
-`rememberEmbeddedPayment` keeps the controller across appearance changes. Call `updateAppearance` / `updateStyle` / `updateLocale` / `updateWalletAppearance` instead of recreating `PaymentConfig`:
+`rememberEmbeddedPayment` keeps the controller across appearance changes. Call `updateAppearance` / `updateLocale` / `updateWalletAppearance` instead of recreating `PaymentConfig`:
 
 ```kotlin
 LaunchedEffect(appearance) { embedded.updateAppearance(appearance) }
-LaunchedEffect(style) { embedded.updateStyle(style) }
 LaunchedEffect(wallet) { embedded.updateWalletAppearance(wallet) }
 ```
 
@@ -279,7 +280,7 @@ Button(
 ) { Text("Pay") }
 ```
 
-`confirm()` submits the currently selected method (new card or saved card). Google Pay still uses the wallet button. `isInteractionEnabled` is false during `updateOrder` and while a charge is in flight. `EmbeddedEvent.Processing` is the in-flight charge only.
+`confirm()` submits the currently selected method (new card, saved card, or crypto). Google Pay still uses the wallet button. `isInteractionEnabled` is false during `updateOrder` and while a charge is in flight. `EmbeddedEvent.Processing` is the in-flight charge only.
 
 Copy-paste sample: [`EmbeddedPaymentSampleActivity.kt`](example/src/main/java/com/xmoney/example/samples/EmbeddedPaymentSampleActivity.kt) · Merchant CTA: [`MerchantPayButtonSampleActivity.kt`](example/src/main/java/com/xmoney/example/samples/MerchantPayButtonSampleActivity.kt) · XML `ComposeView`: [`EmbeddedViewsSampleActivity.kt`](example/src/main/java/com/xmoney/example/samples/EmbeddedViewsSampleActivity.kt) · Update order: [`UpdateOrderSampleActivity.kt`](example/src/main/java/com/xmoney/example/samples/UpdateOrderSampleActivity.kt)
 
@@ -342,6 +343,20 @@ A new `PaymentIntent` on `GooglePayButton` calls `GooglePayController.updateOrde
 
 Copy-paste sample: [`GooglePaySampleActivity.kt`](example/src/main/java/com/xmoney/example/samples/GooglePaySampleActivity.kt) · Activity API: [`GooglePayActivitySample.kt`](example/src/main/java/com/xmoney/example/samples/GooglePayActivitySample.kt)
 
+## Crypto
+
+Pay with crypto is part of Payment Sheet and Payment Element. It is off until you enable it. There is no separate artifact and no button appearance to set.
+
+```kotlin
+paymentMethods = PaymentMethodsConfig(
+    crypto = CryptoConfig(enabled = true),
+)
+```
+
+The shopper sees “Pay with crypto” and “Secure crypto payment”. Selecting it shows “You’ll be redirected to a secure page to complete your payment.” and the button title becomes Continue. Continue does not collect card fields. If `customerDetails.card` is on, Continue stays blocked until those fields are valid, and they are sent with the payment.
+
+Continue opens the hosted page in the same WebView as a 3DS challenge. The SDK polls until the payment completes and delivers the same `PaymentResult`. Closing that page after Continue has started consumes the order. `confirm()` submits crypto when that row is selected. Google Pay still uses its own button.
+
 ## Configuration
 
 ```kotlin
@@ -355,6 +370,7 @@ PaymentConfig(
                 type = WalletButtonType.PAY,
             ),
         ),
+        crypto = CryptoConfig(enabled = true),
     ),
     card = CardConfig(
         savedCards = SavedCardsConfig(enabled = true, optInVisible = true),
@@ -367,12 +383,11 @@ PaymentConfig(
     ),
     options = OptionsConfig(
         locale = "en-US",                // pay-button amount punctuation
-        style = UserInterfaceStyle.AUTOMATIC,
-        appearance = AppearanceConfig(
-            colorsLight = AppearanceColors(/* hex strings */),
-            colorsDark = AppearanceColors(/* hex strings */),
-            borderRadius = 12f,          // card fields + methods container
-            primaryButton = PrimaryButtonConfig(borderRadius = 12f),
+        appearance = Appearance(
+            colorScheme = ColorSchemePreference.AUTOMATIC,
+            brandColor = ThemeColor.of("#1D4ED8"),
+            corners = Corners.Custom(12.0),
+            pillButtons = false,
         ),
     ),
 )
@@ -389,7 +404,7 @@ PaymentConfig(
 
 Pay uses current field validity, not an empty errors map. Cardholder name is always collected.
 
-**Appearance** — pass `colorsLight` / `colorsDark` so the form matches your chrome. Card fields (condensed box and spaced inputs) use `appearance.borderRadius` (default 16 dp), `appearance.borderWidth`, and `colors.componentBorder`. Pay button radius comes from `appearance.primaryButton.borderRadius` (default a pill, `9999` dp). Pass `12` for a squircle. On a mounted Element, call `updateAppearance` / `updateStyle` / `updateWalletAppearance`. See [`exampleAppearance()`](example/src/main/java/com/xmoney/example/SampleHelpers.kt) for a copy-paste palette.
+**Appearance** — set `brandColor`, `accentColor`, `backgroundColor`, and `neutralTint`. Each accepts one hex color or a light/dark pair. The pay button uses `brandColor` as sent. Links, the focus ring, and radios are adjusted so they stay readable. Other unset text, borders, and button states are derived. `textColor` sets primary text only. Saved-card meta, section labels, the "or" label, the powered-by line, and placeholders follow `neutralTint` and `backgroundColor`. `corners` is sharp, default, rounded, or a number from 0 to 24. The default methods container radius is 24. `pillButtons` keeps the pay button fully round. The sheet corner stays 32. `colorScheme` is automatic, light, or dark. On a mounted Element, call `updateAppearance` / `updateWalletAppearance`. See [`exampleAppearance()`](example/src/main/java/com/xmoney/example/SampleHelpers.kt).
 
 **Cookies** — the 3DS challenge needs WebView cookies. The SDK turns on third-party cookies for its own challenge WebView only and does not call `CookieManager.setAcceptCookie`. If your app turns cookies off app-wide, turn them back on before a payment, or the bank page may fail.
 
@@ -418,7 +433,7 @@ Use only these merchant-facing types:
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Config / models | `PaymentConfig` and nested options, `PaymentIntent` / `OrderCredentials` / `OrderPayload` / `OrderChecksum`, `PaymentResult`, `PaymentError`, `Transaction`                                                     |
 | Payment Sheet   | `PaymentSheet`, `rememberPaymentSheet`, `PaymentSheetEvent`                                                                                                                                                     |
-| Payment Element | `PaymentElement`, `rememberEmbeddedPayment`, `EmbeddedPaymentController` (`updateOrder`, `confirm`, `updateAppearance`, `updateStyle`, `updateLocale`, `updateWalletAppearance`), `EmbeddedEvent`               |
+| Payment Element | `PaymentElement`, `rememberEmbeddedPayment`, `EmbeddedPaymentController` (`updateOrder`, `confirm`, `updateAppearance`, `updateLocale`, `updateWalletAppearance`), `EmbeddedEvent`               |
 | Google Pay      | `GooglePay` (`availability`, `present`, `updateOrder`, `dismiss`), `GooglePayAvailability`, `rememberGooglePay`, `GooglePayButton`, `GooglePayController` (`updateOrder`, `updateAppearance`), `GooglePayEvent` |
 
 Everything else (`HttpClient`, services, 3DS host, `PaymentForm`, theme helpers) is library-internal.

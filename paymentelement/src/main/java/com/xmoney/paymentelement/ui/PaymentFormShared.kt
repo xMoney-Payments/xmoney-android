@@ -186,16 +186,23 @@ internal fun SubmitButton(
     isProcessing: Boolean,
     onClick: () -> Unit,
 ) {
-    val background = theme.primaryButtonBackground
-    val shape = RoundedCornerShape(theme.buttonRadius(52.dp))
-    val showShadow = enabled && !isProcessing
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val background = when {
+        !enabled && !isProcessing -> theme.primaryButtonDisabledBackground
+        pressed -> theme.primaryButtonPressed
+        else -> theme.primaryButtonBackground
+    }
+    val labelColor = if (!enabled && !isProcessing) theme.primaryButtonDisabledText else theme.primaryButtonText
+    val shape = RoundedCornerShape(theme.buttonRadius(52.dp * theme.fontScale.coerceAtLeast(1f)))
+    val showShadow = enabled && !isProcessing && theme.brandShadow.alpha > 0.01f
     Button(
         onClick = onClick,
         enabled = enabled && !isProcessing,
+        interactionSource = interaction,
         modifier = Modifier
             .fillMaxWidth()
-            .height(52.dp)
-            .alpha(if (!enabled && !isProcessing) 0.4f else 1f)
+            .heightIn(min = 52.dp * theme.fontScale.coerceAtLeast(1f))
             .then(
                 if (showShadow) {
                     Modifier.shadow(
@@ -231,7 +238,7 @@ internal fun SubmitButton(
             SheetText(
                 title,
                 theme = theme,
-                color = theme.primaryButtonText,
+                color = labelColor,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 18f,
                 fontFamily = theme.primaryButtonFontFamily,
