@@ -362,12 +362,12 @@ fun PaymentForm(
                     )
                 }
                 if (!walletMethods.isNullOrBlank() && walletFactory != null && walletShown) {
-                    val walletShape = RoundedCornerShape(
-                        (config.paymentMethods.googlePay.appearance.radius ?: 26f).dp,
-                    )
+                    val walletAppearance = config.paymentMethods.googlePay.appearance
+                    val walletRadius = walletAppearance.radius ?: theme.buttonRadius(52.dp).value
+                    val walletShape = RoundedCornerShape(walletRadius.dp)
                     val walletArgs = WalletButtonArgs(
                         allowedPaymentMethods = walletMethods,
-                        appearance = config.paymentMethods.googlePay.appearance,
+                        appearance = walletAppearance.copy(radius = walletRadius),
                         enabled = interactionEnabled,
                         isDarkBackground = isDark,
                         onClick = onGooglePay,
@@ -594,7 +594,6 @@ fun PaymentForm(
             state = state,
             isProcessing = isProcessing,
             interactionEnabled = interactionEnabled,
-            promptForCard = !detailsOnScreen && selectedMethod == PaymentMethod.NewCard && !cardFormValid,
             onSubmit = {
                 if (detailsOnScreenState.value) continueDetails() else paySelected()
             },
@@ -611,7 +610,7 @@ fun PaymentForm(
 /** Platform shadows scale spot alpha to ~0.19, which matches the Figma 18% wallet shadow. */
 private val WalletShadowColor = Color(0xFF16141A)
 
-private val PersonalDetailsHeaderStartPadding = 6.dp
+private val PersonalDetailsHeaderStartPadding = 8.dp
 
 private const val PageFadeOutMs = 120
 private const val PageFadeInMs = 180
@@ -724,7 +723,7 @@ private fun PickerSheetHandle(theme: CheckoutTheme) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 10.dp, bottom = 2.dp),
+            .padding(top = 8.dp, bottom = 2.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -750,7 +749,7 @@ fun PersonalDetailsPageHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = startPadding, top = 10.dp),
+            .padding(start = startPadding, top = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -796,7 +795,6 @@ private fun PaymentFormFooter(
     state: SheetState,
     isProcessing: Boolean,
     interactionEnabled: Boolean,
-    promptForCard: Boolean = false,
     onSubmit: () -> Unit,
     horizontalPadding: Dp = SheetContentHorizontalPadding,
     compact: Boolean = false,
@@ -831,7 +829,6 @@ private fun PaymentFormFooter(
             val payTitle = when {
                 continueMode -> Strings.text("personalDetails.continue", config.options.locale)
                 cryptoMode -> Strings.text("button.continue", config.options.locale)
-                promptForCard -> Strings.text("sheet.enterCardDetails", config.options.locale)
                 else -> Strings.submitButtonTitle(config.card.submitButton.type.value, config.options.locale, amount)
             }
 
@@ -840,7 +837,6 @@ private fun PaymentFormFooter(
                 title = payTitle,
                 locale = config.options.locale,
                 enabled = interactionEnabled,
-                dimmed = promptForCard && interactionEnabled && !isProcessing,
                 isProcessing = isProcessing,
                 onClick = onSubmit,
             )
@@ -857,7 +853,7 @@ private fun OrDivider(theme: CheckoutTheme, locale: String) {
             .fillMaxWidth()
             .padding(top = 24.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Divider(modifier = Modifier.weight(1f), color = theme.orDivider)
         SheetText(

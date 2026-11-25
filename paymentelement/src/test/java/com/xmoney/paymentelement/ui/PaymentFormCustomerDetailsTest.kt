@@ -50,7 +50,7 @@ class PaymentFormCustomerDetailsTest {
 
         compose.onNodeWithContentDescription("Card Number").performTextInput("4242424242424242")
         compose.onNodeWithContentDescription("Expiration Date").performTextInput("1230")
-        compose.onNodeWithContentDescription("CVV").performTextInput("123")
+        compose.onNodeWithContentDescription("CVC").performTextInput("123")
         compose.onNodeWithContentDescription("Cardholder Name").performTextInput("Jane Doe")
         compose.onNodeWithText("Enter your personal details").performClick()
         compose.onNodeWithText("Email").performTextInput("a@b.co")
@@ -109,7 +109,7 @@ class PaymentFormCustomerDetailsTest {
 
         compose.onNodeWithText("Enter your personal details").assertIsDisplayed()
         assertEquals(0, compose.onAllNodesWithText("Contact info").fetchSemanticsNodes().size)
-        compose.onNodeWithText("Enter card details").assertIsDisplayed()
+        compose.onNodeWithText("Pay").assertIsDisplayed()
         assertNull(paid)
     }
 

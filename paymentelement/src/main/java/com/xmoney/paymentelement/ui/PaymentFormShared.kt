@@ -87,8 +87,8 @@ import androidx.compose.runtime.LaunchedEffect
 internal enum class PaymentMethod { SavedCard, NewCard, Crypto }
 
 internal val PaymentRowContentPadding = 12.dp
-internal val PaymentRowRadius = 12.dp
-internal val PaymentContainerInset = 6.dp
+internal val PaymentRowRadius = 16.dp
+internal val PaymentContainerInset = 8.dp
 internal val NewCardFormHorizontalPadding = 12.dp
 internal val SavedCardRowHeight = 64.dp
 internal val SavedCardConfirmPanelHeight = 102.dp
@@ -100,7 +100,6 @@ internal val SheetOrDividerVerticalMargin = 12.dp
 internal val SheetFooterTopPadding = 12.dp
 internal val SheetFooterBottomPadding = 16.dp
 internal val SheetFooterContentSpacing = 12.dp
-internal const val SecondaryMetaAlpha = 0.45f
 internal const val PressScale = 0.98f
 internal const val SheetInDurationMs = 300
 
@@ -185,19 +184,18 @@ internal fun SubmitButton(
     locale: String,
     enabled: Boolean,
     isProcessing: Boolean,
-    dimmed: Boolean = false,
     onClick: () -> Unit,
 ) {
     val background = theme.primaryButtonBackground
-    val shape = RoundedCornerShape(theme.primaryButtonBorderRadius)
-    val showShadow = enabled && !isProcessing && !dimmed
+    val shape = RoundedCornerShape(theme.buttonRadius(52.dp))
+    val showShadow = enabled && !isProcessing
     Button(
         onClick = onClick,
         enabled = enabled && !isProcessing,
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
-            .alpha(if (dimmed || (!enabled && !isProcessing)) 0.4f else 1f)
+            .alpha(if (!enabled && !isProcessing) 0.4f else 1f)
             .then(
                 if (showShadow) {
                     Modifier.shadow(
@@ -253,16 +251,16 @@ internal fun PoweredByFooter(theme: CheckoutTheme, locale: String) {
         SheetText(
             Strings.text("sheet.poweredBy", locale),
             theme = theme,
-            color = theme.metaText,
+            color = theme.poweredByText,
             fontSize = 12f,
             fontWeight = FontWeight.Medium,
         )
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.width(8.dp))
         Image(
             painter = painterResource(R.drawable.xmoney_ic_wordmark),
             contentDescription = "xMoney",
             modifier = Modifier.size(width = 56.dp, height = 14.dp),
-            colorFilter = ColorFilter.tint(theme.metaText),
+            colorFilter = ColorFilter.tint(theme.poweredByLogo),
         )
     }
 }

@@ -53,7 +53,7 @@ import com.xmoney.payments.config.Strings
 
 internal enum class CardField { HOLDER, NUMBER, EXPIRY, CVV }
 
-internal val CardFieldHorizontalPadding = 14.dp
+internal val CardFieldHorizontalPadding = 12.dp
 
 @Composable
 internal fun FieldLabel(
@@ -66,7 +66,7 @@ internal fun FieldLabel(
         fontSize = 14f,
         fontWeight = FontWeight.SemiBold,
         color = theme.primaryText,
-        modifier = Modifier.padding(bottom = 6.dp),
+        modifier = Modifier.padding(bottom = 8.dp),
     )
 }
 
@@ -82,7 +82,7 @@ internal fun FieldErrorText(
         color = theme.errorText,
         fontSize = 12f,
         fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(top = 6.dp),
+        modifier = Modifier.padding(top = 8.dp),
     )
 }
 
@@ -147,6 +147,7 @@ internal fun LabeledCardFields(
                         keyboardType = KeyboardType.Text,
                         imeAction = ImeAction.Next,
                         fieldHeight = fieldHeight,
+                        horizontalPadding = 16.dp,
                         onFocus = { onFocus(CardField.HOLDER) },
                         onBlur = { onBlur(CardField.HOLDER) },
                         onValueChange = onHolderChange,
@@ -166,6 +167,7 @@ internal fun LabeledCardFields(
                     keyboardType = KeyboardType.Number,
                     imeAction = ImeAction.Next,
                     fieldHeight = fieldHeight,
+                    horizontalPadding = 16.dp,
                     visualTransformation = CardNumberVisualTransformation,
                     trailing = {
                         CardBrandIcon(
@@ -198,6 +200,7 @@ internal fun LabeledCardFields(
                         keyboardType = KeyboardType.Number,
                         imeAction = ImeAction.Next,
                         fieldHeight = fieldHeight,
+                        horizontalPadding = 16.dp,
                         visualTransformation = ExpiryVisualTransformation,
                         onFocus = { onFocus(CardField.EXPIRY) },
                         onBlur = { onBlur(CardField.EXPIRY) },
@@ -216,6 +219,7 @@ internal fun LabeledCardFields(
                         keyboardType = KeyboardType.Number,
                         imeAction = if (holderIsLast) ImeAction.Next else ImeAction.Done,
                         fieldHeight = fieldHeight,
+                        horizontalPadding = 16.dp,
                         trailing = {
                             Image(
                                 painter = painterResource(R.drawable.xmoney_ic_cvv),
@@ -244,6 +248,7 @@ internal fun LabeledCardFields(
                         keyboardType = KeyboardType.Text,
                         imeAction = ImeAction.Done,
                         fieldHeight = fieldHeight,
+                        horizontalPadding = 16.dp,
                         onFocus = { onFocus(CardField.HOLDER) },
                         onBlur = { onBlur(CardField.HOLDER) },
                         onValueChange = onHolderChange,
@@ -261,14 +266,14 @@ internal fun ErrorBadgeMessage(
     theme: CheckoutTheme,
     topPadding: Dp = 8.dp,
     horizontalPadding: Dp = 2.dp,
-    badgeColor: Color = theme.errorText,
+    badgeColor: Color = theme.errorBadge,
     bangWeight: FontWeight = FontWeight.Medium,
     messageSize: Float = 12f,
 ) {
     Row(
         modifier = Modifier.padding(start = horizontalPadding, end = horizontalPadding, top = topPadding),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(
             modifier = Modifier
@@ -315,12 +320,12 @@ internal fun SaveCardCheckbox(
         Box(
             modifier = Modifier
                 .size(22.dp)
-                .clip(RoundedCornerShape(7.dp))
+                .clip(RoundedCornerShape(8.dp))
                 .then(
                     if (checked) {
                         Modifier.background(theme.primary)
                     } else {
-                        Modifier.border(1.5.dp, theme.unselectedRing, RoundedCornerShape(7.dp))
+                        Modifier.border(1.5.dp, theme.unselectedRing, RoundedCornerShape(8.dp))
                     },
                 ),
             contentAlignment = Alignment.Center,
@@ -356,7 +361,7 @@ internal fun ContainedFieldRow(
     contentDescription: String? = null,
     horizontalPadding: Dp = CardFieldHorizontalPadding,
     valueColor: Color = theme.primaryText,
-    placeholderColor: Color = theme.sectionLabel,
+    placeholderColor: Color = theme.metaText,
     valueWeight: FontWeight = FontWeight.Normal,
     placeholderWeight: FontWeight = FontWeight.Normal,
     trailing: @Composable (() -> Unit)? = null,

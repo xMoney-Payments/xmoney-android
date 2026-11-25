@@ -198,7 +198,7 @@ private fun SavedCardsListHeader(
         SheetText(
             title,
             theme = theme,
-            color = if (isEditing) theme.sectionLabel else theme.metaText,
+            color = theme.sectionLabel,
             fontSize = 14f,
             fontWeight = FontWeight.SemiBold,
         )
@@ -213,7 +213,7 @@ private fun SavedCardsListHeader(
                 SheetText(
                     Strings.text(if (isEditing) "sheet.done" else "sheet.edit", locale),
                     theme = theme,
-                    color = theme.primary,
+                    color = theme.textBrand,
                     fontSize = 14f,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -304,4 +304,4 @@ internal fun NewCardBlock(
     }
 }
 
-internal val SelectedPanelRadius = 12.dp
+internal val SelectedPanelRadius = 16.dp

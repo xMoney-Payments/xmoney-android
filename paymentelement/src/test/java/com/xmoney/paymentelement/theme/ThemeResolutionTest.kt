@@ -1,6 +1,7 @@
 package com.xmoney.paymentelement.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import com.xmoney.payments.config.AppearanceConfig
 import com.xmoney.payments.config.OptionsConfig
 import com.xmoney.payments.config.ResolvedPaymentConfig
@@ -52,8 +53,86 @@ class ThemeResolutionTest {
             mapOf("colors" to mapOf("primary" to primaryHex)),
             isDark = false,
         )
+        val primary = requireColor(primaryHex)
+        assertEquals(primary.copy(alpha = 0x0F / 255f), theme.selectedBackground)
+        assertEquals(primary.copy(alpha = 0x1F / 255f), theme.accentIconBackground)
+        assertEquals(theme.unselectedRing, theme.radioIdle)
+        assertEquals(primary, theme.textBrand)
+        assertEquals(primary, theme.iconBrand)
+    }
+
+    @Test
+    fun omittedPrimaryKeepsBrandedWashes() {
+        val theme = resolveAppearance(emptyMap(), isDark = false)
         assertEquals(Color(0xFFF7F6FF), theme.selectedBackground)
         assertEquals(Color(0xFFECE5FF), theme.accentIconBackground)
+        assertEquals(Color(0xCC7C4DFF), theme.radioIdle)
+        assertEquals(Color(0xFF7A4BFB), theme.textBrand)
+        assertEquals(Color(0xFF7C4DFF), theme.iconBrand)
+    }
+
+    @Test
+    fun secondaryTextOverridesSecondaryCopy() {
+        val theme = resolveAppearance(
+            mapOf("colors" to mapOf("secondaryText" to "#335577")),
+            isDark = false,
+        )
+        val secondary = requireColor("#335577")
+        assertEquals(secondary, theme.metaText)
+        assertEquals(secondary, theme.sectionLabel)
+    }
+
+    @Test
+    fun omittedSecondaryTextKeepsBrandedCopy() {
+        val theme = resolveAppearance(emptyMap(), isDark = false)
+        assertEquals(Color(0xFF63606D), theme.metaText)
+        assertEquals(Color(0xFF6B6779), theme.sectionLabel)
+    }
+
+    @Test
+    fun placeholderTextOverridesInputPlaceholder() {
+        val light = resolveAppearance(
+            mapOf("colors" to mapOf("placeholderText" to "#AA3300")),
+            isDark = false,
+        )
+        assertEquals(requireColor("#AA3300"), light.inputPlaceholder)
+        val dark = resolveAppearance(
+            mapOf("colorsDark" to mapOf("placeholderText" to "#00AA33")),
+            isDark = true,
+        )
+        assertEquals(requireColor("#00AA33"), dark.inputPlaceholder)
+
+        assertEquals(Color(0xFF9691A3), resolveAppearance(emptyMap(), isDark = false).inputPlaceholder)
+        assertEquals(Color(0xFF69696F), resolveAppearance(emptyMap(), isDark = true).inputPlaceholder)
+    }
+
+    @Test
+    fun inverseTextContrastsWithPrimaryText() {
+        assertEquals(Color(0xFFF7F6FF), resolveAppearance(emptyMap(), isDark = false).inverseText)
+        assertEquals(Color(0xFF09090B), resolveAppearance(emptyMap(), isDark = true).inverseText)
+        val custom = resolveAppearance(
+            mapOf("colors" to mapOf("primaryText" to "#FFFFFF", "background" to "#FFFFFF")),
+            isDark = false,
+        )
+        assertEquals(Color(0xFF16141A), custom.inverseText)
+    }
+
+    @Test
+    fun dangerTintsUseErrorRedAtFixedAlphas() {
+        val light = resolveAppearance(emptyMap(), isDark = false)
+        assertEquals(Color(0xFFEF4444).copy(alpha = 0.08f), light.dangerTint)
+        assertEquals(Color(0xFFEF4444).copy(alpha = 0.09f), light.dangerTintStrong)
+        val dark = resolveAppearance(emptyMap(), isDark = true)
+        assertEquals(Color(0xFFEF4444).copy(alpha = 0.15f), dark.dangerTint)
+        assertEquals(Color(0xFFEF4444).copy(alpha = 0.30f), dark.dangerTintStrong)
+        val overridden = resolveAppearance(mapOf("colors" to mapOf("error" to "#00AA55")), isDark = false)
+        assertEquals(light.dangerTint, overridden.dangerTint)
+        assertEquals(Color(0xFF00AA55), overridden.errorBorder)
+    }
+
+    @Test
+    fun groupedCardFieldsUseTwelvePointInset() {
+        assertEquals(12.dp, com.xmoney.paymentelement.ui.CardFieldHorizontalPadding)
     }
 
     @Test
@@ -117,6 +196,21 @@ class ThemeResolutionTest {
     }
 
     @Test
+    fun buttonRadiusFollowsPrimaryButtonShape() {
+        assertEquals(24f, resolveAppearance(emptyMap(), isDark = false).buttonRadius(48.dp).value, 0.001f)
+        val square = resolveAppearance(
+            mapOf("primaryButton" to mapOf("shapes" to mapOf("borderRadius" to 0))),
+            isDark = false,
+        )
+        assertEquals(0f, square.buttonRadius(48.dp).value, 0.001f)
+        val rounded = resolveAppearance(
+            mapOf("primaryButton" to mapOf("shapes" to mapOf("borderRadius" to 8))),
+            isDark = false,
+        )
+        assertEquals(8f, rounded.buttonRadius(52.dp).value, 0.001f)
+    }
+
+    @Test
     fun omittedBorderRadiusKeepsBrandedFieldAndContainerDefaults() {
         val theme = resolveAppearance(emptyMap(), isDark = false)
         assertEquals(CheckoutTheme.DefaultFormFieldRadius, theme.formFieldRadius.value, 0.001f)
@@ -133,7 +227,7 @@ class ThemeResolutionTest {
             isDark = false,
         )
         assertEquals(4f, theme.formFieldRadius.value, 0.001f)
-        assertEquals(4f, theme.paymentContainerRadius.value, 0.001f)
+        assertEquals(CheckoutTheme.DefaultPaymentContainerRadius, theme.paymentContainerRadius.value, 0.001f)
         assertEquals(2.5f, theme.borderWidth.value, 0.001f)
         assertEquals(2.5f, theme.fieldStrokeWidth(false).value, 0.001f)
         assertEquals(2.5f, theme.fieldStrokeWidth(true).value, 0.001f)
@@ -181,8 +275,9 @@ class ThemeResolutionTest {
     @Test
     fun omittedErrorKeepsBrandedFieldChrome() {
         val theme = resolveAppearance(emptyMap(), isDark = false)
-        assertEquals(Color(0xFFEF4444), theme.errorBorder)
+        assertEquals(Color(0xFFDC2626), theme.errorBorder)
         assertEquals(Color(0xFFDC2626), theme.errorText)
+        assertEquals(Color(0xFFDC2626), theme.errorBadge)
     }
 
     @Test
@@ -202,16 +297,22 @@ class ThemeResolutionTest {
     @Test
     fun darkModeChromeUsesLightInk() {
         val theme = resolveAppearance(emptyMap(), isDark = true)
-        val ink = Color(0xFFF7F6F9)
         val chrome = Color.White
         assertEquals(Color(0xFF18181B), theme.background)
-        assertEquals(Color(0xFF18181B), theme.componentBackground)
-        assertEquals(Color(0xFF797585), theme.mutedIcon)
+        assertEquals(Color(0xFF1F1F23), theme.componentBackground)
+        assertEquals(Color(0xFFFAFAFA), theme.primaryText)
+        assertEquals(Color(0xFF69696F), theme.mutedIcon)
         assertEquals(chrome.copy(alpha = 0x33 / 255f), theme.unselectedRing)
-        assertEquals(ink.copy(alpha = 0x1A / 255f), theme.fieldBorder)
-        assertEquals(ink.copy(alpha = 0x14 / 255f), theme.fieldDivider)
-        assertEquals(chrome.copy(alpha = 0x29 / 255f), theme.sheetHandle)
+        assertEquals(chrome.copy(alpha = 0x1A / 255f), theme.fieldBorder)
+        assertEquals(chrome.copy(alpha = 0x1A / 255f), theme.fieldDivider)
+        assertEquals(chrome.copy(alpha = 0x1A / 255f), theme.sheetHandle)
         assertEquals(chrome.copy(alpha = 0x1A / 255f), theme.orDivider)
+        assertEquals(Color(0xFF2A2A2F), theme.selectedBackground)
+        assertEquals(Color(0xFF24124C), theme.accentIconBackground)
+        assertEquals(Color(0xFF926BFF), theme.textBrand)
+        assertEquals(Color(0xFF605C70), theme.poweredByText)
+        assertEquals(Color(0xFFEF4444), theme.errorText)
+        assertEquals(Color(0xFFDC2626), theme.errorBadge)
         assertEquals(chrome.copy(alpha = 0x14 / 255f), theme.footerBorder)
     }
 
@@ -219,7 +320,7 @@ class ThemeResolutionTest {
     fun lightModeChromePreserved() {
         val theme = resolveAppearance(emptyMap(), isDark = false)
         val ink = Color(0xFF16141A)
-        assertEquals(Color(0x5216141A), theme.mutedIcon)
+        assertEquals(Color(0xFF9691A3), theme.mutedIcon)
         assertEquals(Color(0x2916141A), theme.unselectedRing)
         assertEquals(Color(0xFFE3E1E8), theme.fieldBorder)
         assertEquals(Color(0xFFE3E1E8), theme.fieldDivider)

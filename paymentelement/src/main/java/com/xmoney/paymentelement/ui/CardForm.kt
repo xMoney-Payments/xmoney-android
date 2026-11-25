@@ -190,7 +190,7 @@ internal fun CardForm(
             SheetText(
                 sectionLabel,
                 theme = theme,
-                color = theme.sectionLabel,
+                color = theme.metaText,
                 fontSize = 14f,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(bottom = 8.dp),

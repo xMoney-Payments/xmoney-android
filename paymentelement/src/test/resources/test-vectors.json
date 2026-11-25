@@ -95,8 +95,8 @@
       },
       "expected": {
         "primary": "#0E7C66",
-        "selectedBackground": "#F7F6FF",
-        "accentIconBackground": "#ECE5FF",
+        "selectedBackground": "#0F0E7C66",
+        "accentIconBackground": "#1F0E7C66",
         "containerBorder": "#00000000"
       }
     },

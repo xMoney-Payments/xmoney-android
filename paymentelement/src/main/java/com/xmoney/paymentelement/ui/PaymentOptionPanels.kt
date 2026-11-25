@@ -38,7 +38,7 @@ private fun PaymentOptionPanel(
             .background(theme.componentBackground)
             .border(theme.containerBorderWidth, theme.containerBorder, outer)
             .padding(PaymentContainerInset),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Column(
             modifier = Modifier
@@ -58,6 +58,7 @@ private fun PaymentOptionRow(
     subtitle: String,
     selected: Boolean,
     enabled: Boolean,
+    subtitleColor: Color = theme.metaText,
     onClick: () -> Unit,
     chip: @Composable () -> Unit,
 ) {
@@ -83,7 +84,7 @@ private fun PaymentOptionRow(
             SheetText(
                 subtitle,
                 theme = theme,
-                color = theme.metaText,
+                color = subtitleColor,
                 fontSize = 14f,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
@@ -147,7 +148,7 @@ internal fun CryptoOptionPanel(
                     fontSize = 14f,
                     fontWeight = FontWeight.Medium,
                     lineHeight = 20f,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 )
             }
         } else {
@@ -158,6 +159,7 @@ internal fun CryptoOptionPanel(
             theme = theme,
             title = Strings.text("sheet.payWithCrypto", locale),
             subtitle = Strings.text("sheet.cryptoSubtitle", locale),
+            subtitleColor = theme.sectionLabel,
             selected = selected,
             enabled = enabled,
             onClick = onSelect,
@@ -171,14 +173,14 @@ private fun CryptoChip(theme: CheckoutTheme) {
         modifier = Modifier
             .width(48.dp)
             .height(34.dp)
-            .clip(RoundedCornerShape(9.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(theme.accentIconBackground),
         contentAlignment = Alignment.Center,
     ) {
         SheetText(
             "\u20BF",
             theme = theme,
-            color = theme.primary,
+            color = theme.iconBrand,
             fontSize = 18f,
             fontWeight = FontWeight.Bold,
             lineHeight = null,

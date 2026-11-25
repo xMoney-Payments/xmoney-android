@@ -113,7 +113,7 @@ private fun SheetHandle(theme: CheckoutTheme) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 10.dp, bottom = 2.dp),
+            .padding(top = 8.dp, bottom = 2.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -137,7 +137,7 @@ private fun SheetHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 6.dp, top = 10.dp),
+            .padding(start = 8.dp, top = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(

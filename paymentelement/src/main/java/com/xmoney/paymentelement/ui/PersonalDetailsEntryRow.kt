@@ -40,7 +40,7 @@ internal fun PersonalDetailsEntryRow(
     topPadding: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(24.dp)
     val showErrorBorder = showError && !completed
     Column(modifier = modifier.fillMaxWidth().padding(top = topPadding, bottom = 12.dp)) {
         Row(
@@ -50,13 +50,13 @@ internal fun PersonalDetailsEntryRow(
                 .background(theme.componentBackground)
                 .then(
                     if (showErrorBorder) {
-                        Modifier.border(1.dp, theme.errorText, shape)
+                        Modifier.border(1.dp, theme.errorBorder, shape)
                     } else {
                         Modifier
                     },
                 )
                 .pressScaleClickable(enabled = enabled, onClick = onClick)
-                .padding(6.dp)
+                .padding(8.dp)
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -67,7 +67,7 @@ internal fun PersonalDetailsEntryRow(
                 Box(
                     modifier = Modifier
                         .size(width = 48.dp, height = 34.dp)
-                        .clip(RoundedCornerShape(9.dp))
+                        .clip(RoundedCornerShape(12.dp))
                         .background(theme.accentIconBackground),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -75,7 +75,7 @@ internal fun PersonalDetailsEntryRow(
                         painter = painterResource(R.drawable.xmoney_ic_plus),
                         contentDescription = null,
                         modifier = Modifier.size(14.dp),
-                        colorFilter = ColorFilter.tint(theme.primary),
+                        colorFilter = ColorFilter.tint(theme.iconBrand),
                     )
                 }
             }
@@ -85,7 +85,7 @@ internal fun PersonalDetailsEntryRow(
                     locale,
                 ),
                 theme = theme,
-                color = if (completed) theme.primaryText else theme.primary,
+                color = if (completed) theme.primaryText else theme.textBrand,
                 fontSize = 16f,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = (-0.01).em,
@@ -101,7 +101,7 @@ internal fun PersonalDetailsEntryRow(
                     painter = painterResource(R.drawable.xmoney_ic_chevron_down),
                     contentDescription = null,
                     modifier = Modifier.size(width = 13.dp, height = 8.dp).rotate(-90f),
-                    colorFilter = ColorFilter.tint(theme.primary),
+                    colorFilter = ColorFilter.tint(theme.iconBrand),
                 )
             }
         }
@@ -110,8 +110,8 @@ internal fun PersonalDetailsEntryRow(
                 Strings.text("personalDetails.completeDetails", locale),
                 theme,
                 topPadding = 8.dp,
-                horizontalPadding = 4.dp,
-                badgeColor = theme.errorText,
+                horizontalPadding = 2.dp,
+                badgeColor = theme.errorBadge,
                 bangWeight = FontWeight.Medium,
                 messageSize = 12f,
             )
@@ -125,7 +125,7 @@ private fun CompletedMark(theme: CheckoutTheme) {
         Box(
             modifier = Modifier
                 .size(width = 48.dp, height = 34.dp)
-                .clip(RoundedCornerShape(9.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(theme.accentIconBackground),
             contentAlignment = Alignment.Center,
         ) {

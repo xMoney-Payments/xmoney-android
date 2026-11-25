@@ -2,9 +2,11 @@ package com.xmoney.paymentelement.theme
 
 import android.graphics.Typeface
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.coerceIn
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xmoney.payments.config.AppearanceColors
@@ -51,17 +53,21 @@ data class CheckoutTheme(
     val formFieldRadius: Dp,
     val formFieldHeight: Dp,
     val isDark: Boolean,
+    val inputPlaceholder: Color,
+    val metaText: Color,
+    val sectionLabel: Color,
+    val radioIdle: Color,
+    val textBrand: Color,
+    val iconBrand: Color,
+    val errorBadge: Color,
+    val dangerTint: Color,
+    val dangerTintStrong: Color,
+    val inverseText: Color,
+    val poweredByText: Color,
+    val poweredByLogo: Color,
 ) {
-    val inputPlaceholder: Color
-        get() = if (isDark) Color(0xFF6E6878) else Color(0xFFD1CDDB)
-    val metaText: Color
-        get() = if (isDark) secondaryText else Color(0xFF9691A3)
-    val sectionLabel: Color
-        get() = if (isDark) secondaryText else Color(0xFF797585)
-    val radioIdle: Color
-        get() = if (isDark) unselectedRing else Color(0xFFDED4FF)
     val brandChipBorder: Color
-        get() = if (isDark) footerBorder else Color(0xFFEFEEF1)
+        get() = fieldBorder
     val text: Color get() = primaryText
     val fieldBackground: Color get() = componentBackground
     val border: Color get() = componentBorder
@@ -69,6 +75,9 @@ data class CheckoutTheme(
 
     val containerBorderWidth: Dp
         get() = if (containerBorder.alpha == 0f) 0.dp else 1.dp
+
+    /** Corner radius for any button, following `primaryButton.borderRadius` so every button shares one shape. */
+    fun buttonRadius(height: Dp): Dp = primaryButtonBorderRadius.coerceIn(0.dp, height / 2)
 
     fun fieldStrokeWidth(hasError: Boolean): Dp =
         if (hasError) maxOf(borderWidth, 1.5.dp) else borderWidth
@@ -79,9 +88,13 @@ data class CheckoutTheme(
         val BrandPrimary = Color(0xFF7C4DFF)
         const val DefaultPrimaryButtonRadius = 9999f
         const val DefaultFormFieldRadius = 16f
-        const val DefaultPaymentContainerRadius = 16f
-        private val DefaultErrorBorder = Color(0xFFEF4444)
-        private val DefaultErrorText = Color(0xFFDC2626)
+        const val DefaultPaymentContainerRadius = 24f
+        const val DefaultRowRadius = 16f
+        const val DefaultBrandTileRadius = 12f
+        /** `kyc-status-danger-solid`. The "!" badge keeps this in both themes. */
+        private val DefaultErrorBadge = Color(0xFFDC2626)
+        private val DefaultErrorTextLight = Color(0xFFDC2626)
+        private val DefaultErrorTextDark = Color(0xFFEF4444)
         private val LightInk = Color(0xFF16141A)
         private val DarkInk = Color(0xFFF7F6F9)
         private val DarkChrome = Color(0xFFFFFFFF)
@@ -101,6 +114,9 @@ data class CheckoutTheme(
                 return parseColor(hex) ?: fallback
             }
 
+            fun isSet(selector: (AppearanceColors) -> String?): Boolean =
+                parseColor(modeColors?.let(selector) ?: sharedColors?.let(selector)) != null
+
             fun optionalColor(
                 selector: (AppearanceColors) -> String?,
                 fallback: Color,
@@ -116,9 +132,28 @@ data class CheckoutTheme(
             val pbShapes = appearance.primaryButton
 
             val primary = color({ it.primary }, defaults.primary)
+            val primaryText = color({ it.primaryText }, defaults.primaryText)
+            val primaryTextSet = isSet { it.primaryText }
             val icon = color({ it.icon }, defaults.icon)
             fun chromeAlpha(alpha: Int): Color =
                 (if (isDark) DarkChrome else ink).copy(alpha = alpha / 255f)
+
+            val secondaryText = color({ it.secondaryText }, defaults.secondaryText)
+            val placeholderText = color({ it.placeholderText }, defaults.placeholderText)
+            val unselectedRing = if (isDark) chromeAlpha(0x33) else inkAlpha(0x29)
+            // Explicit kyc tokens until the merchant sets the source color. Dark no longer
+            // pretends every surface is an alpha wash of primary.
+            val derivesFromPrimary = isSet { it.primary }
+            val derivesFromSecondary = isSet { it.secondaryText }
+            val derivesFromPlaceholder = isSet { it.placeholderText }
+            val textTertiary = if (isDark) Color(0xFF95959D) else Color(0xFF63606D)
+            val textMuted = if (isDark) Color(0xFF85858D) else Color(0xFF6B6779)
+            val placeholder = if (isDark) Color(0xFF69696F) else Color(0xFF9691A3)
+            val poweredBy = if (isDark) Color(0xFF605C70) else Color(0xFF9691A3)
+            val danger = if (isDark) DefaultErrorTextDark else DefaultErrorTextLight
+            val borderDefault = if (isDark) chromeAlpha(0x1A) else Color(0xFFE3E1E8)
+            val fieldBorderColor = color({ it.componentBorder }, borderDefault)
+            val merchantError = isSet { it.error }
 
             return CheckoutTheme(
                 primary = primary,
@@ -126,10 +161,10 @@ data class CheckoutTheme(
                 componentBackground = color({ it.componentBackground }, defaults.componentBackground),
                 componentBorder = color({ it.componentBorder }, defaults.componentBorder),
                 componentDivider = color({ it.componentDivider }, defaults.componentDivider),
-                primaryText = color({ it.primaryText }, defaults.primaryText),
-                secondaryText = color({ it.secondaryText }, defaults.secondaryText),
+                primaryText = primaryText,
+                secondaryText = secondaryText,
                 componentText = color({ it.componentText }, defaults.componentText),
-                placeholderText = color({ it.placeholderText }, defaults.placeholderText),
+                placeholderText = placeholderText,
                 icon = icon,
                 error = color({ it.error }, defaults.error),
                 borderRadius = (appearance.borderRadius ?: DefaultFormFieldRadius).dp,
@@ -146,24 +181,60 @@ data class CheckoutTheme(
                     ?: primary,
                 primaryButtonBorderRadius = (pbShapes?.borderRadius ?: DefaultPrimaryButtonRadius).dp,
                 primaryButtonBorderWidth = (pbShapes?.borderWidth ?: 0f).dp,
-                selectedBackground = if (isDark) primary.copy(alpha = 0x2E / 255f) else Color(0xFFF7F6FF),
-                accentIconBackground = if (isDark) primary.copy(alpha = 0x3D / 255f) else Color(0xFFECE5FF),
+                selectedBackground = if (derivesFromPrimary) {
+                    primary.copy(alpha = (if (isDark) 0x2E else 0x0F) / 255f)
+                } else {
+                    if (isDark) Color(0xFF2A2A2F) else Color(0xFFF7F6FF)
+                },
+                accentIconBackground = if (derivesFromPrimary) {
+                    primary.copy(alpha = (if (isDark) 0x3D else 0x1F) / 255f)
+                } else {
+                    if (isDark) Color(0xFF24124C) else Color(0xFFECE5FF)
+                },
                 containerBorder = optionalColor({ it.containerBorder }, if (isDark) inkAlpha(0x17) else Color.Transparent),
                 neutralChip = inkAlpha(0x0D),
-                fieldBorder = color({ it.componentBorder }, if (isDark) inkAlpha(0x1A) else Color(0xFFE3E1E8)),
-                fieldDivider = color({ it.componentDivider }, if (isDark) inkAlpha(0x14) else Color(0xFFE3E1E8)),
-                mutedIcon = if (isDark) icon else inkAlpha(0x52),
-                unselectedRing = if (isDark) chromeAlpha(0x33) else inkAlpha(0x29),
-                errorBorder = color({ it.error }, DefaultErrorBorder),
-                errorText = color({ it.error }, DefaultErrorText),
+                fieldBorder = fieldBorderColor,
+                fieldDivider = color({ it.componentDivider }, borderDefault),
+                mutedIcon = when {
+                    isSet { it.icon } -> icon
+                    derivesFromPlaceholder -> placeholderText
+                    else -> placeholder
+                },
+                unselectedRing = unselectedRing,
+                errorBorder = if (merchantError) color({ it.error }, danger) else danger,
+                errorText = if (merchantError) color({ it.error }, danger) else danger,
                 footerBorder = chromeAlpha(if (isDark) 0x14 else 0x0F),
-                sheetHandle = if (isDark) chromeAlpha(0x29) else Color(0xFFE3E1E8),
-                orDivider = if (isDark) chromeAlpha(0x1A) else Color(0xFFE3E1E8),
+                sheetHandle = borderDefault,
+                orDivider = borderDefault,
                 visaMarkTint = if (isDark) Color.White else null,
-                paymentContainerRadius = (appearance.borderRadius ?: DefaultPaymentContainerRadius).dp,
+                paymentContainerRadius = DefaultPaymentContainerRadius.dp,
                 formFieldRadius = (appearance.borderRadius ?: DefaultFormFieldRadius).dp,
                 formFieldHeight = 48.dp,
                 isDark = isDark,
+                inputPlaceholder = if (derivesFromPlaceholder) placeholderText else placeholder,
+                metaText = if (derivesFromSecondary) secondaryText else textTertiary,
+                sectionLabel = if (derivesFromSecondary) secondaryText else textMuted,
+                radioIdle = if (derivesFromPrimary) {
+                    unselectedRing
+                } else if (isDark) {
+                    Color(0xA1A180FF)
+                } else {
+                    Color(0xCC7C4DFF)
+                },
+                textBrand = if (derivesFromPrimary) primary else if (isDark) Color(0xFF926BFF) else Color(0xFF7A4BFB),
+                iconBrand = if (derivesFromPrimary) primary else if (isDark) Color(0xFF926BFF) else Color(0xFF7C4DFF),
+                errorBadge = if (merchantError) color({ it.error }, DefaultErrorBadge) else DefaultErrorBadge,
+                dangerTint = Color(0xFFEF4444).copy(alpha = if (isDark) 0.15f else 0.08f),
+                dangerTintStrong = Color(0xFFEF4444).copy(alpha = if (isDark) 0.30f else 0.09f),
+                inverseText = if (primaryTextSet) {
+                    if (primaryText.luminance() > 0.5f) LightInk else DarkInk
+                } else if (isDark) {
+                    Color(0xFF09090B)
+                } else {
+                    Color(0xFFF7F6FF)
+                },
+                poweredByText = if (derivesFromSecondary) secondaryText.copy(alpha = 0.30f) else poweredBy,
+                poweredByLogo = if (derivesFromSecondary) secondaryText.copy(alpha = 0.42f) else poweredBy,
             )
         }
 
@@ -230,10 +301,10 @@ data class CheckoutTheme(
             val dark = Palette(
                 primary = Color(0xFF7C4DFF),
                 background = Color(0xFF18181B),
-                componentBackground = Color(0xFF18181B),
+                componentBackground = Color(0xFF1F1F23),
                 componentBorder = Color(0xFF3F3B48),
                 componentDivider = Color(0xFF3F3B48),
-                primaryText = Color(0xFFF7F6F9),
+                primaryText = Color(0xFFFAFAFA),
                 secondaryText = Color(0xFFD1CDDB),
                 componentText = Color(0xFFD1CDDB),
                 placeholderText = Color(0xFF797585),

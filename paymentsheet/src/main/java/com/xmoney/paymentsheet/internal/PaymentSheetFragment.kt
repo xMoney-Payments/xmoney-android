@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Text
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,6 +29,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalDensity
@@ -115,6 +120,8 @@ class PaymentSheetFragment : BottomSheetDialogFragment(), CheckoutCloseTarget {
         dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { sheet ->
             sheet.setBackgroundColor(android.graphics.Color.TRANSPARENT)
             sheet.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+            sheet.clipToOutline = false
+            (sheet.parent as? ViewGroup)?.clipChildren = false
             bindSheetBehavior(sheet)
         }
     }
@@ -394,14 +401,64 @@ private fun LoadingCoin(theme: CheckoutTheme, locale: String, onHeight: (Dp) -> 
     }
 }
 
+private val SheetCorner = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
+
 @androidx.compose.runtime.Composable
 private fun SheetSurface(theme: CheckoutTheme, content: @androidx.compose.runtime.Composable () -> Unit) {
+    val density = LocalDensity.current
+    var shadow by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var retired by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    SideEffect {
+        retired?.recycle()
+        retired = null
+    }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
+            .onSizeChanged { size ->
+                val next = sheetLiftShadow(size.width, size.height, density.density) ?: return@onSizeChanged
+                val current = shadow
+                if (current != null && current.width == next.width && current.height == next.height) {
+                    next.recycle()
+                    return@onSizeChanged
+                }
+                retired = current
+                shadow = next
+            }
+            .graphicsLayer { clip = false }
+            .drawBehind {
+                val bitmap = shadow ?: return@drawBehind
+                val lift = 24.dp.toPx()
+                val blur = 35.dp.toPx()
+                drawIntoCanvas { canvas ->
+                    canvas.nativeCanvas.drawBitmap(bitmap, 0f, -lift - blur, null)
+                }
+            }
+            .clip(SheetCorner)
             .background(theme.background),
     ) {
         content()
     }
+}
+
+/** CSS `0 -24 35` at `#16141A` 22%, drawn above the sheet into the scrim. */
+private fun sheetLiftShadow(width: Int, height: Int, density: Float): android.graphics.Bitmap? {
+    if (width <= 0 || height <= 0) return null
+    val blur = 35f * density
+    val radius = 32f * density
+    val pad = (blur * 2).toInt() + 4
+    val bitmap = android.graphics.Bitmap.createBitmap(width, height + pad, android.graphics.Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bitmap)
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.argb(56, 0x16, 0x14, 0x1A)
+        maskFilter = android.graphics.BlurMaskFilter(blur, android.graphics.BlurMaskFilter.Blur.NORMAL)
+    }
+    val top = blur
+    canvas.drawRoundRect(
+        android.graphics.RectF(0f, top, width.toFloat(), top + height),
+        radius,
+        radius,
+        paint,
+    )
+    return bitmap
 }

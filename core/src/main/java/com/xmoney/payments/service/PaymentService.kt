@@ -82,7 +82,7 @@ class PaymentService(
         val fields = HashMap<String, String>()
         fields["jsonRequest"] = orderPayload
         fields["checksum"] = orderChecksum
-        fields["transactionType"] = "crypto"
+        fields["paymentMethod"] = "crypto"
         appendCustomerDetails(fields, customerDetails)
         fields.putAll(DeviceMetadata.fields(context))
         return fields

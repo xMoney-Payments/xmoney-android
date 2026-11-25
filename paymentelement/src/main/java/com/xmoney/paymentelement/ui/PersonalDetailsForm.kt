@@ -54,8 +54,6 @@ private enum class PickerKind { PHONE_COUNTRY, COUNTRY, REGION }
 
 private val DetailsFieldHeight = 48.dp
 private val DetailsFieldInset = 16.dp
-private val DetailsFieldBorder = Color(0xFFE3E1E8)
-private val DetailsPlaceholder = Color(0xFFD1CDDB)
 private val PhonePrefixWidth = 130.dp
 private val FieldTracking = (-0.01).em
 
@@ -134,12 +132,12 @@ internal fun PersonalDetailsForm(
                                 )
                             }
                             if (visibility.showPhone) {
-                                if (started) Divider(color = DetailsFieldBorder, thickness = 1.dp)
+                                if (started) Divider(color = theme.fieldBorder, thickness = 1.dp)
                                 started = true
                                 CondensedPhoneRow(state, theme, localeTag) { openPicker(PickerKind.PHONE_COUNTRY) }
                             }
                             if (visibility.showEmail) {
-                                if (started) Divider(color = DetailsFieldBorder, thickness = 1.dp)
+                                if (started) Divider(color = theme.fieldBorder, thickness = 1.dp)
                                 GroupTextField(
                                     theme, state, PersonalField.EMAIL,
                                     Strings.text("personalDetails.emailPlaceholder", localeTag),
@@ -207,7 +205,7 @@ internal fun PersonalDetailsForm(
                             )
                             started = true
                             if (format.showRegion) {
-                                Divider(color = DetailsFieldBorder, thickness = 1.dp)
+                                Divider(color = theme.fieldBorder, thickness = 1.dp)
                                 val keys = AddressFormats.regionKeys(format.regionType)
                                 SelectRow(
                                     theme = theme,
@@ -216,13 +214,13 @@ internal fun PersonalDetailsForm(
                                     onClick = { openPicker(PickerKind.REGION) },
                                 )
                             }
-                            if (started) Divider(color = DetailsFieldBorder, thickness = 1.dp)
+                            if (started) Divider(color = theme.fieldBorder, thickness = 1.dp)
                             GroupTextField(
                                 theme, state, PersonalField.ADDRESS,
                                 Strings.text("personalDetails.addressPlaceholder", localeTag),
                                 KeyboardType.Text,
                             )
-                            Divider(color = DetailsFieldBorder, thickness = 1.dp)
+                            Divider(color = theme.fieldBorder, thickness = 1.dp)
                             CondensedCityPostal(state, theme, localeTag, format.showPostal, format.postalType)
                         }
                         GroupError(addressFields, state, theme, localeTag)
@@ -296,7 +294,7 @@ private fun GroupedFields(
     val borderColor = when {
         hasError -> theme.errorBorder
         anyFocused -> theme.primary
-        else -> DetailsFieldBorder
+        else -> theme.fieldBorder
     }
     Column(
         modifier = Modifier
@@ -315,8 +313,10 @@ private fun GroupError(
     theme: CheckoutTheme,
     locale: String,
 ) {
-    val message = fields.firstNotNullOfOrNull { state.errorMessage(it, locale) }
-    if (message != null) ErrorBadgeMessage(message, theme)
+    fields.forEach { field ->
+        val message = state.errorMessage(field, locale) ?: return@forEach
+        ErrorBadgeMessage(message, theme, topPadding = 16.dp)
+    }
 }
 
 @Composable
@@ -473,7 +473,7 @@ private fun CondensedPhoneRow(
             modifier = Modifier.width(PhonePrefixWidth),
         )
         Divider(
-            color = DetailsFieldBorder,
+            color = theme.fieldBorder,
             modifier = Modifier.fillMaxHeight().width(1.dp),
         )
         GroupTextField(
@@ -510,7 +510,7 @@ private fun CondensedCityPostal(
             modifier = Modifier.weight(1f),
         )
         Divider(
-            color = DetailsFieldBorder,
+            color = theme.fieldBorder,
             modifier = Modifier.fillMaxHeight().width(1.dp),
         )
         GroupTextField(
@@ -549,7 +549,7 @@ private fun GroupTextField(
         modifier = modifier,
         horizontalPadding = DetailsFieldInset,
         valueColor = theme.primaryText,
-        placeholderColor = DetailsPlaceholder,
+        placeholderColor = theme.inputPlaceholder,
         valueWeight = FontWeight.Medium,
         placeholderWeight = FontWeight.Normal,
         imeAction = ImeAction.Next,
@@ -598,7 +598,7 @@ private fun SelectRow(
         SheetText(
             label,
             theme = theme,
-            color = if (filled) theme.primaryText else DetailsPlaceholder,
+            color = if (filled) theme.primaryText else theme.inputPlaceholder,
             fontSize = 18f,
             fontWeight = if (filled) FontWeight.Medium else FontWeight.Normal,
             maxLines = 1,
@@ -613,7 +613,7 @@ private fun SelectRow(
             modifier = Modifier
                 .size(width = 14.dp, height = 9.dp)
                 .clearAndSetSemantics { },
-            colorFilter = ColorFilter.tint(theme.sectionLabel),
+            colorFilter = ColorFilter.tint(theme.mutedIcon),
         )
     }
 }
@@ -622,7 +622,7 @@ private fun borderColor(state: PersonalDetailsFormState, field: PersonalField, t
     when {
         state.shouldShow(field) -> theme.errorBorder
         state.focused[field] == true -> theme.primary
-        else -> DetailsFieldBorder
+        else -> theme.fieldBorder
     }
 
 private fun borderWidth(state: PersonalDetailsFormState, field: PersonalField, theme: CheckoutTheme) =
